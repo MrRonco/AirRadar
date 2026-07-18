@@ -7,6 +7,6 @@
 - **Dusk dimming**: backlight is on/off only, so scale the palette by local time
   (NTP already synced) — e.g. multiply all colors 60% between civil dusk and dawn.
 - **Feeder stats readout**: poll tar1090 `stats.json` occasionally and show
-  positions/sec + msgs/sec next to the SUDCRATER source tag.
+  positions/sec + msgs/sec next to the local source tag.
 - **Airframe names**: local feed includes `desc` ("BOEING 777-300ER") — show it in the
   Selected Aircraft card when present (local source only).

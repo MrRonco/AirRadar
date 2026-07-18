@@ -20,7 +20,7 @@ keyless; OpenSky OAuth2 + credit limits would be strictly worse).
 ## v4 — glass edition
 Tech Talkies card layout, slate/cyan glassmorphism (per-pixel frost compositing into a
 full-screen chrome sprite, built once at boot), FreeSans typography, amber/cyan/violet
-altitude ramp. v4.1 added the local feeder: SUDCRATER-first polling at 2 s with
+altitude ramp. v4.1 added the local feeder: local-feeder-first polling at 2 s with
 airplanes.live fallback at 8 s, `seen_pos` staleness guard, live source tag.
 
 ## v5 — current

@@ -10,7 +10,7 @@
 //   - NETWORK settings screen: DHCP or static IP/gateway/mask/DNS on-device,
 //     reached from the Settings card or the gear menu; bottom bar removed
 //
-// Data: local feeder (SUDCRATER, tar1090 on :8080) first, airplanes.live fallback.
+// Data: local ADS-B feeder (tar1090 on :8080) first, airplanes.live fallback.
 //
 // Board settings (Tools):
 //   ESP32S3 Dev Module · USB CDC On Boot: Enabled · Flash: QIO 80MHz, 16MB
@@ -36,16 +36,20 @@
 // ============================================================
 //  Defaults (editable on-device / in browser afterwards)
 // ============================================================
-#define DEFAULT_LAT   51.470000
-#define DEFAULT_LON  -0.454300
-#define HOME_LABEL   "SUDBURY"
-#define TZ_STRING    "EST5EDT,M3.2.0,M11.1.0"
+// Set your own location on first boot (coordinate numpad or web UI); these are
+// just neutral placeholders so the repo ships no real address.
+#define DEFAULT_LAT   0.0
+#define DEFAULT_LON   0.0
+#define HOME_LABEL   "HOME"
+// POSIX TZ string - set yours (e.g. "EST5EDT,M3.2.0,M11.1.0" for US/Canada Eastern)
+#define TZ_STRING    "UTC0"
 #define MDNS_NAME    "airradar"
 
-// Local ADS-B feeder (SUDCRATER) - tried first every poll; cloud is fallback
-// adsb.im image: tar1090 is on port 8080 (port 80 is the feeder config app)
+// Local ADS-B feeder - tried first every poll; cloud is fallback.
+// adsb.im image: tar1090 is on port 8080 (port 80 is the feeder config app).
+// Set your feeder's address on first boot (Settings card or web UI).
 #define LOCAL_FEED_URL_DEFAULT "http://adsb.local:8080/data/aircraft.json"
-#define LOCAL_FEED_NAME        "SUDCRATER"
+#define LOCAL_FEED_NAME        "LOCAL"
 
 const uint32_t POLL_LOCAL_MS    = 2000;    // own feeder: no rate limit
 const uint32_t POLL_CLOUD_MS    = 8000;    // airplanes.live courtesy

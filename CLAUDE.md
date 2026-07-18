@@ -1,8 +1,8 @@
 # CLAUDE.md — AirRadar
 
 Real-time ADS-B air-traffic radar display on a Waveshare 7" ESP32-S3 touchscreen.
-Glassmorphism UI, touch provisioning, on-device network config, fed primarily by the
-owner's own ADS-B receiver ("SUDCRATER") with airplanes.live as automatic cloud fallback.
+Glassmorphism UI, touch provisioning, on-device network config, fed primarily by a
+local ADS-B receiver with airplanes.live as automatic cloud fallback.
 
 Current version: **v5.0** (2026-07-17). One sketch file + one display header, on purpose —
 it must stay flashable from a stock Arduino IDE.
@@ -112,25 +112,29 @@ arduino-cli monitor -p /dev/cu.wchusbserial* -c baudrate=115200
 
 ## Data sources
 
-- **Primary — local feeder "SUDCRATER":** `feedUrl` (NVS, default
-  `http://adsb.local:8080/data/aircraft.json`). readsb/tar1090 dialect: top-level key
-  `aircraft`, includes `r`/`t`/`desc`/`seen_pos`/`r_dst`. Polled every **2 s**, plain
-  HTTP, 1.5 s connect + 4 s read timeout, auto-retry on the alternate
-  `/tar1090/data/` path.
+- **Primary — local feeder:** `feedUrl` (NVS, default
+  `http://adsb.local:8080/data/aircraft.json` — set yours on first boot). readsb/tar1090
+  dialect: top-level key `aircraft`, includes `r`/`t`/`desc`/`seen_pos`/`r_dst`. Polled
+  every **2 s**, plain HTTP, 1.5 s connect + 4 s read timeout, auto-retry on the
+  alternate `/tar1090/data/` path.
   Entries with `seen_pos > 15 s` are skipped so our coast logic owns stale positions.
 - **Fallback — airplanes.live** `/v2/point/lat/lon/radiusNM` (key `ac`), polled every
   **8 s** — that interval is API courtesy; keep it. Radius derives from `rangeKm`
   (capped 250 NM). Snaps back to local automatically on the next successful poll.
 - Both parse through `fetchParse()` with one shared ArduinoJson filter.
-- The Overview card shows the live source: SUDCRATER (cyan) / CLOUD (grey) / OFFLINE.
+- The Overview card shows the live source: LOCAL (cyan) / CLOUD (grey) / OFFLINE.
 
-## Owner's network environment
+## Network environment (example setup)
 
-- ESP32 lives on a **10.0.30.x** VLAN, router DHCP reservation **10.0.30.120**.
-- Feeder: Raspberry Pi 5 running the adsb.im image at **adsb.local** — port 80 is the
-  Flask config app (a 404 there is *expected*), tar1090 is on **port 8080**.
-- OPNsense segments VLANs: the ESP's VLAN needs a pass rule, **TCP → adsb.local:8080**.
-  If the display shows CLOUD instead of SUDCRATER, suspect that rule first.
+The author runs the feeder on a segmented network; adapt these to yours.
+
+- The ESP32 typically gets a DHCP reservation so its IP is stable (or use the
+  on-device static-IP screen).
+- Feeder: a Raspberry Pi running the adsb.im image — port 80 is the Flask config app
+  (a 404 there is *expected*), tar1090 is on **port 8080** (`/data/aircraft.json`).
+- If your feeder is on a different VLAN/subnet than the display, the firewall needs a
+  pass rule for **TCP → <feeder-ip>:8080**. If the display shows CLOUD instead of the
+  local source, suspect that rule (or a wrong feeder URL) first.
 
 ## NVS schema (Preferences namespace `"radar"`)
 

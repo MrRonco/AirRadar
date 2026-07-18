@@ -22,7 +22,8 @@ Drive GPIO4 (INT) low as output → TP_RST low (out reg 0x1C) → 12 ms → TP_R
 (0x1E) → 60 ms (address latch window with INT held low ⇒ 0x5D) → release INT to
 input → Wire.end() so LovyanGFX's I2C driver owns the bus.
 
-## Owner's network
-ESP32: 10.0.30.x VLAN, reservation 10.0.30.120. Feeder: adsb.im on Raspberry Pi 5 at
-adsb.local — port 80 = Flask config app, port 8080 = tar1090 (`/data/aircraft.json`).
-OPNsense needs a pass rule TCP → adsb.local:8080 from the ESP's VLAN.
+## Network (example setup — adapt to yours)
+Give the ESP32 a stable address (DHCP reservation or the on-device static-IP screen).
+Feeder: adsb.im on a Raspberry Pi — port 80 = Flask config app, port 8080 = tar1090
+(`/data/aircraft.json`). If the feeder is on a different VLAN/subnet than the display,
+add a firewall pass rule TCP → <feeder-ip>:8080 from the display's network.
