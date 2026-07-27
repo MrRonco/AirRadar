@@ -1,14 +1,19 @@
-// AirRadar v5
+// AirRadar v6
 // Waveshare ESP32-S3-Touch-LCD-7 (800x480 RGB, GT911 touch, CH422G expander)
 //
-// v5 changes:
-//   - symmetric card layout: left column (Overview/Settings) fills to the same
-//     baseline as the right column (Selected/Time)
-//   - Overview: data age and source on separate lines (no more overlap)
-//   - tappable range pill: 50 / 100 / 150 / 250 km, rings relabel live
-//   - time card: local time only (UTC line removed), date below
-//   - NETWORK settings screen: DHCP or static IP/gateway/mask/DNS on-device,
-//     reached from the Settings card or the gear menu; bottom bar removed
+// v6 changes:
+//   - Settings card removed from the radar view; coords + labels live on the gear
+//     screen only. Both side columns are mirrored stacks (tall card over short) that
+//     run top-edge to floor; the top-left brand strip is gone to buy that height.
+//   - Time card moved to bottom-left; a full-width SETTINGS button (was the corner
+//     cog) sits bottom-right.
+//   - Overview: HOME location in the header, in-range/heard, conditional emergency
+//     line, nearest target + bearing, feed rate (stats.json), altitude colour key.
+//   - Selected Aircraft: operator/airframe/year (aircraft DB), tail, selected
+//     altitude, always-on squawk, live/coast status, and origin->dest route (adsbdb).
+//   - Satellite base map under the scope: keyless Esri World Imagery for the entered
+//     coordinates, slate-tinted, rescaled on range change.
+//   - Emergency targets flash red on the scope in step with the Overview line.
 //
 // Data: local ADS-B feeder (tar1090 on :8080) first, airplanes.live fallback.
 //
@@ -44,6 +49,11 @@
 // POSIX TZ string - set yours (e.g. "EST5EDT,M3.2.0,M11.1.0" for US/Canada Eastern)
 #define TZ_STRING    "UTC0"
 #define MDNS_NAME    "airradar"
+
+// about / credit (shown on the settings screen and web page)
+#define APP_VERSION  "v6.0"
+#define REPO_URL     "github.com/MrRonco/AirRadar"
+#define AUTHOR_LINE  "A hobby ADS-B radar by Franco Raso"
 
 // Local ADS-B feeder - tried first every poll; cloud is fallback.
 // adsb.im image: tar1090 is on port 8080 (port 80 is the feeder config app).
@@ -87,12 +97,12 @@ const float X_CORR = 0.93f;
 const int PLOT_X = 200, PLOT_Y = 22;
 const int PLOT_W = 400, PLOT_H = 408;
 
-const int OV_X=12,  OV_Y=64,  OV_W=168, OV_H=176;   // overview card
-const int ST_X=12,  ST_Y=248, ST_W=168, ST_H=188;   // settings card
-const int SC_X=620, SC_Y=20,  SC_W=168, SC_H=300;   // selected craft card
-const int TM_X=620, TM_Y=332, TM_W=168, TM_H=104;   // time card
+// v6 mirrored columns: tall card (14..374) over short card (382..470), both sides
+const int OV_X=12,  OV_Y=14,  OV_W=168, OV_H=360;   // overview card (tall, left)
+const int TM_X=12,  TM_Y=382, TM_W=168, TM_H=88;    // time card (short, left)
+const int SC_X=620, SC_Y=14,  SC_W=168, SC_H=360;   // selected craft card (tall, right)
+const int SET_X=620,SET_Y=382, SET_W=168,SET_H=88;  // settings button (short, right)
 const int ARROW_L_X=216, ARROW_R_X=584, ARROW_Y=388, ARROW_R=22;
-const int GEAR_X=766, GEAR_Y=458, GEAR_R=16;
 
 // ---------- palette ----------
 uint16_t colTxtHi, colTxtMd, colTxtLo, colAcc, colAccDim;
@@ -105,9 +115,13 @@ const uint8_t GLASS[3]={26,36,50};
 struct Track {
   bool valid;
   char hex[8], flight[12], typeCode[8], category[5], squawk[6], reg[10];
+  char desc[24], ownOp[20], year[6];   // aircraft DB (may be blank on some feeds)
+  char origin[5], dest[5];             // route from adsbdb (Tier C), "" until looked up
+  bool routeTried;                     // route lookup attempted for this hex
+  bool mil;                            // dbFlags bit0 = military / interesting
   double lat, lon;
   float gsKt, trackDeg;
-  int altFt, vRateFpm;
+  int altFt, vRateFpm, navAltFt;       // navAltFt = autopilot selected altitude (-1 none)
   uint32_t lastApiMs;
   float trailX[TRAIL_LEN], trailY[TRAIL_LEN];
   int trailCount, trailHead;
@@ -117,18 +131,41 @@ Track tracks[MAX_TRACKS];
 
 struct ApiPlane {
   char hex[8], flight[12], typeCode[8], category[5], squawk[6], reg[10];
-  double lat, lon; float gsKt, trackDeg; int altFt, vRateFpm;
+  char desc[24], ownOp[20], year[6];
+  bool mil;
+  double lat, lon; float gsKt, trackDeg; int altFt, vRateFpm, navAltFt;
 };
 ApiPlane pendingPlanes[MAX_TRACKS];
-int  pendingCount=0;
+int  pendingCount=0, pendingHeard=0;
 bool pendingReady=false, pendingOk=false, pendingLocal=true, fetchInProgress=false;
 portMUX_TYPE dataMux = portMUX_INITIALIZER_UNLOCKED;
 
 uint32_t lastFetchStart=0, lastGoodApply=0, lastPosTick=0, lastClockTick=0;
-int posTickCounter=0, lastSubMin=-1, visibleCount=0;
+int posTickCounter=0, lastSubMin=-1, visibleCount=0, heardCount=0;
 
 char selHex[8]="";
 int  orderIdx[MAX_TRACKS], orderN=0;
+
+// feed rate (stats.json, local feeder only) — msgs/sec, -1 = unknown
+volatile float feedMsgRate=-1.0f;
+uint32_t lastStatsStart=0;
+const uint32_t POLL_STATS_MS=15000;
+
+// emergency blink phase (toggled on each radar tick)
+bool emergBlink=false;
+
+// satellite base map (Esri World Imagery, decoded into bg plot region)
+uint8_t* satBuf=nullptr;         // PSRAM JPEG buffer
+volatile int satLen=0;           // bytes ready to decode, 0 = none
+volatile bool satFetching=false; // fetch task running
+volatile bool satReady=false;    // new image waiting for main loop to decode
+int satForRange=-1;              // range the pending/last image was fetched for
+bool satEnabled=true;
+
+// route lookup (adsbdb, Tier C) — single-slot request handed to a worker task
+char routeReqHex[8]="", routeReqFlight[12]="";
+char routeResHex[8]=""; char routeResOrigin[5]="", routeResDest[5]="";
+volatile bool routeReqPending=false, routeResReady=false, routeFetching=false;
 
 enum Screen { SCR_MAIN, SCR_WIFI_SCAN, SCR_WIFI_PASS, SCR_COORDS, SCR_MENU, SCR_NET };
 Screen screen = SCR_MAIN;
@@ -146,6 +183,10 @@ bool wasTouched=false;
 void startServer();
 void drawMainScreen();
 void drawNetScreen();
+void startSatFetch();
+void requestRoute(const char* hex,const char* flight);
+void drawSatelliteBase();
+void fetchStats();
 
 // ============================================================
 //  Math helpers
@@ -301,18 +342,9 @@ bool hitC(int tx,int ty,int cx,int cy,int r){
 // ============================================================
 //  Static chrome build (runs once at boot)
 // ============================================================
-void buildChrome(){
-  for(int y=0;y<480;y++){
-    uint8_t r=BG1[0]+(BG2[0]-BG1[0])*y/479;
-    uint8_t g=BG1[1]+(BG2[1]-BG1[1])*y/479;
-    uint8_t b=BG1[2]+(BG2[2]-BG1[2])*y/479;
-    bg.drawFastHLine(0,y,800,lcd.color565(r,g,b));
-  }
-  uint16_t deco=lcd.color565(19,27,38);
-  bg.drawEllipse(RCX,RCY,(int)(250*X_CORR),250,deco);
-  bg.drawEllipse(RCX,RCY,(int)(310*X_CORR),310,deco);
-  bg.drawEllipse(RCX,RCY,(int)(380*X_CORR),380,deco);
-
+// Scope rings, spokes, compass, crosshair — drawn into bg. Split out so it can be
+// re-laid over the satellite base after a new image is composited in.
+void drawScopeRings(){
   uint16_t ringDim=lcd.color565(34,48,64), ringHi=lcd.color565(64,92,122);
   int rr[4]={49,98,146,R};
   for(int i=0;i<3;i++) bg.drawEllipse(RCX,RCY,(int)(rr[i]*X_CORR),rr[i],ringDim);
@@ -331,56 +363,137 @@ void buildChrome(){
   bg.drawString("E",RCX+(int)((R-20)*X_CORR),RCY);
   bg.drawString("S",RCX,RCY+R-20);
   bg.drawString("W",RCX-(int)((R-20)*X_CORR),RCY);
-
   bg.drawLine(RCX,RCY-6,RCX+5,RCY,colAcc); bg.drawLine(RCX+5,RCY,RCX,RCY+6,colAcc);
   bg.drawLine(RCX,RCY+6,RCX-5,RCY,colAcc); bg.drawLine(RCX-5,RCY,RCX,RCY-6,colAcc);
+}
 
-  // glass cards
+void buildChrome(){
+  for(int y=0;y<480;y++){
+    uint8_t r=BG1[0]+(BG2[0]-BG1[0])*y/479;
+    uint8_t g=BG1[1]+(BG2[1]-BG1[1])*y/479;
+    uint8_t b=BG1[2]+(BG2[2]-BG1[2])*y/479;
+    bg.drawFastHLine(0,y,800,lcd.color565(r,g,b));
+  }
+  uint16_t deco=lcd.color565(19,27,38);
+  bg.drawEllipse(RCX,RCY,(int)(250*X_CORR),250,deco);
+  bg.drawEllipse(RCX,RCY,(int)(310*X_CORR),310,deco);
+  bg.drawEllipse(RCX,RCY,(int)(380*X_CORR),380,deco);
+
+  drawScopeRings();
+
+  // glass cards (mirrored columns + range pill + cycle arrows)
   glassRect(OV_X,OV_Y,OV_W,OV_H,14);
-  glassRect(ST_X,ST_Y,ST_W,ST_H,14);
   glassRect(SC_X,SC_Y,SC_W,SC_H,14);
   glassRect(TM_X,TM_Y,TM_W,TM_H,14);
+  glassRect(SET_X,SET_Y,SET_W,SET_H,14);
   glassRect(348,446,104,24,12);                 // range pill (text is dynamic)
   glassCircle(ARROW_L_X,ARROW_Y,ARROW_R);
   glassCircle(ARROW_R_X,ARROW_Y,ARROW_R);
-  glassCircle(GEAR_X,GEAR_Y,GEAR_R);
 
-  // brand
-  bg.setTextDatum(top_left);
-  bg.setFont(&fonts::FreeSansBold12pt7b);
-  bg.setTextColor(colTxtHi); bg.drawString("AIR RADAR",14,14);
-  bg.setFont(&fonts::FreeSans9pt7b);
-  bg.setTextColor(colAcc);   bg.drawString(HOME_LABEL,15,40);
-
-  // card headers + fixed labels
+  // ---- Overview header: eyebrow + HOME location (drawn home icon; ASCII-safe) ----
   bg.setFont(&fonts::FreeSansBold9pt7b);
   bg.setTextColor(colTxtLo);
   bg.setTextDatum(top_center);
-  bg.drawString("OVERVIEW",OV_X+OV_W/2,OV_Y+10);
-  bg.drawString("SETTINGS",ST_X+ST_W/2,ST_Y+10);
+  bg.drawString("OVERVIEW",OV_X+OV_W/2,OV_Y+9);
+  {
+    bg.setFont(&fonts::FreeSansBold12pt7b);
+    int tw=bg.textWidth(HOME_LABEL);
+    int total=tw+20;                            // 14px icon + 6px gap
+    int lx=OV_X+OV_W/2-total/2, iy=OV_Y+30;
+    bg.fillTriangle(lx,iy,lx+7,iy-8,lx+14,iy,colAcc);   // roof
+    bg.fillRect(lx+2,iy,10,8,colAcc);                   // body
+    bg.setTextDatum(top_left);
+    bg.setTextColor(colAcc);
+    bg.drawString(HOME_LABEL,lx+20,OV_Y+22);
+  }
+  bg.drawFastHLine(OV_X+12,OV_Y+50,OV_W-24,colBorder);
+  bg.drawFastHLine(OV_X+12,OV_Y+290,OV_W-24,colBorder);
+
+  // ---- Overview altitude colour key (static) ----
+  bg.setTextDatum(top_left);
+  bg.setFont(&fonts::Font0);
+  bg.setTextColor(colTxtLo);
+  bg.drawString("ALTITUDE",OV_X+14,OV_Y+298);
+  {
+    struct AK{int alt;const char*lab;};
+    AK ak[3]={{5000,"<10k"},{20000,"10-30k"},{40000,">30k"}};
+    int ay=OV_Y+314;
+    for(int i=0;i<3;i++){
+      uint8_t r,g,b; altRGB(ak[i].alt,r,g,b);
+      int cx=OV_X+18+i*52;
+      bg.fillCircle(cx,ay+5,4,bg.color565(r,g,b));
+      bg.setTextColor(colTxtMd);
+      bg.drawString(ak[i].lab,cx+8,ay+1);
+    }
+  }
+
+  // ---- Selected Aircraft header ----
+  bg.setFont(&fonts::FreeSansBold9pt7b);
+  bg.setTextColor(colTxtLo);
+  bg.setTextDatum(top_center);
   bg.drawString("SELECTED",SC_X+SC_W/2,SC_Y+8);
   bg.drawString("AIRCRAFT",SC_X+SC_W/2,SC_Y+26);
-  bg.setTextDatum(top_left);
-  bg.setFont(&fonts::FreeSans9pt7b);
-  bg.drawString("AIRCRAFT",OV_X+14,OV_Y+36);
-  bg.drawString("UPDATED",OV_X+14,OV_Y+108);
-  bg.drawString("COORDS",ST_X+14,ST_Y+36);
-  bg.drawString("LABELS",ST_X+14,ST_Y+146);
-  bg.drawFastHLine(OV_X+12,OV_Y+100,OV_W-24,colBorder);
-  bg.drawFastHLine(ST_X+12,ST_Y+124,ST_W-24,colBorder);
 
-  // arrow chevrons
+  // ---- Settings button: drawn gear + label, accent-outlined ----
+  {
+    int cx=SET_X+34, cy=SET_Y+SET_H/2;
+    bg.drawCircle(cx,cy,7,colAcc);
+    bg.drawCircle(cx,cy,2,colAcc);
+    for(int a=0;a<360;a+=60){
+      float rad=deg2rad((float)a);
+      bg.drawLine(cx+cosf(rad)*7,cy+sinf(rad)*7,cx+cosf(rad)*11,cy+sinf(rad)*11,colAcc);
+    }
+    bg.setFont(&fonts::FreeSansBold12pt7b);
+    bg.setTextColor(colTxtHi);
+    bg.setTextDatum(middle_left);
+    bg.drawString("SETTINGS",SET_X+56,cy);
+    bg.drawRoundRect(SET_X+1,SET_Y+1,SET_W-2,SET_H-2,14,colAccDim);
+  }
+
+  // arrow chevrons (live inside the scope; copied into the plot each tick)
   bg.fillTriangle(ARROW_L_X+7,ARROW_Y-10,ARROW_L_X+7,ARROW_Y+10,ARROW_L_X-8,ARROW_Y,colAcc);
   bg.fillTriangle(ARROW_R_X-7,ARROW_Y-10,ARROW_R_X-7,ARROW_Y+10,ARROW_R_X+8,ARROW_Y,colAcc);
+}
 
-  // gear icon
-  bg.drawCircle(GEAR_X,GEAR_Y,7,colAcc);
-  bg.drawCircle(GEAR_X,GEAR_Y,2,colAcc);
-  for(int a=0;a<360;a+=60){
-    float rad=deg2rad((float)a);
-    bg.drawLine(GEAR_X+cosf(rad)*7,GEAR_Y+sinf(rad)*7,
-                GEAR_X+cosf(rad)*11,GEAR_Y+sinf(rad)*11,colAcc);
+// Composite the fetched Esri JPEG into the bg scope circle, slate-tinted, then re-lay
+// the rings and attribution over it. One-shot on boot / range change (never per-frame).
+void drawSatelliteBase(){
+  if(!satReady||satLen<=0||!satBuf){ satReady=false; return; }
+  LGFX_Sprite sat(&lcd); sat.setPsram(true); sat.setColorDepth(16);
+  if(!sat.createSprite(PLOT_W,PLOT_H)){ satReady=false; return; }
+  sat.fillScreen(lcd.color565(BG1[0],BG1[1],BG1[2]));
+  // image is requested at exactly PLOT_W x PLOT_H, so draw it 1:1
+  sat.drawJpg(satBuf,(size_t)satLen,0,0);
+
+  for(int yy=0; yy<PLOT_H; yy++){
+    int gy=PLOT_Y+yy, dy=gy-RCY;
+    for(int xx=0; xx<PLOT_W; xx++){
+      int gx=PLOT_X+xx; float fx=(gx-RCX)/X_CORR;
+      float rd2=fx*fx+(float)dy*dy;
+      if(rd2>(float)R*R) continue;                       // clip to scope circle
+      uint16_t c=sat.readPixel(xx,yy);
+      int r=((c>>11)&0x1f)<<3, g=((c>>5)&0x3f)<<2, b=(c&0x1f)<<3;
+      int lum=(r*77+g*150+b*29)>>8;                      // luminance
+      // slate-cyan monochrome ramp (keeps the green earth out of the UI palette)
+      r=(lum*90)>>8;  r+=8;
+      g=(lum*128)>>8; g+=16;
+      b=(lum*182)>>8; b+=26;
+      float vig=1.0f-0.55f*(rd2/((float)R*R));            // darken toward the edge
+      r=(int)(r*vig); g=(int)(g*vig); b=(int)(b*vig);
+      bg.drawPixel(gx,gy,bg.color565(constrain(r,0,255),constrain(g,0,255),constrain(b,0,255)));
+    }
   }
+  sat.deleteSprite();
+
+  drawScopeRings();                                       // rings back on top of imagery
+  bg.setFont(&fonts::Font0);
+  bg.setTextDatum(bottom_right);
+  bg.setTextColor(lcd.color565(120,140,158));
+  bg.drawString("Esri, Maxar",RCX+(int)(R*X_CORR)-4,RCY+R-1);   // required attribution
+  bg.setTextDatum(top_left);
+
+  satReady=false;
+  if(screen==SCR_MAIN) drawMainScreen();                  // repaint everything from bg
 }
 
 // ============================================================
@@ -397,6 +510,9 @@ void fillFilter(JsonObject f){
   f["alt_baro"]=true; f["alt_geom"]=true; f["gs"]=true; f["track"]=true;
   f["t"]=true; f["category"]=true; f["baro_rate"]=true; f["geom_rate"]=true;
   f["squawk"]=true; f["r"]=true; f["seen_pos"]=true;
+  // v6 enrichment (aircraft DB fields; absent on some feeds — parsed defensively)
+  f["desc"]=true; f["ownOp"]=true; f["year"]=true; f["dbFlags"]=true;
+  f["nav_altitude_mcp"]=true;
 }
 
 bool fetchParse(Stream &s, bool local){
@@ -404,7 +520,7 @@ bool fetchParse(Stream &s, bool local){
   fillFilter(filter["ac"].createNestedObject());
   fillFilter(filter["aircraft"].createNestedObject());
 
-  DynamicJsonDocument doc(49152);
+  DynamicJsonDocument doc(65536);
   DeserializationError err=deserializeJson(doc,s,DeserializationOption::Filter(filter));
   if(err){ Serial.printf("JSON(%s): %s\n",local?"local":"cloud",err.c_str()); return false; }
 
@@ -412,23 +528,30 @@ bool fetchParse(Stream &s, bool local){
   if(arr.isNull()) arr=doc["ac"].as<JsonArray>();
   if(arr.isNull()) return false;
 
-  ApiPlane temp[MAX_TRACKS]; int n=0;
+  ApiPlane temp[MAX_TRACKS]; int n=0, heard=0;
   for(JsonObject ac: arr){
-    if(n>=MAX_TRACKS) break;
     if(!ac["lat"].is<float>()||!ac["lon"].is<float>()) continue;
     if(local){
       float sp=ac["seen_pos"]|999.0f;
       if(sp>15.0f) continue;
     }
+    heard++;                                   // aircraft with a live position
     double lat=ac["lat"], lon=ac["lon"];
     if(haversineKm(homeLat,homeLon,lat,lon)>(float)rangeKm) continue;
+    if(n>=MAX_TRACKS) continue;                // in range but table full
     ApiPlane &p=temp[n];
+    memset(&p,0,sizeof(ApiPlane));
     strlcpy(p.hex,ac["hex"]|"",sizeof(p.hex));
     strlcpy(p.flight,ac["flight"]|"",sizeof(p.flight));
     strlcpy(p.typeCode,ac["t"]|"",sizeof(p.typeCode));
     strlcpy(p.category,ac["category"]|"",sizeof(p.category));
     strlcpy(p.squawk,ac["squawk"]|"",sizeof(p.squawk));
     strlcpy(p.reg,ac["r"]|"",sizeof(p.reg));
+    strlcpy(p.desc,ac["desc"]|"",sizeof(p.desc));
+    strlcpy(p.ownOp,ac["ownOp"]|"",sizeof(p.ownOp));
+    if(ac["year"].is<const char*>()) strlcpy(p.year,ac["year"]|"",sizeof(p.year));
+    else if(ac["year"].is<int>()) snprintf(p.year,sizeof(p.year),"%d",ac["year"].as<int>());
+    int flags=ac["dbFlags"]|0; p.mil=((flags&3)!=0);
     p.lat=lat; p.lon=lon;
     p.gsKt=ac["gs"]|0.0f; p.trackDeg=ac["track"]|0.0f;
     if(ac["alt_baro"].is<int>()) p.altFt=ac["alt_baro"];
@@ -438,11 +561,12 @@ bool fetchParse(Stream &s, bool local){
     if(ac["baro_rate"].is<int>()) p.vRateFpm=ac["baro_rate"];
     else if(ac["geom_rate"].is<int>()) p.vRateFpm=ac["geom_rate"];
     else p.vRateFpm=0;
+    p.navAltFt=ac["nav_altitude_mcp"].is<int>()?ac["nav_altitude_mcp"].as<int>():-1;
     n++;
   }
 
   portENTER_CRITICAL(&dataMux);
-  pendingCount=n;
+  pendingCount=n; pendingHeard=heard;
   memcpy(pendingPlanes,temp,sizeof(ApiPlane)*n);
   pendingOk=true; pendingLocal=local; pendingReady=true;
   portEXIT_CRITICAL(&dataMux);
@@ -469,7 +593,10 @@ void fetchAircraftData(){
       int code=http.GET();
       bool ok=(code==200)&&fetchParse(http.getStream(),true);
       http.end();
-      if(ok) return;
+      if(ok){
+        if(millis()-lastStatsStart>=POLL_STATS_MS){ lastStatsStart=millis(); fetchStats(); }
+        return;
+      }
       Serial.printf("Local feed %s -> HTTP %d\n",urls[u].c_str(),code);
     }
   }
@@ -484,7 +611,7 @@ void fetchAircraftData(){
     HTTPClient http;
     http.useHTTP10(true); http.setTimeout(12000);
     if(http.begin(client,url)){
-      http.addHeader("User-Agent","ESP32-AirRadar/5.0");
+      http.addHeader("User-Agent","ESP32-AirRadar/6.0");
       int code=http.GET();
       bool ok=(code==200)&&fetchParse(http.getStream(),false);
       http.end();
@@ -502,16 +629,120 @@ void startFetch(){
   xTaskCreatePinnedToCore(fetchTask,"fetch",12000,NULL,1,NULL,0);
 }
 
+// ---- Feed rate: tar1090/readsb stats.json (local feeder only) ----
+void fetchStats(){
+  String url=feedUrl;
+  int q=url.lastIndexOf('/');
+  if(q<0){ return; }
+  url=url.substring(0,q+1)+"stats.json";
+  WiFiClient net; HTTPClient http;
+  http.setConnectTimeout(1500); http.setTimeout(4000); http.useHTTP10(true);
+  if(!http.begin(net,url)) return;
+  int code=http.GET();
+  if(code==200){
+    StaticJsonDocument<192> filt;
+    filt["last1min"]["messages"]=true;
+    DynamicJsonDocument doc(4096);
+    if(!deserializeJson(doc,http.getStream(),DeserializationOption::Filter(filt))){
+      long m=doc["last1min"]["messages"]|(long)-1;
+      if(m>=0) feedMsgRate=m/60.0f;
+    }
+  }
+  http.end();
+}
+
+// ---- Satellite base map: keyless Esri World Imagery for the current view ----
+const size_t SAT_MAX=320*1024;
+void fetchSatellite(){
+  if(!satEnabled||WiFi.status()!=WL_CONNECTED) return;
+  if(!satBuf){ satBuf=(uint8_t*)ps_malloc(SAT_MAX); if(!satBuf) return; }
+  const double ER=6378137.0;
+  double cx=ER*deg2rad(homeLon);
+  double cy=ER*log(tan(M_PI/4.0+deg2rad(homeLat)/2.0));
+  double half=(double)rangeKm*1000.0;          // scope radius in metres
+  char url[360];
+  snprintf(url,sizeof(url),
+    "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
+    "?bbox=%.1f,%.1f,%.1f,%.1f&bboxSR=3857&imageSR=3857&size=%d,%d&format=jpg&f=image",
+    cx-half,cy-half,cx+half,cy+half,PLOT_W,PLOT_H);
+  WiFiClientSecure client; client.setInsecure();
+  HTTPClient http; http.setTimeout(12000);
+  if(!http.begin(client,url)) return;
+  int code=http.GET();
+  if(code!=200){ http.end(); Serial.printf("Esri -> HTTP %d\n",code); return; }
+  int clen=http.getSize(); size_t total=0;
+  WiFiClient* st=http.getStreamPtr();
+  uint32_t t0=millis();
+  while(http.connected() && (clen<0||(int)total<clen) && total<SAT_MAX){
+    size_t avail=st->available();
+    if(avail){
+      size_t room=SAT_MAX-total; if(avail>room) avail=room;
+      int r=st->readBytes(satBuf+total,avail);
+      if(r>0){ total+=r; t0=millis(); }
+    }else{ if(millis()-t0>4000) break; delay(4); }
+  }
+  http.end();
+  if(total>1000){ satLen=(int)total; satForRange=rangeKm; satReady=true;
+    Serial.printf("Esri image: %u bytes (range %d)\n",(unsigned)total,rangeKm); }
+}
+void satTask(void*){ fetchSatellite(); satFetching=false; vTaskDelete(NULL); }
+void startSatFetch(){
+  if(satFetching||!satEnabled) return;
+  satReady=false;                    // drop any stale image the loop hasn't consumed
+  satFetching=true;
+  xTaskCreatePinnedToCore(satTask,"sat",12000,NULL,1,NULL,0);   // TLS needs headroom
+}
+
+// ---- Route lookup: adsbdb (keyless), single-slot request ----
+void fetchRoute(){
+  String c(routeReqFlight); c.trim();
+  if(c.length()){
+    String url="https://api.adsbdb.com/v0/callsign/"+c;
+    WiFiClientSecure client; client.setInsecure();
+    HTTPClient http; http.setTimeout(8000);
+    if(http.begin(client,url)){
+      int code=http.GET();
+      if(code==200){
+        StaticJsonDocument<512> filt;
+        filt["response"]["flightroute"]["origin"]["iata_code"]=true;
+        filt["response"]["flightroute"]["destination"]["iata_code"]=true;
+        DynamicJsonDocument doc(2048);
+        if(!deserializeJson(doc,http.getStream(),DeserializationOption::Filter(filt))){
+          JsonObject fr=doc["response"]["flightroute"];
+          strlcpy(routeResOrigin,fr["origin"]["iata_code"]|"",sizeof(routeResOrigin));
+          strlcpy(routeResDest,  fr["destination"]["iata_code"]|"",sizeof(routeResDest));
+        }
+      }
+      http.end();
+    }
+  }
+  strlcpy(routeResHex,routeReqHex,sizeof(routeResHex));
+  routeResReady=true;                          // ready (may be blank) — marks "tried"
+}
+void routeTask(void*){ fetchRoute(); routeFetching=false; vTaskDelete(NULL); }
+void requestRoute(const char* hex,const char* flight){
+  if(routeFetching) return;
+  String f(flight); f.trim();
+  if(!f.length()) return;
+  routeResOrigin[0]=0; routeResDest[0]=0;
+  strlcpy(routeReqHex,hex,sizeof(routeReqHex));
+  strlcpy(routeReqFlight,f.c_str(),sizeof(routeReqFlight));
+  routeFetching=true;
+  xTaskCreatePinnedToCore(routeTask,"route",12000,NULL,1,NULL,0);   // TLS needs headroom
+}
+
 bool applyPending(){
-  ApiPlane local[MAX_TRACKS]; int n=0; bool ok=false, pl=true, ready;
+  ApiPlane local[MAX_TRACKS]; int n=0, hd=0; bool ok=false, pl=true, ready;
   portENTER_CRITICAL(&dataMux);
   ready=pendingReady;
-  if(ready){ ok=pendingOk; n=pendingCount; pl=pendingLocal;
+  if(ready){ ok=pendingOk; n=pendingCount; hd=pendingHeard; pl=pendingLocal;
     if(ok) memcpy(local,pendingPlanes,sizeof(ApiPlane)*n);
     pendingReady=false; }
   portEXIT_CRITICAL(&dataMux);
   if(!ready||!ok) return false;
   feedIsLocal=pl;
+  heardCount=hd;
+  if(!pl) feedMsgRate=-1.0f;                    // feed rate is local-feeder only
 
   uint32_t now=millis();
   for(int i=0;i<n;i++){
@@ -529,11 +760,19 @@ bool applyPending(){
       strlcpy(tracks[slot].hex,p.hex,sizeof(tracks[slot].hex));
     }
     Track &t=tracks[slot];
+    // callsign changed -> route cache is stale, allow a fresh lookup
+    if(p.flight[0]&&strcmp(t.flight,p.flight)){ t.routeTried=false; t.origin[0]=0; t.dest[0]=0; }
     strlcpy(t.flight,p.flight,sizeof(t.flight));
     strlcpy(t.typeCode,p.typeCode,sizeof(t.typeCode));
     strlcpy(t.category,p.category,sizeof(t.category));
     strlcpy(t.squawk,p.squawk,sizeof(t.squawk));
     strlcpy(t.reg,p.reg,sizeof(t.reg));
+    // enrichment: keep last-known value if this poll's field is blank
+    if(p.desc[0])  strlcpy(t.desc,p.desc,sizeof(t.desc));
+    if(p.ownOp[0]) strlcpy(t.ownOp,p.ownOp,sizeof(t.ownOp));
+    if(p.year[0])  strlcpy(t.year,p.year,sizeof(t.year));
+    t.mil = t.mil || p.mil;
+    t.navAltFt=p.navAltFt;
     t.lat=p.lat; t.lon=p.lon; t.gsKt=p.gsKt; t.trackDeg=p.trackDeg;
     t.altFt=p.altFt; t.vRateFpm=p.vRateFpm; t.lastApiMs=now;
   }
@@ -598,7 +837,8 @@ void drawTarget(Track &t){
   bool emerg=isEmergency(t.squawk);
 
   uint8_t r,g,bc;
-  if(emerg){r=255;g=93;bc=93;} else altRGB(t.altFt,r,g,bc);
+  if(emerg){ if(emergBlink){r=255;g=60;bc=70;} else {r=120;g=36;bc=42;} }  // flash red
+  else altRGB(t.altFt,r,g,bc);
   if(coasting){r=(uint8_t)(r*0.55f);g=(uint8_t)(g*0.55f);bc=(uint8_t)(bc*0.55f);}
   uint16_t col=plot.color565(r,g,bc);
 
@@ -619,6 +859,7 @@ void drawTarget(Track &t){
     plot.fillTriangle(sx+nx,sy+ny,sx+rx,sy+ry,sx+cx2,sy+cy2,col);
     plot.fillTriangle(sx+nx,sy+ny,sx+cx2,sy+cy2,sx+lx,sy+ly,col);
   }
+  if(t.mil){ plot.drawRect(sx-7,sy-7,14,14,colTxtHi); }   // military / interesting
   if(sel){
     plot.drawEllipse(sx,sy,(int)(13*X_CORR)+1,13,colTxtHi);
     plot.drawEllipse(sx,sy,(int)(15*X_CORR)+1,15,colAccDim);
@@ -695,55 +936,90 @@ void renderPlot(){
 //  Card field drawers
 // ============================================================
 void drawOverview(){
-  restore(OV_X+8,OV_Y+52,OV_W-16,OV_H-58);
+  rebuildOrder();
+  int inRange=orderN; visibleCount=inRange;
+
+  restore(OV_X+8,OV_Y+52,OV_W-16,234);
   bool link=(WiFi.status()==WL_CONNECTED);
   bool stale=(millis()-lastGoodApply>STALE_FEED_MS)||lastGoodApply==0;
-  uint16_t st=!link?colBad:(stale?colLowA:colAcc);
 
+  // hero: aircraft in range + total heard
   lcd.setTextDatum(top_left);
   lcd.setFont(&fonts::FreeSansBold18pt7b);
   lcd.setTextColor(colAcc);
-  lcd.drawString(String(visibleCount),OV_X+16,OV_Y+58);
-
-  int px=OV_X+120, py=OV_Y+79;
-  lcd.fillTriangle(px,py-8,px+6,py+7,px,py+3,st);
-  lcd.fillTriangle(px,py-8,px,py+3,px-6,py+7,st);
-
-  lcd.setFont(&fonts::FreeSans9pt7b);
-  lcd.setTextColor(st);
-  char buf[24];
-  const char* lbl=!link?"NO LINK":(stale?"STALE":nullptr);
-  if(lbl) snprintf(buf,sizeof(buf),"%s",lbl);
-  else{ uint32_t age=(millis()-lastGoodApply)/1000;
-        snprintf(buf,sizeof(buf),"%lus ago",(unsigned long)age); }
-  lcd.drawString(buf,OV_X+14,OV_Y+128);
-
-  // source on its own line
-  if(!link){ lcd.setTextColor(colBad);  lcd.drawString("OFFLINE",OV_X+14,OV_Y+148); }
-  else if(feedIsLocal){ lcd.setTextColor(colAcc); lcd.drawString(LOCAL_FEED_NAME,OV_X+14,OV_Y+148); }
-  else{ lcd.setTextColor(colTxtMd); lcd.drawString("CLOUD",OV_X+14,OV_Y+148); }
-}
-
-void drawSettingsVals(){
-  restore(ST_X+8,ST_Y+52,ST_W-16,64);
-  lcd.setTextDatum(top_left);
-  lcd.setFont(&fonts::FreeSans9pt7b);
-  lcd.setTextColor(colTxtHi);
-  char l1[20],l2[20];
-  snprintf(l1,sizeof(l1),"%.4f %c",fabs(homeLat),homeLat>=0?'N':'S');
-  snprintf(l2,sizeof(l2),"%.4f %c",fabs(homeLon),homeLon>=0?'E':'W');
-  lcd.drawString(l1,ST_X+16,ST_Y+58);
-  lcd.drawString(l2,ST_X+16,ST_Y+82);
+  lcd.drawString(String(inRange),OV_X+16,OV_Y+54);
   lcd.setFont(&fonts::Font0);
   lcd.setTextColor(colTxtLo);
-  lcd.drawString("TAP TO EDIT",ST_X+16,ST_Y+104);
+  lcd.drawString("IN RANGE",OV_X+72,OV_Y+62);
+  lcd.setFont(&fonts::FreeSans9pt7b);
+  lcd.setTextColor(colTxtMd);
+  char hb[24]; snprintf(hb,sizeof(hb),"of %d heard",heardCount);
+  lcd.drawString(hb,OV_X+16,OV_Y+88);
 
-  // labels toggle pill
-  restore(ST_X+ST_W-64,ST_Y+142,52,26);
-  int tx=ST_X+ST_W-62, ty=ST_Y+144, tw=48, th=22;
-  lcd.fillRoundRect(tx,ty,tw,th,11,showLabels?colAcc:lcd.color565(40,52,66));
-  int kx=showLabels?tx+tw-11:tx+11;
-  lcd.fillCircle(kx,ty+th/2,8,showLabels?lcd.color565(8,14,20):colTxtLo);
+  // emergency line (only when a 7500/7600/7700 is in range)
+  int em=-1;
+  for(int i=0;i<orderN;i++){ if(isEmergency(tracks[orderIdx[i]].squawk)){em=orderIdx[i];break;} }
+  if(em>=0){
+    lcd.setFont(&fonts::FreeSansBold9pt7b);
+    lcd.setTextColor(emergBlink?colBad:lcd.color565(150,60,66));
+    String ec(tracks[em].flight); ec.trim(); if(!ec.length()) ec=tracks[em].hex;
+    char eb[28]; snprintf(eb,sizeof(eb),"! %s  %s",tracks[em].squawk,ec.substring(0,7).c_str());
+    lcd.drawString(eb,OV_X+14,OV_Y+112);
+  }
+  lcd.drawFastHLine(OV_X+12,OV_Y+134,OV_W-24,colBorder);
+
+  // nearest target
+  lcd.setTextDatum(top_left);
+  lcd.setFont(&fonts::FreeSans9pt7b);
+  lcd.setTextColor(colTxtLo);
+  lcd.drawString("NEAREST",OV_X+14,OV_Y+142);
+  lcd.setTextDatum(top_right);
+  if(inRange>0){
+    Track &nt=tracks[orderIdx[0]];
+    String nc(nt.flight); nc.trim(); if(!nc.length()) nc=nt.hex;
+    lcd.setTextColor(colTxtHi);
+    lcd.drawString(nc.substring(0,8),OV_X+OV_W-14,OV_Y+142);
+    float nd=haversineKm(homeLat,homeLon,nt.lat,nt.lon);
+    float nbg=bearingTo(homeLat,homeLon,nt.lat,nt.lon);
+    char nbuf[24]; snprintf(nbuf,sizeof(nbuf),"%.1f km %s",nd,cardinal8(nbg));
+    lcd.setTextColor(colAcc);
+    lcd.drawString(nbuf,OV_X+OV_W-14,OV_Y+162);
+  }else{
+    lcd.setTextColor(colTxtLo);
+    lcd.drawString("--",OV_X+OV_W-14,OV_Y+142);
+  }
+
+  // feed rate (local feeder only)
+  lcd.setTextDatum(top_left);  lcd.setTextColor(colTxtLo);
+  lcd.drawString("FEED",OV_X+14,OV_Y+186);
+  lcd.setTextDatum(top_right);
+  char fb[16];
+  if(feedIsLocal&&feedMsgRate>=0) snprintf(fb,sizeof(fb),"%d/s",(int)(feedMsgRate+0.5f));
+  else snprintf(fb,sizeof(fb),"--");
+  lcd.setTextColor(colTxtHi);
+  lcd.drawString(fb,OV_X+OV_W-14,OV_Y+186);
+
+  lcd.setTextDatum(top_left);
+  lcd.drawFastHLine(OV_X+12,OV_Y+210,OV_W-24,colBorder);
+
+  // source + updated age
+  lcd.setTextColor(colTxtLo);
+  lcd.drawString("SOURCE",OV_X+14,OV_Y+218);
+  lcd.setTextDatum(top_right);
+  if(!link){ lcd.setTextColor(colBad); lcd.drawString("OFFLINE",OV_X+OV_W-14,OV_Y+218); }
+  else if(feedIsLocal){ lcd.setTextColor(colAcc); lcd.drawString(LOCAL_FEED_NAME,OV_X+OV_W-14,OV_Y+218); }
+  else{ lcd.setTextColor(colTxtMd); lcd.drawString("CLOUD",OV_X+OV_W-14,OV_Y+218); }
+
+  lcd.setTextDatum(top_left);  lcd.setTextColor(colTxtLo);
+  lcd.drawString("UPDATED",OV_X+14,OV_Y+242);
+  lcd.setTextDatum(top_right);
+  char ub[16]; uint16_t uc=colTxtHi;
+  if(!link){ snprintf(ub,sizeof(ub),"NO LINK"); uc=colBad; }
+  else if(stale){ snprintf(ub,sizeof(ub),"STALE"); uc=colLowA; }
+  else{ uint32_t age=(millis()-lastGoodApply)/1000; snprintf(ub,sizeof(ub),"%lus",(unsigned long)age); }
+  lcd.setTextColor(uc);
+  lcd.drawString(ub,OV_X+OV_W-14,OV_Y+242);
+  lcd.setTextDatum(top_left);
 }
 
 void drawRangePill(){
@@ -757,7 +1033,7 @@ void drawRangePill(){
 }
 
 void drawSelectedCard(){
-  restore(SC_X+6,SC_Y+46,SC_W-12,SC_H-52);
+  restore(SC_X+6,SC_Y+44,SC_W-12,SC_H-50);
   Track* t=findByHex(selHex);
   lcd.setTextDatum(top_left);
 
@@ -765,53 +1041,85 @@ void drawSelectedCard(){
     lcd.setFont(&fonts::FreeSans9pt7b);
     lcd.setTextColor(colTxtLo);
     lcd.setTextDatum(top_center);
-    lcd.drawString("Tap a target or",SC_X+SC_W/2,SC_Y+150);
-    lcd.drawString("use the arrows",SC_X+SC_W/2,SC_Y+174);
+    lcd.drawString("Tap a target or",SC_X+SC_W/2,SC_Y+170);
+    lcd.drawString("use the arrows",SC_X+SC_W/2,SC_Y+194);
     lcd.setTextDatum(top_left);
     return;
   }
 
   String call(t->flight); call.trim(); if(!call.length()) call=String(t->hex);
   bool emerg=isEmergency(t->squawk);
+  bool coasting=(millis()-t->lastApiMs>STALE_TRACK_MS);
   float d=haversineKm(homeLat,homeLon,t->lat,t->lon);
 
-  lcd.setFont(&fonts::FreeSansBold12pt7b);
+  // callsign
+  lcd.setFont(&fonts::FreeSansBold18pt7b);
   lcd.setTextColor(emerg?colBad:colTxtHi);
-  lcd.drawString(call.substring(0,9),SC_X+14,SC_Y+48);
-  lcd.setFont(&fonts::FreeSans9pt7b);
-  lcd.setTextColor(colTxtMd);
-  String typ(t->typeCode); typ.trim(); if(!typ.length()) typ=String(t->category);
-  lcd.drawString(typ.substring(0,8),SC_X+14,SC_Y+76);
-  if(emerg){
-    lcd.setTextColor(colBad);
-    char sq[10]; snprintf(sq,sizeof(sq),"SQ %s",t->squawk);
-    lcd.setTextDatum(top_right);
-    lcd.drawString(sq,SC_X+SC_W-12,SC_Y+76);
-    lcd.setTextDatum(top_left);
-  }
+  lcd.drawString(call.substring(0,8),SC_X+14,SC_Y+46);
 
+  // identity block (Tier B, drawn only when present — no blank rows)
+  lcd.setFont(&fonts::FreeSans9pt7b);
+  if(t->ownOp[0]){ lcd.setTextColor(colAcc);
+    lcd.drawString(String(t->ownOp).substring(0,17),SC_X+14,SC_Y+78); }
+  if(t->origin[0]&&t->dest[0]){
+    char rt[16]; snprintf(rt,sizeof(rt),"%s > %s",t->origin,t->dest);
+    lcd.setTextColor(colTxtHi); lcd.drawString(rt,SC_X+14,SC_Y+98); }
+  { String frame(t->desc); frame.trim();
+    if(!frame.length()){ frame=String(t->typeCode); frame.trim();
+      if(!frame.length()) frame=categoryName(t->category); }
+    lcd.setTextColor(colTxtMd);
+    lcd.drawString(frame.substring(0,17),SC_X+14,SC_Y+116); }
+  // tail . type . year (. MIL) — small
+  { char idl[32]; String tail(t->reg); tail.trim();
+    snprintf(idl,sizeof(idl),"%s  %s%s%s",
+      tail.length()?tail.c_str():"----", t->typeCode[0]?t->typeCode:"",
+      t->year[0]?"  ":"", t->year[0]?t->year:"");
+    lcd.setFont(&fonts::Font0); lcd.setTextColor(colTxtLo);
+    lcd.drawString(idl,SC_X+14,SC_Y+136);
+    if(t->mil){ lcd.setTextColor(colAcc); lcd.setTextDatum(top_right);
+      lcd.drawString("MIL",SC_X+SC_W-14,SC_Y+136); lcd.setTextDatum(top_left); } }
+
+  lcd.drawFastHLine(SC_X+12,SC_Y+152,SC_W-24,colBorder);
+
+  // number rows
   struct Row{const char* k; char v[16]; uint16_t c;};
-  Row rows[7];
+  Row rows[6];
   uint8_t rr,gg,bb; altRGB(t->altFt,rr,gg,bb);
-  snprintf(rows[0].v,16,t->altFt>=0?"%d ft":"---",t->altFt);
+  char altStr[12];
+  if(t->altFt>=18000) snprintf(altStr,sizeof(altStr),"FL%03d",t->altFt/100);
+  else if(t->altFt>=0) snprintf(altStr,sizeof(altStr),"%dft",t->altFt);
+  else snprintf(altStr,sizeof(altStr),"---");
+  if(t->navAltFt>0) snprintf(rows[0].v,16,"%s>%d",altStr,t->navAltFt/100);
+  else snprintf(rows[0].v,16,"%s",altStr);
   rows[0].k="ALT"; rows[0].c=lcd.color565(rr,gg,bb);
   snprintf(rows[1].v,16,"%d kt",(int)t->gsKt); rows[1].k="SPD"; rows[1].c=colTxtHi;
   snprintf(rows[2].v,16,"%d %s",(int)t->trackDeg,cardinal8(t->trackDeg));
   rows[2].k="HDG"; rows[2].c=colTxtHi;
-  snprintf(rows[3].v,16,"%+d fpm",t->vRateFpm); rows[3].k="V/S";
+  snprintf(rows[3].v,16,"%+d",t->vRateFpm); rows[3].k="V/S";
   rows[3].c=(t->vRateFpm>300)?colAcc:(t->vRateFpm<-300?colLowA:colTxtHi);
-  snprintf(rows[4].v,16,"%.1f km",d); rows[4].k="DIST"; rows[4].c=colTxtHi;
-  snprintf(rows[5].v,16,"%s",regCountry(t->reg)); rows[5].k="CTRY"; rows[5].c=colAcc;
-  snprintf(rows[6].v,16,"%s",categoryName(t->category)); rows[6].k="CAT"; rows[6].c=colTxtMd;
+  snprintf(rows[4].v,16,"%.1f km %s",d,cardinal8(bearingTo(homeLat,homeLon,t->lat,t->lon)));
+  rows[4].k="DIST"; rows[4].c=colTxtHi;
+  snprintf(rows[5].v,16,"%s",t->squawk[0]?t->squawk:"----");
+  rows[5].k="SQK"; rows[5].c=emerg?colBad:colTxtMd;
 
   lcd.setFont(&fonts::FreeSans9pt7b);
-  for(int i=0;i<7;i++){
-    int y=SC_Y+102+i*26;
+  for(int i=0;i<6;i++){
+    int y=SC_Y+162+i*26;
     lcd.setTextDatum(top_left);
     lcd.setTextColor(colTxtLo);  lcd.drawString(rows[i].k,SC_X+14,y);
     lcd.setTextDatum(top_right);
     lcd.setTextColor(rows[i].c); lcd.drawString(rows[i].v,SC_X+SC_W-14,y);
   }
+
+  // live / coast status
+  uint16_t sc=coasting?colLowA:colAcc;
+  uint32_t age=(millis()-t->lastApiMs)/1000;
+  lcd.fillCircle(SC_X+18,SC_Y+326,4,sc);
+  lcd.setFont(&fonts::Font0);
+  lcd.setTextColor(sc);
+  lcd.setTextDatum(middle_left);
+  char sb[16]; snprintf(sb,sizeof(sb),"%s  %lus",coasting?"COAST":"LIVE",(unsigned long)age);
+  lcd.drawString(sb,SC_X+28,SC_Y+326);
   lcd.setTextDatum(top_left);
 }
 
@@ -856,7 +1164,6 @@ void drawTimeCard(bool force){
 void drawMainScreen(){
   bg.pushSprite(0,0);
   drawOverview();
-  drawSettingsVals();
   drawSelectedCard();
   lastSubMin=-1;
   drawTimeCard(true);
@@ -1067,7 +1374,7 @@ void saveCoords(){
   prefs.putDouble("lat",homeLat); prefs.putDouble("lon",homeLon);
   for(int i=0;i<MAX_TRACKS;i++) tracks[i].valid=false;
   selHex[0]=0;
-  screen=SCR_MAIN; drawMainScreen(); startFetch();
+  screen=SCR_MAIN; drawMainScreen(); startFetch(); startSatFetch();
 }
 
 // ============================================================
@@ -1213,11 +1520,14 @@ void drawMenuScreen(){
   btn(240,340,320,50,"REBOOT");
   lcd.setTextDatum(top_center);
   lcd.setFont(&fonts::Font0);
-  lcd.setTextColor(colTxtLo);
+  lcd.setTextColor(colTxtMd);
   String ipl=(WiFi.status()==WL_CONNECTED)?
     ("Browser config: http://"+WiFi.localIP().toString()+"/  (http://" MDNS_NAME ".local/)"):
     String("Not connected");
-  lcd.drawString(ipl,400,404);
+  lcd.drawString(ipl,400,392);
+  lcd.setTextColor(colTxtLo);
+  lcd.drawString("AirRadar " APP_VERSION "   " REPO_URL,400,406);
+  lcd.drawString(AUTHOR_LINE,400,418);
 }
 
 // ============================================================
@@ -1269,6 +1579,9 @@ void handleRoot(){
   h+=F("'><button type=submit>Save &amp; reboot</button></form><br>"
     "<form method=post action=/forget onsubmit='return confirm(\"Forget WiFi and reboot?\")'>"
     "<button class=d>Forget Wi-Fi</button></form>"
+    "<p style='margin-top:28px;color:#5f7488;font-size:.85em'>AirRadar " APP_VERSION
+    " &middot; <a style='color:#8fa3b8' href='https://" REPO_URL "'>" REPO_URL "</a><br>"
+    AUTHOR_LINE "</p>"
     "</body></html>");
   server.send(200,"text/html",h);
 }
@@ -1284,7 +1597,7 @@ void handleSave(){
   selHex[0]=0;
   server.sendHeader("Location","/"); server.send(303);
   if(screen==SCR_MAIN) drawMainScreen();
-  startFetch();
+  startFetch(); startSatFetch();
 }
 void handleForget(){
   server.send(200,"text/plain","Forgetting WiFi, rebooting...");
@@ -1371,25 +1684,16 @@ void cycleRange(){
   drawOverview();
   renderPlot();
   startFetch();
+  startSatFetch();          // re-frame the satellite base to the new range
 }
 
 void mainTouch(int tx,int ty){
-  if(hitC(tx,ty,GEAR_X,GEAR_Y,GEAR_R+6)){ screen=SCR_MENU; drawMenuScreen(); return; }
+  if(hit(tx,ty,SET_X,SET_Y,SET_W,SET_H)){ screen=SCR_MENU; drawMenuScreen(); return; }
   if(hitC(tx,ty,ARROW_L_X,ARROW_Y,ARROW_R+6)){
     selectByOrder(-1); drawSelectedCard(); renderPlot(); return; }
   if(hitC(tx,ty,ARROW_R_X,ARROW_Y,ARROW_R+6)){
     selectByOrder(+1); drawSelectedCard(); renderPlot(); return; }
   if(hit(tx,ty,340,440,120,36)){ cycleRange(); return; }
-  if(hit(tx,ty,ST_X,ST_Y,ST_W,ST_H)){
-    if(ty<ST_Y+124){
-      coordLat=String(homeLat,6); coordLon=String(homeLon,6); coordField=0;
-      screen=SCR_COORDS; drawCoordScreen();
-    }else{
-      showLabels=!showLabels; prefs.putBool("lbl",showLabels);
-      drawSettingsVals(); renderPlot();
-    }
-    return;
-  }
   if(hit(tx,ty,PLOT_X,PLOT_Y,PLOT_W,PLOT_H)){
     float bestD=26*26; int best=-1;
     for(int i=0;i<MAX_TRACKS;i++){
@@ -1572,6 +1876,7 @@ void setup(){
   screen=SCR_MAIN;
   drawMainScreen();
   startFetch();
+  startSatFetch();                 // pull the satellite base for the current view
   lastPosTick=lastClockTick=millis();
 }
 
@@ -1593,7 +1898,23 @@ void loop(){
   }
   wasTouched=touched;
 
+  // a fresh satellite image is ready -> composite it into the chrome (heavy, one-shot)
+  if(satReady) drawSatelliteBase();
+
   if(screen!=SCR_MAIN) return;
+
+  // route lookup for the selected aircraft (Tier C) + apply any result
+  if(selHex[0]&&!routeFetching){
+    Track* s=findByHex(selHex);
+    if(s&&!s->routeTried&&s->flight[0]) requestRoute(s->hex,s->flight);
+  }
+  if(routeResReady){
+    routeResReady=false;
+    Track* s=findByHex(routeResHex);
+    if(s){ strlcpy(s->origin,routeResOrigin,sizeof(s->origin));
+           strlcpy(s->dest,routeResDest,sizeof(s->dest)); s->routeTried=true;
+           if(!strcmp(selHex,routeResHex)) drawSelectedCard(); }
+  }
 
   if(applyPending()){
     drawSelectedCard(); drawOverview();
@@ -1607,6 +1928,7 @@ void loop(){
   if(now-lastPosTick>=POS_TICK_MS){
     float dt=(now-lastPosTick)/1000.0f;
     lastPosTick=now;
+    emergBlink=!emergBlink;              // flash emergency targets + Overview line
     deadReckon(dt);
     if(++posTickCounter>=TRAIL_EVERY_TICK){ posTickCounter=0; recordTrails(); }
     drawSelectedCard(); drawOverview();
