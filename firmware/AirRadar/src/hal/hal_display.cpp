@@ -110,13 +110,16 @@ static bool s_backlight = true;
 // ============================================================
 //  LVGL glue
 // ============================================================
-// Draw buffers live in PSRAM: two slices of 800x120 px (192 KB each). The RGB
-// panel keeps its own full framebuffer inside LovyanGFX; pushImage() writes
-// into it and the panel DMA-scans continuously.
-#define BUF_LINES 120
+// HARDWARE-TUNED: the draw buffer lives in INTERNAL SRAM (single 800x60 slice,
+// 96 KB). With PSRAM draw buffers, every redraw was render-write + flush-read
+// on the same PSRAM bus the panel DMA scans at ~32 MB/s — visible as screen
+// wiggle whenever the map image forced real compositing. Internal SRAM keeps
+// rendering off that bus; only the final pushImage writes PSRAM. Falls back
+// to PSRAM if the heap can't give 96 KB (then expect the wiggle, and consider
+// dropping freq_write to 12 MHz as documented in CLAUDE.md).
+#define BUF_LINES 60
 static lv_disp_draw_buf_t s_drawBuf;
 static lv_color_t* s_buf1 = nullptr;
-static lv_color_t* s_buf2 = nullptr;
 
 static void flush_cb(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* px) {
   int32_t w = area->x2 - area->x1 + 1;
@@ -152,13 +155,21 @@ bool halDisplayInit() {
   lv_init();
 
   size_t bufBytes = SCR_W * BUF_LINES * sizeof(lv_color_t);
-  s_buf1 = (lv_color_t*)heap_caps_malloc(bufBytes, MALLOC_CAP_SPIRAM);
-  s_buf2 = (lv_color_t*)heap_caps_malloc(bufBytes, MALLOC_CAP_SPIRAM);
-  if (!s_buf1 || !s_buf2) {
-    Serial.println("[hal] PSRAM draw buffer alloc FAILED - check PSRAM=OPI PSRAM");
+  s_buf1 = (lv_color_t*)heap_caps_malloc(bufBytes,
+                                         MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (s_buf1) {
+    Serial.printf("[hal] draw buffer: %u KB internal SRAM\n",
+                  (unsigned)(bufBytes / 1024));
+  } else {
+    s_buf1 = (lv_color_t*)heap_caps_malloc(bufBytes, MALLOC_CAP_SPIRAM);
+    Serial.println("[hal] WARNING: internal draw buffer failed - using PSRAM "
+                   "(screen wiggle possible)");
+  }
+  if (!s_buf1) {
+    Serial.println("[hal] draw buffer alloc FAILED - check PSRAM=OPI PSRAM");
     return false;
   }
-  lv_disp_draw_buf_init(&s_drawBuf, s_buf1, s_buf2, SCR_W * BUF_LINES);
+  lv_disp_draw_buf_init(&s_drawBuf, s_buf1, NULL, SCR_W * BUF_LINES);
 
   static lv_disp_drv_t dispDrv;
   lv_disp_drv_init(&dispDrv);

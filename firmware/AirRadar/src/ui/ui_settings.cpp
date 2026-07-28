@@ -143,22 +143,27 @@ static lv_obj_t* mkRow(lv_obj_t* group, const char* key, bool divider) {
   return r;
 }
 
-// right-side "value ›" cluster; returns the value label
+// right-side "value ›" cluster; returns the value label.
+// HARDWARE-VERIFIED FIX: SIZE_CONTENT flex boxes under-measured and clipped
+// values from the LEFT ("DHCP" -> "CP"). Everything is fixed-width now: the
+// label ellipsizes on the right (LONG_DOT needs a set width to engage) and
+// short values right-align against the chevron.
 static lv_obj_t* mkChevronValue(lv_obj_t* row, const char* val) {
   lv_obj_t* box = lv_obj_create(row);
   lv_obj_remove_style_all(box);
-  lv_obj_set_size(box, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_size(box, 222, 24);
   lv_obj_set_flex_flow(box, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(box, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
                         LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(box, 7, 0);
   lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_t* v = lv_label_create(box);
+  lv_obj_set_width(v, 200);
   lv_label_set_text(v, val);
   lv_obj_set_style_text_font(v, F_MONO13, 0);
   lv_obj_set_style_text_color(v, C_IVORY2, 0);
+  lv_obj_set_style_text_align(v, LV_TEXT_ALIGN_RIGHT, 0);
   lv_label_set_long_mode(v, LV_LABEL_LONG_DOT);
-  lv_obj_set_style_max_width(v, 210, 0);   // was 150 — values were ellipsizing early
   lv_obj_t* c = lv_label_create(box);
   lv_label_set_text(c, "›");                 // ›
   lv_obj_set_style_text_font(c, F_MONO13, 0);
@@ -344,10 +349,10 @@ static void saveWatchlist(const char* v) {
 static void saveFeeder(const char* v) {
   String s(v);
   s.trim();
-  if (!s.startsWith("http://") && !s.startsWith("https://")) {
-    toast("Must start with http(s)://");
-    return;
-  }
+  if (!s.length()) { toast("Feeder URL empty"); return; }
+  if (!s.startsWith("http://") && !s.startsWith("https://"))
+    s = "http://" + s;                     // bare host/IP entries are fine
+
   g_set.feedUrl = s;
   g_prefs.putString("feed", s);
   feederUpdateSrcName();
@@ -794,6 +799,8 @@ void settingsBuild() {
   lv_obj_set_style_pad_column(nbox, 10, 0);
   lv_obj_set_flex_align(nbox, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   s_vNight = lv_label_create(nbox);
+  lv_obj_set_width(s_vNight, 100);               // fixed: flex under-measure clips
+  lv_obj_set_style_text_align(s_vNight, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_set_style_text_font(s_vNight, F_MONO13, 0);
   lv_obj_set_style_text_color(s_vNight, C_IVORY2, 0);
   lv_obj_add_flag(s_vNight, LV_OBJ_FLAG_CLICKABLE);

@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include "ui.h"
 #include "../core/tracks.h"
+#include "../net/logos.h"
 
 LV_IMG_DECLARE(img_arrowhead);          // 8x10 chevron; not exported via theme.h
 
@@ -84,7 +85,8 @@ static lv_color_t s_emergDim;                  // computed at build
 
 // Selected
 static lv_obj_t *s_selCont, *s_selEmpty;
-static lv_obj_t *s_selTile, *s_selIni, *s_selCallsign, *s_selOp;
+static lv_obj_t *s_selTile, *s_selIni, *s_selLogoImg, *s_selCallsign, *s_selOp;
+static const lv_img_dsc_t* s_selLogoShown = nullptr;   // change cache for the tile
 static lv_obj_t *s_selRoute, *s_selOrigin, *s_selDest;
 static lv_obj_t *s_selFrame, *s_selIdent, *s_selMil;
 static lv_obj_t *s_selAlt, *s_selSpd, *s_selHdg, *s_selClimb;
@@ -293,8 +295,12 @@ static void buildSelectedTop(lv_obj_t* cont) {
   lv_obj_set_style_border_color(s_selTile, lv_color_white(), 0);
   lv_obj_set_style_border_opa(s_selTile, 46, 0);
   lv_obj_set_style_border_width(s_selTile, 1, 0);
+  lv_obj_set_style_clip_corner(s_selTile, true, 0);   // logo respects radius 12
   s_selIni = mkLbl(s_selTile, F_M20, lv_color_white());
   lv_obj_align(s_selIni, LV_ALIGN_CENTER, 0, 0);
+  s_selLogoImg = lv_img_create(s_selTile);            // real airline logo when cached
+  lv_obj_align(s_selLogoImg, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_add_flag(s_selLogoImg, LV_OBJ_FLAG_HIDDEN);
 
   s_selCallsign = mkLbl(cont, F_L28, C_IVORY);
   lv_label_set_long_mode(s_selCallsign, LV_LABEL_LONG_CLIP);
@@ -661,6 +667,37 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
   }
 }
 
+// Real airline logo: 3-letter ICAO callsign prefix (letters + digit pattern,
+// e.g. JZA238) drives a lazy CDN fetch; the monogram stays until/unless it lands.
+static void updateSelLogo(const Track* t) {
+  const lv_img_dsc_t* want = nullptr;
+  if (g_set.logoEn && t) {
+    char icao[4] = "";
+    if (isalpha((unsigned char)t->flight[0]) &&
+        isalpha((unsigned char)t->flight[1]) &&
+        isalpha((unsigned char)t->flight[2]) &&
+        isdigit((unsigned char)t->flight[3])) {
+      for (int i = 0; i < 3; i++) icao[i] = toupper((unsigned char)t->flight[i]);
+      icao[3] = 0;
+      const lv_img_dsc_t* d = nullptr;
+      LogoState st = logosGet(icao, &d);
+      if (st == LOGO_UNKNOWN) logosRequest(icao);
+      else if (st == LOGO_OK) want = d;
+    }
+  }
+  if (want != s_selLogoShown) {
+    s_selLogoShown = want;
+    if (want) {
+      lv_img_set_src(s_selLogoImg, want);
+      lv_obj_clear_flag(s_selLogoImg, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(s_selIni, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(s_selLogoImg, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_clear_flag(s_selIni, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+}
+
 static void updateSelected(uint32_t nowMs) {
   Track* t = tracksSelected();
   setHiddenCached(s_selCont, t == nullptr);
@@ -668,6 +705,7 @@ static void updateSelected(uint32_t nowMs) {
   if (!t) return;
   selApplyLogoLayout(g_set.logoEn);
   updateSelectedIdentity(t);
+  updateSelLogo(t);
   updateSelectedGrid(t);
   updateSelectedStatus(t, nowMs);
 }

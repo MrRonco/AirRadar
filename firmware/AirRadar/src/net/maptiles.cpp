@@ -321,6 +321,9 @@ void mapLoop(uint32_t nowMs) {
   if (!s_bufA) return;                          // boot allocation failed
 
   // 1) Publish a finished stitch (task done: ready set, in-flight cleared).
+  static int      s_appliedRange = -1;     // what the FRONT image was built for
+  static double   s_appliedLat = 999, s_appliedLon = 999;
+  static uint32_t s_lastHealMs = 0;
   if (s_stitchedReady && !s_fetchInFlight) {
     s_stitchedReady = false;
     uint16_t* t = s_front;
@@ -329,6 +332,26 @@ void mapLoop(uint32_t nowMs) {
     s_imgDsc.data = (const uint8_t*)s_front;
     s_haveImage = true;
     s_generation++;
+    s_appliedRange = s_job.rangeKm;        // one fetch at a time: s_job is stable
+    s_appliedLat   = s_job.lat;
+    s_appliedLon   = s_job.lon;
+  }
+
+  // 1b) Self-heal: if the shown map doesn't match the current settings (range
+  // cycled, location moved, or an earlier fetch died), quietly re-request.
+  // Covers "range button shows more aircraft but the map never rescales".
+  if (g_set.mapEn && g_wifiUp && !s_fetchInFlight && !s_stitchedReady &&
+      !s_refreshWanted && (int32_t)(nowMs - s_lastHealMs) > 15000) {
+    bool mismatch = !s_haveImage ||
+                    s_appliedRange != g_set.rangeKm ||
+                    fabs(s_appliedLat - g_set.homeLat) > 0.01 ||
+                    fabs(s_appliedLon - g_set.homeLon) > 0.01;
+    if (mismatch) {
+      s_lastHealMs = nowMs;
+      s_retryUsed  = false;                // fresh attempt gets a retry again
+      s_refreshWanted = true;
+      Serial.println("[map] self-heal refetch (range/location/image mismatch)");
+    }
   }
 
   // 2) Failure: one delayed retry per refresh request, then give up.

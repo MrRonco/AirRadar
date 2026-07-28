@@ -18,6 +18,7 @@
 #include "src/net/feeder.h"
 #include "src/net/enrich.h"
 #include "src/net/maptiles.h"
+#include "src/net/logos.h"
 #include "src/hal/hal_display.h"
 #include "src/ui/theme.h"
 #include "src/ui/ui.h"
@@ -106,6 +107,7 @@ void loop() {
   enrichLoop(now);
   mapLoop(now);
   mqttLoop(now);
+  logosLoop(now);
 
   // Route result first, then (maybe) a new request — ordering avoids a
   // guaranteed duplicate adsbdb fetch right after each lookup completes.

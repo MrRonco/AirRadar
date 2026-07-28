@@ -34,7 +34,7 @@
 #define AR_DROP_TRACK_MS    60000         // coasting -> dropped
 #define AR_STALE_FEED_MS    30000         // "STALE" banner threshold
 #define AR_UI_TICK_MS         250         // card refresh cadence
-#define AR_BLIP_GLIDE_MS     1600         // target position ease duration
+#define AR_BLIP_GLIDE_MS      900         // target position ease duration
 #define AR_MQTT_PUB_MS       5000         // state publish cadence
 #define AR_SEENPOS_SKIP_S    15.0f        // local feed: skip stale positions
 
