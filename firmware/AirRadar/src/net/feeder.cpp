@@ -211,7 +211,7 @@ static bool tryLocal(const FeederJob& job) {
 }
 
 static bool tryCloud(const FeederJob& job) {
-  if (!tlsTryAcquire()) {                   // another TLS fetch is running —
+  if (!tlsTryAcquire(true)) {              // essential: exempt from heap floor
     Serial.println("[feeder] TLS busy - cloud pass skipped");
     return false;                           // next poll retries in 8s
   }

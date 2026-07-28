@@ -669,6 +669,13 @@ static void handleMetrics() {
   snprintf(l, sizeof(l), "airradar_heap_free %u\n", (unsigned)ESP.getFreeHeap()); s += l;
   s += F("# TYPE airradar_psram_free gauge\n");
   snprintf(l, sizeof(l), "airradar_psram_free %u\n", (unsigned)ESP.getFreePsram()); s += l;
+  // Leak-vs-fragmentation forensics: min-ever free + largest single block.
+  s += F("# TYPE airradar_heap_min gauge\n");
+  snprintf(l, sizeof(l), "airradar_heap_min %u\n",
+           (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL)); s += l;
+  s += F("# TYPE airradar_heap_largest gauge\n");
+  snprintf(l, sizeof(l), "airradar_heap_largest %u\n",
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); s += l;
   s += F("# TYPE airradar_uptime_seconds gauge\n");
   snprintf(l, sizeof(l), "airradar_uptime_seconds %lu\n",
            (unsigned long)(millis() / 1000UL)); s += l;

@@ -128,12 +128,32 @@ void enrichKickWeather() {
 //  ISS — wheretheiss.at (AR_ISS_API), cadence AR_POLL_ISS_MS
 // ============================================================
 static void issTask(void*) {
+  // Plain HTTP by design (see AR_ISS_API note in config.h): the 15s TLS poll
+  // to wheretheiss.at leaked ~1.5KB/connection in the esp-tls layer.
+  // open-notify returns iss_position lat/lon as STRINGS.
   DynamicJsonDocument doc(kIssDocBytes);
   bool ok = false;
-  if (httpsGetJson(AR_ISS_API, doc, nullptr, "iss")) {
-    double lat = doc["latitude"]  | 999.0;     // sentinel = missing key
-    double lon = doc["longitude"] | 999.0;
-    double alt = doc["altitude"]  | 0.0;
+  bool fetched = false;
+  {
+    WiFiClient net;
+    HTTPClient http;
+    http.setConnectTimeout(3000);
+    http.setTimeout(kHttpTimeoutMs);
+    http.useHTTP10(true);
+    if (http.begin(net, AR_ISS_API)) {
+      http.addHeader("User-Agent", AR_USER_AGENT);
+      int code = http.GET();
+      if (code == HTTP_CODE_OK)
+        fetched = !deserializeJson(doc, http.getStream());
+      else
+        Serial.printf("[enrich] iss: http %d\n", code);
+      http.end();
+    }
+  }
+  if (fetched) {
+    double lat = atof(doc["iss_position"]["latitude"]  | "999");
+    double lon = atof(doc["iss_position"]["longitude"] | "999");
+    double alt = 420.0;                        // open-notify has no altitude
     if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0) {
       uint32_t nowMs = millis();
       portENTER_CRITICAL(&g_dataMux);

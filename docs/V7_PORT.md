@@ -57,6 +57,44 @@ Open-Meteo weather · wheretheiss ISS · CARTO dark tiles. All keyless.
 * MQTT: Home Assistant discovery (sensors + emergency binary_sensor), LWT
   availability, 5 s state publish.
 
+## Hardware bring-up findings (first live session — each cost real debugging)
+
+1. **RGB path wants byte-swapped 565.** `lcd.setSwapBytes(true)` in the flush;
+   LVGL stays `LV_COLOR_16_SWAP 0`. Symptom of getting it wrong: `#0c1119`
+   background renders olive (128,96,64), AA text gets chromatic fringes.
+2. **LVGL draw buffer must be internal SRAM** (single 800×60). PSRAM draw
+   buffers put render-writes + flush-reads on the bus the panel DMA scans —
+   visible wiggle whenever the map forced real compositing.
+3. **…but then LVGL's heap must move to PSRAM** (`ps_malloc` in lv_conf.h),
+   or widgets + draw buffer together starve internal RAM below the ~50 KB
+   mbedTLS needs per handshake and every HTTPS fetch dies (STALE + no map).
+4. **One TLS connection at a time** (`tlsTryAcquire` in state.h). Selecting an
+   airliner fired logo+route+cloud TLS simultaneously — 3×50 KB — and stalled
+   the whole pipeline. Feed has priority; everything else defers and retries.
+5. **Style writes invalidate even when values are unchanged.** Every dynamic
+   widget needs change-caching (see the Blip caches / setTextCached) or the
+   scope repaints constantly and fights the panel DMA.
+6. **LVGL flex under-measures SIZE_CONTENT boxes** in these row layouts and
+   clips children from the *left* ("DHCP" → "CP"). Fixed-width value labels,
+   right-aligned, `LONG_DOT`.
+7. **Screen diagnostics beat serial**: with CDC-on-boot the runtime log needs
+   the UART switch flipped, but `/metrics` (heap!), `/api/state`,
+   `/api/probe?url=` (the device fetches a URL and reports code+ms) and
+   `/screen.bmp` (literal framebuffer) diagnose almost everything over LAN.
+   The 4 ms `-1` probe result is how the "firewall vs firmware" feeder
+   question was settled (instant REJECT vs 2 s timeout for a DROP).
+8. CARTO tint: ×1.6 luminance lift (×2.6, tuned on a z8 tile, is neon at the
+   z9–z11 the scope really uses).
+9. **Repeated TLS connections leak ~1.5 KB each** somewhere in esp-tls/mbedTLS
+   (core 3.3.10) — measured via A/B: heap drifted −120 B/s with the 15 s
+   wheretheiss.at poll and recovered flat with it off. Consequences baked in:
+   ISS uses open-notify over **plain HTTP**; and `tlsTryAcquire(essential)`
+   has a 45 KB heap floor so a residual drift sheds logos/routes/weather
+   before it can ever starve the aircraft feed. Rare TLS (weather 15 min,
+   logos/routes once per selection) leaks negligibly; a device parked on the
+   **cloud fallback** (TLS every 8 s) will still drift — fix the local feeder
+   reachability rather than living on cloud long-term.
+
 ## Deferred (tracked, not forgotten)
 
 Real airline logo pack in FATFS (monogram tile ships now) · aircraft photos ·

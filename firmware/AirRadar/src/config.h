@@ -84,7 +84,10 @@
 #define AR_CLOUD_API   "https://api.airplanes.live/v2/point/"        // lat/lon/radiusNM
 #define AR_ROUTE_API   "https://api.adsbdb.com/v0/callsign/"         // + CALLSIGN
 #define AR_WX_API      "https://api.open-meteo.com/v1/forecast"      // ?lat&lon&current=...
-#define AR_ISS_API     "https://api.wheretheiss.at/v1/satellites/25544"
+// Plain HTTP on purpose: the 15s ISS poll over TLS leaked ~1.5KB/connection
+// in the esp-tls layer (field-measured); open-notify needs no TLS at all.
+#define AR_ISS_API     "http://api.open-notify.org/iss-now.json"
+#define AR_TLS_HEAP_FLOOR (45 * 1024)   // below this, optional TLS is shed
 #define AR_TILE_HOST   "basemaps.cartocdn.com"                       // CARTO dark_all
 #define AR_TILE_STYLE  "dark_all"
 #define AR_TILE_ATTRIB "(C) OSM - CARTO"

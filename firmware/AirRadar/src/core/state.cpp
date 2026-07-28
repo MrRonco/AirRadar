@@ -132,7 +132,10 @@ void settingsSaveFavs() {
 // ============================================================
 static volatile bool s_tlsBusy = false;
 
-bool tlsTryAcquire() {
+bool tlsTryAcquire(bool essential) {
+  if (!essential &&
+      heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < AR_TLS_HEAP_FLOOR)
+    return false;                      // shed eye-candy before the feed starves
   bool got = false;
   portENTER_CRITICAL(&g_dataMux);
   if (!s_tlsBusy) { s_tlsBusy = true; got = true; }

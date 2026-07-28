@@ -85,7 +85,11 @@ extern bool    g_timeSynced;               // NTP has produced a sane time
 // Every task that opens a WiFiClientSecure MUST tlsTryAcquire() first and
 // tlsRelease() when its HTTP client is fully torn down; on failure, skip and
 // retry later. Atomic under g_dataMux — safe from any context.
-bool tlsTryAcquire();
+// `essential`: the aircraft feed passes true and is exempt from the heap
+// floor; optional fetches (logos/routes/weather/map) are denied whenever free
+// internal heap sits below AR_TLS_HEAP_FLOOR, so a slow leak degrades
+// eye-candy first and the feed last.
+bool tlsTryAcquire(bool essential = false);
 void tlsRelease();
 
 // ---------- misc helpers (implemented in state.cpp) ----------
