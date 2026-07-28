@@ -5,7 +5,8 @@ One-click browser install for the ESP32-S3, hosted on GitHub Pages.
 ## What's here
 - `index.html` — the install page (loads ESP Web Tools, styled to match AirRadar).
 - `manifest.json` — points ESP Web Tools at the firmware image.
-- `airradar-merged.bin` — **not committed yet**; produced from the build (see below).
+- `airradar-merged.bin` — full first-install image (bootloader+partitions+app).
+- `airradar-ota.bin` — app-only image for over-the-air updates via `/update`.
 
 ## Hosting on GitHub Pages
 1. Commit this `flasher/` folder.

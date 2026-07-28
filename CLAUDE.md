@@ -4,8 +4,14 @@ Real-time ADS-B air-traffic radar display on a Waveshare 7" ESP32-S3 touchscreen
 Glassmorphism UI, touch provisioning, on-device network config, fed primarily by a
 local ADS-B receiver with airplanes.live as automatic cloud fallback.
 
-Current version: **v5.0** (2026-07-17). One sketch file + one display header, on purpose —
-it must stay flashable from a stock Arduino IDE.
+Current version: **v7.0** — an LVGL 8.3 application under `firmware/AirRadar/`
+(see `docs/V7_PORT.md` for architecture and `firmware/BUILD.md` for the exact
+build). The root `AirRadar.ino` is the legacy v6 single-sketch app, kept as the
+reference for proven data/bring-up logic. Everything below about hardware,
+toolchain pins, and the non-negotiable rules applies to BOTH; v7 additionally
+pins lvgl 8.3.11 + PubSubClient 2.8 and needs `firmware/lv_conf.h` copied
+beside the lvgl library folder. NOTE: on esp32 core 3.3.x the FQBN no longer
+has a `FlashFreq` option — `FlashMode=qio` already means QIO 80 MHz.
 
 ## Hardware (ground truth)
 

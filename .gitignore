@@ -3,3 +3,5 @@ build/
 *.elf
 *.map
 .DS_Store
+firmware/AirRadar/build/
+node_modules/

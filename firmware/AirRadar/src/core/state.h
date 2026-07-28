@@ -1,0 +1,89 @@
+// state.h — AirRadar v7 shared application state + threading contract
+//
+// THREADING MODEL (do not violate):
+//   * loop() runs on core 1. ALL lv_* calls, all Track mutation, all NVS writes
+//     happen there and only there.
+//   * Network work runs in short-lived tasks on core 0. Those tasks may ONLY
+//     write into the g_pending* structures below, guarded by g_dataMux, and
+//     set volatile ready flags. They never touch tracks[], never call lv_*.
+//   * applyPending() (loop context) drains pending into the live state.
+#pragma once
+#include <Arduino.h>
+#include <Preferences.h>
+#include "types.h"
+
+// ---------- live state (loop-context only) ----------
+extern Track    g_tracks[AR_MAX_TRACKS];
+extern char     g_selHex[8];              // "" = nothing selected
+extern int      g_orderIdx[AR_MAX_TRACKS];// distance-sorted indexes of in-range tracks
+extern int      g_orderN;
+extern int      g_heardCount;             // aircraft with positions in last poll
+extern bool     g_feedIsLocal;            // current source
+extern char     g_localSrcName[AR_LOCAL_SRC_NAME_MAX]; // shown on Overview ("LOCAL" or host)
+extern uint32_t g_lastGoodApply;          // millis of last successful apply
+extern float    g_feedMsgRate;            // msg/s from stats.json, <0 = unknown
+extern WeatherState g_wx;
+extern IssState     g_iss;
+
+// ---------- settings (loaded from NVS at boot; loop-context writes) ----------
+struct Settings {
+  double  homeLat, homeLon;
+  int     rangeKm;
+  bool    showLabels;
+  String  wifiSsid, wifiPass;
+  String  feedUrl;
+  String  tz;
+  String  panelPass;          // "" = no auth
+  bool    netStatic; String netIp, netGw, netMask, netDns;
+  bool    mqttEn;   String mqttUri;
+  bool    nightEn;  int nightFromMin, nightToMin;
+  bool    wxEn, issEn, logoEn, mapEn;
+  uint8_t filtCls;            // FCLS_* bitmask
+  int     filtAltLo, filtAltHi;   // ft, 0 = off
+  String  watchlist;          // comma-separated prefixes
+  // favourites
+  double  favLat[AR_MAX_FAVS], favLon[AR_MAX_FAVS];
+  String  favName[AR_MAX_FAVS];
+  bool    favUsed[AR_MAX_FAVS];
+};
+extern Settings g_set;
+extern Preferences g_prefs;
+
+void settingsLoad();                       // NVS -> g_set (call once at boot)
+void settingsSaveLocation();               // lat/lon/range
+void settingsSaveDisplay();                // labels/night/wx/iss/logo/map
+void settingsSaveFilters();                // cls/alt/watchlist
+void settingsSaveNetworkExtras();          // mqtt/panelPass/tz  (wifi & static IP have
+                                           //  their own save paths in web/settings UI)
+void settingsSaveFavs();
+
+// ---------- pending buffers (net task -> loop handoff) ----------
+extern portMUX_TYPE g_dataMux;
+extern ApiPlane g_pendingPlanes[AR_MAX_TRACKS];
+extern int      g_pendingCount;
+extern int      g_pendingHeard;
+extern bool     g_pendingLocal;
+extern volatile bool g_pendingReady;       // set by net task, cleared by applyPending
+extern volatile bool g_pendingOk;
+
+// route lookup result (single slot)
+extern char g_routeResHex[8];
+extern char g_routeResOrigin[5], g_routeResDest[5];
+extern volatile bool g_routeResReady;
+
+// ---------- runtime flags ----------
+extern volatile bool g_fetchInProgress;    // aircraft fetch task alive
+extern volatile bool g_routeFetching;
+extern Screen  g_screen;
+extern bool    g_wifiUp;                   // WiFi connected (loop-maintained)
+extern bool    g_timeSynced;               // NTP has produced a sane time
+
+// ---------- misc helpers (implemented in state.cpp) ----------
+float haversineKm(double la1, double lo1, double la2, double lo2);
+float bearingTo(double la1, double lo1, double la2, double lo2);
+// Great-circle position -> scope pixel. Returns false if outside range ring.
+bool  scopeToScreen(double lat, double lon, float& sx, float& sy);
+uint8_t trackClass(const Track& t);        // FCLS_* single bit for a track
+bool  trackPassesFilters(const Track& t);  // class + altitude filters
+bool  trackOnWatchlist(const Track& t);    // prefix match reg/callsign
+void  altColorRGB(int altFt, uint8_t& r, uint8_t& g, uint8_t& b); // amber/cyan/violet/red
