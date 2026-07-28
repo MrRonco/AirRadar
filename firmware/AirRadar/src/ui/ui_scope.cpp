@@ -258,7 +258,9 @@ static void blipSetLabel(Blip& b, const Track& t, bool selected) {
 static void blipStyle(Blip& b, const Track& t, uint32_t nowMs) {
   bool selected  = g_selHex[0] && !strcmp(t.hex, g_selHex);
   bool emergency = sqIsEmergency(t.squawk);
-  bool coasting  = (nowMs - t.lastApiMs) > AR_STALE_TRACK_MS;
+  // Signed: applyPending can stamp lastApiMs a hair AFTER our caller's nowMs;
+  // unsigned math would underflow into "coasting" for a frame.
+  bool coasting  = (int32_t)(nowMs - t.lastApiMs) > (int32_t)AR_STALE_TRACK_MS;
 
   uint8_t r, g, bl;
   altColorRGB(t.altFt, r, g, bl);
@@ -410,9 +412,15 @@ void scopeBuild(lv_obj_t* parent) {
 // ============================================================
 static void scopeUpdateIss() {
   if (!s_issImg) return;
+  // Snapshot under the mux: issTask rewrites these doubles on core 0 and a
+  // torn 64-bit read here would place the glyph at a bogus position.
+  IssState iss;
+  portENTER_CRITICAL(&g_dataMux);
+  iss = g_iss;
+  portEXIT_CRITICAL(&g_dataMux);
   float sx = 0, sy = 0;
-  bool show = g_set.issEn && g_iss.valid &&
-              scopeToScreen(g_iss.lat, g_iss.lon, sx, sy);
+  bool show = g_set.issEn && iss.valid &&
+              scopeToScreen(iss.lat, iss.lon, sx, sy);
   if (show) {
     int lx = (int)lroundf(sx) - SCOPE_X0;
     int ly = (int)lroundf(sy) - SCOPE_Y0;

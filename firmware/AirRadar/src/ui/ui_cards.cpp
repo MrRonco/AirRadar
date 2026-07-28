@@ -61,7 +61,6 @@ static const int SEL_DOT_D    = 7;             // LIVE dot diameter
 static const int      FL_TRANSITION_FT = 18000;  // FLxxx display threshold
 static const int      CLIMB_STRONG_FPM = 300;    // colored climb/descent
 static const uint32_t EMERG_BLINK_MS   = 500;
-static const uint32_t TIME_FETCH_MS    = 50;     // getLocalTime budget
 
 // Recolor hex strings for the range pill (mirror C_DIM / C_CY in theme.h)
 static const char* RECOLOR_DIM = "69757f";
@@ -600,8 +599,12 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
                 t->squawk[0] ? t->squawk : "----");
   setColorCached(s_selSqk, &s_colSqk, emerg ? C_RED : C_IVORY2);
 
-  bool coasting = (nowMs - t->lastApiMs) > AR_STALE_TRACK_MS;
-  uint32_t age = (nowMs - t->lastApiMs) / 1000U;
+  // Signed: applyPending may stamp lastApiMs a hair after our nowMs — the
+  // unsigned difference would underflow into COAST + a 4-billion-second age.
+  int32_t ageMs = (int32_t)(nowMs - t->lastApiMs);
+  if (ageMs < 0) ageMs = 0;
+  bool coasting = ageMs > (int32_t)AR_STALE_TRACK_MS;
+  uint32_t age = (uint32_t)ageMs / 1000U;
   snprintf(b, sizeof(b), "%s \xC2\xB7 %lus", coasting ? "COAST" : "LIVE",
            (unsigned long)age);
   setTextCached(s_selLive, s_bufLive, sizeof(s_bufLive), b);
@@ -628,10 +631,16 @@ static void updateSelected(uint32_t nowMs) {
 //  Update — time card, weather pill, range pill
 // ============================================================
 static void updateTimeCard() {
+  // Non-blocking clock: time(nullptr) is free, unlike getLocalTime()'s wait
+  // loop which would burn its full timeout every 250 ms tick before NTP sync.
+  time_t tt = time(nullptr);
   struct tm ti;
-  if (!getLocalTime(&ti, TIME_FETCH_MS) || ti.tm_year <= 120) {
-    setTextCached(s_tmTime, s_bufTime, sizeof(s_bufTime), "--:--");
-    setTextCached(s_tmDate, s_bufDate, sizeof(s_bufDate), "--");
+  localtime_r(&tt, &ti);
+  if (ti.tm_year <= 120) {                     // not synced yet (or offline)
+    // F_NUM36 carries only digits+':' — "0:00" stays inside the subset;
+    // the sync hint lives on the mono date label instead.
+    setTextCached(s_tmTime, s_bufTime, sizeof(s_bufTime), "0:00");
+    setTextCached(s_tmDate, s_bufDate, sizeof(s_bufDate), "WAITING FOR TIME");
     return;
   }
   if (!g_timeSynced) g_timeSynced = true;      // loop context: allowed write

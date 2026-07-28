@@ -128,7 +128,9 @@ static void flush_cb(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* px) 
 
 static void touch_cb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
   uint16_t x, y;
-  if (lcd.getTouch(&x, &y)) {
+  // Panel dark (night mode): swallow input so the wake-up tap can't also
+  // click whatever invisible widget sits under the finger.
+  if (s_backlight && lcd.getTouch(&x, &y)) {
     data->state = LV_INDEV_STATE_PRESSED;
     data->point.x = x;
     data->point.y = y;

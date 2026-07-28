@@ -10,6 +10,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <ctype.h>
 #include "enrich.h"
 #include "../core/tracks.h"
 
@@ -149,8 +150,26 @@ static void issTask(void*) {
 // ============================================================
 static void routeTask(void*) {
   char org[5] = "", dst[5] = "";
+  // Callsign comes straight off the ADS-B wire — allow only [A-Za-z0-9] into
+  // the URL so a hostile broadcast can't inject path/query segments.
+  char safe[sizeof(s_routeJob.flight)];
+  int si = 0;
+  for (const char* p = s_routeJob.flight; *p && si < (int)sizeof(safe) - 1; p++)
+    if (isalnum((unsigned char)*p)) safe[si++] = *p;
+  safe[si] = '\0';
+  if (!si) {                                   // nothing valid to look up
+    portENTER_CRITICAL(&g_dataMux);
+    strlcpy(g_routeResHex, s_routeJob.hex, sizeof(g_routeResHex));
+    g_routeResOrigin[0] = 0;
+    g_routeResDest[0] = 0;
+    g_routeResReady = true;
+    portEXIT_CRITICAL(&g_dataMux);
+    g_routeFetching = false;
+    vTaskDelete(NULL);
+    return;
+  }
   char url[kUrlMax];
-  snprintf(url, sizeof(url), "%s%s", AR_ROUTE_API, s_routeJob.flight);
+  snprintf(url, sizeof(url), "%s%s", AR_ROUTE_API, safe);
   StaticJsonDocument<512> filt;                // v6-proven filter + doc sizes
   filt["response"]["flightroute"]["origin"]["iata_code"]      = true;
   filt["response"]["flightroute"]["destination"]["iata_code"] = true;

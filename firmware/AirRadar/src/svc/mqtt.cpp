@@ -17,7 +17,12 @@
 // ---------- file-local constants ----------
 static const uint16_t kDefaultPort       = 1883;
 static const uint16_t kBufferBytes       = 1024;   // discovery JSON > 256 B default
-static const uint32_t kReconnectMs       = 5000;
+static const uint32_t kReconnectMs       = 5000;    // after a clean disconnect
+static const uint32_t kReconnectFailMs   = 60000;   // after a FAILED attempt —
+                                                    // connect() blocks the LVGL
+                                                    // loop, so back way off
+static const uint16_t kSocketTimeoutS    = 2;       // CONNACK wait cap (default 15!)
+static const uint32_t kNetTimeoutMs      = 2000;    // TCP connect/read cap
 static const uint32_t kErrLogMs          = 60000;  // connect-failure log throttle
 static const size_t   kDiscoveryJsonCap  = 768;    // StaticJsonDocument budget
 static const size_t   kDiscoveryPayload  = 640;    // serialized config max
@@ -207,8 +212,14 @@ static void mqttPublishStates(uint32_t nowMs) {
 // ============================================================
 //  Connection management
 // ============================================================
+static uint32_t s_retryDelayMs = kReconnectMs;      // grows after failures
+
 static void mqttTryConnect(uint32_t nowMs) {
   s_lastTryMs = nowMs;
+  // Bound how long a dead broker can stall the LVGL loop: short TCP timeout
+  // and a 2 s CONNACK cap instead of PubSubClient's 15 s default.
+  s_net.setTimeout(kNetTimeoutMs);
+  s_mqtt.setSocketTimeout(kSocketTimeoutS);
   bool ok = s_mqtt.connect(s_clientId,
                            s_user[0] ? s_user : nullptr,
                            s_pass[0] ? s_pass : nullptr,
@@ -216,12 +227,14 @@ static void mqttTryConnect(uint32_t nowMs) {
   if (ok) {
     Serial.printf("[mqtt] connected %s:%u as %s\n", s_host, (unsigned)s_port, s_clientId);
     s_lastErrLogMs = 0;                            // next failure logs at once
+    s_retryDelayMs = kReconnectMs;                 // reset backoff
     if (!s_mqtt.publish(kTopicStatus, kPayloadOnline, true))
       Serial.println("[mqtt] status publish failed");
     mqttPublishDiscovery();
     s_lastPubMs = 0;                               // publish state promptly
     return;
   }
+  s_retryDelayMs = kReconnectFailMs;               // back off hard on failure
   if (s_lastErrLogMs == 0 || nowMs - s_lastErrLogMs >= kErrLogMs) {
     s_lastErrLogMs = nowMs;
     Serial.printf("[mqtt] connect %s:%u failed, state=%d\n",
@@ -261,7 +274,7 @@ void mqttLoop(uint32_t nowMs) {
   if (!s_cfgValid) return;
 
   if (!s_mqtt.connected() &&
-      (s_lastTryMs == 0 || nowMs - s_lastTryMs >= kReconnectMs))
+      (s_lastTryMs == 0 || nowMs - s_lastTryMs >= s_retryDelayMs))
     mqttTryConnect(nowMs);
 
   s_mqtt.loop();
@@ -279,6 +292,7 @@ void mqttRestart() {
   s_lastTryMs    = 0;
   s_lastErrLogMs = 0;
   s_lastPubMs    = 0;
+  s_retryDelayMs = kReconnectMs;                   // fresh settings, fresh backoff
   if (!g_set.mqttEn) {
     Serial.println("[mqtt] disabled");
     return;

@@ -46,6 +46,18 @@ static const char*    kNtpServer2      = "time.nist.gov";
 //  Small helpers
 // ============================================================
 static bool authed() {
+  // Cross-site guard: browsers auto-attach Basic credentials, so a malicious
+  // page could POST here from another origin. A browser always sends Origin
+  // on cross-site POSTs — reject any Origin that isn't this device.
+  if (server.hasHeader("Origin")) {
+    String o = server.header("Origin");
+    String hostHdr = server.hasHeader("Host") ? server.header("Host") : "";
+    if (o.length() && hostHdr.length() && o.indexOf(hostHdr) < 0) {
+      Serial.printf("[web] cross-origin request blocked: %s\n", o.c_str());
+      server.send(403, "text/plain", "cross-origin request rejected");
+      return false;
+    }
+  }
   if (!g_set.panelPass.length()) return true;
   if (server.authenticate("admin", g_set.panelPass.c_str())) return true;
   server.requestAuthentication();
@@ -451,11 +463,11 @@ static void handleApiConfigGet() {
 static bool apiCfgValidate(String& err) {
   if (server.hasArg("lat")) {
     double v = server.arg("lat").toDouble();
-    if (v < -90 || v > 90) { err = "lat out of range"; return false; }
+    if (isnan(v) || v < -90 || v > 90) { err = "lat out of range"; return false; }
   }
   if (server.hasArg("lon")) {
     double v = server.arg("lon").toDouble();
-    if (v < -180 || v > 180) { err = "lon out of range"; return false; }
+    if (isnan(v) || v < -180 || v > 180) { err = "lon out of range"; return false; }
   }
   if (server.hasArg("feed")) {
     String v = server.arg("feed"); v.trim();
@@ -688,6 +700,9 @@ void webBegin() {
   server.on("/metrics", HTTP_GET, handleMetrics);
   server.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   server.onNotFound(handleNotFound);
+  // WebServer only retains headers we explicitly collect (for the CSRF guard).
+  static const char* kHdrs[] = {"Origin", "Host"};
+  server.collectHeaders(kHdrs, 2);
   if (MDNS.begin(AR_MDNS_NAME)) MDNS.addService("http", "tcp", 80);
   else Serial.println("[web] mDNS start failed");
   server.begin();

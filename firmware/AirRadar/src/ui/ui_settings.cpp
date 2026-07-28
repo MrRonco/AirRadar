@@ -278,6 +278,7 @@ static void applyNewLocation() {
   settingsSaveLocation();
   for (int i = 0; i < AR_MAX_TRACKS; i++) g_tracks[i].valid = false;
   g_selHex[0] = 0;
+  g_orderN = 0;          // stale order would report the OLD location's nearest
   feederKick();
   mapRequestRefresh();
   enrichKickWeather();
@@ -482,6 +483,8 @@ static void chipCb(lv_event_t* e) {
 // ============================================================
 //  Wi-Fi flow
 // ============================================================
+static String s_scanSsid[AR_MAX_SCAN_APS];    // full SSIDs (labels are lossy)
+
 static void wifiStartScan() {
   s_wifiFlow = WF_SCANNING;
   s_wifiT0 = millis();
@@ -490,7 +493,8 @@ static void wifiStartScan() {
   WiFi.scanDelete();
   WiFi.scanNetworks(true /*async*/);
 }
-static void openWifi(lv_event_t*) { wifiStartScan(); uiShow(SCR_WIFI); }
+void wifiScreenOpen() { wifiStartScan(); uiShow(SCR_WIFI); }
+static void openWifi(lv_event_t*) { wifiScreenOpen(); }
 
 static void wifiPassSaved(const char* pass) {
   s_pendPass = pass;
@@ -509,11 +513,9 @@ static void wifiPassSaved(const char* pass) {
   WiFi.begin(s_pendSsid.c_str(), s_pendPass.c_str());
 }
 static void wifiNetClicked(lv_event_t* e) {
-  lv_obj_t* b = lv_event_get_target(e);
-  lv_obj_t* l = lv_obj_get_child(b, 0);
-  String txt = lv_label_get_text(l);
-  int p = txt.lastIndexOf("  (");
-  s_pendSsid = (p > 0) ? txt.substring(0, p) : txt;
+  int idx = (int)(intptr_t)lv_event_get_user_data(e);
+  if (idx < 0 || idx >= AR_MAX_SCAN_APS || !s_scanSsid[idx].length()) return;
+  s_pendSsid = s_scanSsid[idx];        // full SSID, never parsed off the label
   texteditOpen("PASSWORD", "", true, wifiPassSaved);
 }
 static void wifiRescan(lv_event_t*) { wifiStartScan(); }
@@ -530,6 +532,7 @@ static void wifiBuildList(int n) {
     bool dup = false;                           // dedup by ssid
     for (int j = 0; j < i; j++) if (WiFi.SSID(j) == ssid) { dup = true; break; }
     if (dup) continue;
+    s_scanSsid[shown] = ssid;                   // keep the FULL ssid for connect
     lv_obj_t* b = lv_btn_create(s_wifiList);
     lv_obj_set_size(b, LV_PCT(100), 46);
     lv_obj_set_style_bg_color(b, C_CARD_HI, 0);
@@ -543,9 +546,11 @@ static void wifiBuildList(int n) {
     lv_obj_set_style_text_font(l, F_UI15, 0);
     lv_obj_set_style_text_color(l, C_IVORY, 0);
     lv_obj_align(l, LV_ALIGN_LEFT_MID, 6, 0);
-    lv_obj_add_event_cb(b, wifiNetClicked, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(b, wifiNetClicked, LV_EVENT_CLICKED,
+                        (void*)(intptr_t)shown);
     shown++;
   }
+  for (int i = shown; i < AR_MAX_SCAN_APS; i++) s_scanSsid[i] = "";
   WiFi.scanDelete();
 }
 
@@ -875,7 +880,7 @@ void settingsBuild() {
 //  Async pump — toast timing, wifi scan/connect state machine
 // ============================================================
 void settingsPoll(uint32_t nowMs) {
-  if (s_toast && nowMs >= s_toastHideAt) {
+  if (s_toast && (int32_t)(nowMs - s_toastHideAt) >= 0) {   // wrap-safe
     lv_obj_del(s_toast);
     s_toast = nullptr;
   }

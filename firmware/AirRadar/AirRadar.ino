@@ -87,7 +87,7 @@ void setup() {
     enrichKickWeather();
     feederKick();
   } else if (!g_set.wifiSsid.length()) {
-    uiShow(SCR_WIFI);                         // first boot: provision on-screen
+    wifiScreenOpen();                         // first boot: scan + provision
   }
 
   s_lastUiTick = s_lastPosTick = millis();
@@ -107,19 +107,23 @@ void loop() {
   mapLoop(now);
   mqttLoop(now);
 
-  // Route lookup for the selected aircraft (lazy, deduped by routeTried)
-  if (!g_routeFetching) {
+  // Route result first, then (maybe) a new request — ordering avoids a
+  // guaranteed duplicate adsbdb fetch right after each lookup completes.
+  if (enrichApplyRoute()) cardsUpdate(now);
+  if (!g_routeFetching && !g_routeResReady) {
     Track* sel = tracksSelected();
     if (sel && !sel->routeTried && sel->flight[0])
       enrichRequestRoute(sel->hex, sel->flight);
   }
-  if (enrichApplyRoute()) cardsUpdate(now);
 
-  // New aircraft data
+  // New aircraft data. Use a FRESH timestamp for the refresh: applyPending
+  // stamps tracks with a millis() taken after `now`, and an unsigned age of
+  // (now - lastApiMs) would underflow into "everything is coasting".
   if (tracksApplyPending()) {
+    uint32_t n2 = millis();
     tracksRebuildOrder();
-    scopeUpdate(now);
-    cardsUpdate(now);
+    scopeUpdate(n2);
+    cardsUpdate(n2);
   }
 
   // Dead-reckon + periodic scope refresh between polls

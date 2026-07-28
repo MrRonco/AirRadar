@@ -38,6 +38,7 @@ void cardsUpdate(uint32_t nowMs);
 void settingsBuild();                // SCR_SETTINGS root
 void settingsRefresh();              // re-read g_set into widgets
 void wifiScreenBuild();              // SCR_WIFI (scan list; tap -> keyboard)
+void wifiScreenOpen();               // start an async scan, then show SCR_WIFI
 void coordsScreenBuild();            // SCR_COORDS
 void texteditOpen(const char* title, const char* initial, bool password,
                   void (*onSave)(const char* value));   // SCR_TEXTEDIT
