@@ -142,7 +142,11 @@ static void touch_cb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
 bool halDisplayInit() {
   ch422g_init();
   lcd.init();
-  lcd.setSwapBytes(false);       // native RGB565 into the RGB panel FB
+  // HARDWARE-VERIFIED on the real panel: the RGB path wants byte-swapped 565.
+  // With false, #0c1119 rendered as olive (128,96,64) — classic swap symptom.
+  // LVGL stays LV_COLOR_16_SWAP=0; the swap happens once here at flush time,
+  // so the map buffer and image assets remain plain RGB565.
+  lcd.setSwapBytes(true);
   lcd.fillScreen(TFT_BLACK);
 
   lv_init();

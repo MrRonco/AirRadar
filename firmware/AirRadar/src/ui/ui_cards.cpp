@@ -30,6 +30,7 @@ static const int OV_HAIR2_Y   = 182;
 static const int OV_NEAR_Y    = 192;
 static const int OV_NEARD_Y   = 212;
 static const int OV_FEED_Y    = 236;
+static const int OV_SRC_Y     = 262;           // SOURCE row (name · age)
 static const int RAMP_W       = 46;            // altitude ramp bars
 static const int RAMP_H       = 5;
 static const int RAMP_DY      = -16;           // bar offset above its label
@@ -74,9 +75,10 @@ static bool s_built = false;
 // Overview
 static lv_obj_t *s_ovCount, *s_ovInRange, *s_ovHeard;
 static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl;
-static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed;
+static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24];
-static char s_bufNear[12], s_bufNearD[24], s_bufFeed[12];
+static char s_bufNear[12], s_bufNearD[24], s_bufFeed[12], s_bufSrc[24];
+static lv_color_t s_colSrc = {};
 static lv_color_t s_colEmerg = {};
 static lv_color_t s_emergDim;                  // computed at build
 
@@ -262,6 +264,9 @@ static void buildOverview(lv_obj_t* parent) {
   mkMicro(card, "FEED", 0, OV_FEED_Y);
   s_ovFeed = mkLbl(card, F_UI15, C_IVORY);
   lv_obj_align(s_ovFeed, LV_ALIGN_TOP_RIGHT, 0, OV_FEED_Y - 2);
+  mkMicro(card, "SOURCE", 0, OV_SRC_Y);
+  s_ovSrc = mkLbl(card, F_UI15, C_IVORY2);
+  lv_obj_align(s_ovSrc, LV_ALIGN_TOP_RIGHT, 0, OV_SRC_Y - 2);
 
   mkRampBar(card, LV_ALIGN_BOTTOM_LEFT,  C_AMBER,  "<10K");
   mkRampBar(card, LV_ALIGN_BOTTOM_MID,   C_CY,     "10-30K");
@@ -386,10 +391,10 @@ static void buildTimeCard(lv_obj_t* parent) {
   lv_obj_set_pos(card, CARD_L_X, CARD_BOT_Y);
   lv_obj_set_size(card, CARD_W, CARD_SHORT_H);
   s_tmTime = mkLbl(card, F_NUM36, C_IVORY);
-  lv_obj_align(s_tmTime, LV_ALIGN_CENTER, 0, -7);
+  lv_obj_align(s_tmTime, LV_ALIGN_CENTER, 0, -10);   // breathing room over the date
   s_tmDate = mkLbl(card, F_MONO11, C_DIM);
   lv_obj_set_style_text_letter_space(s_tmDate, 2, 0);
-  lv_obj_align(s_tmDate, LV_ALIGN_CENTER, 0, 13);
+  lv_obj_align(s_tmDate, LV_ALIGN_CENTER, 0, 17);
 }
 
 static void buildSettingsBtn(lv_obj_t* parent) {
@@ -501,6 +506,31 @@ static void updateOverview(uint32_t nowMs) {
   else
     snprintf(b, sizeof(b), "--");
   setTextCached(s_ovFeed, s_bufFeed, sizeof(s_bufFeed), b);
+
+  // SOURCE row: where the data is coming from + how fresh it is.
+  lv_color_t sc;
+  int32_t ageS = g_lastGoodApply
+                     ? (int32_t)(nowMs - g_lastGoodApply) / 1000 : -1;
+  if (ageS < 0) ageS = 0;
+  if (!g_wifiUp) {
+    snprintf(b, sizeof(b), "OFFLINE");
+    sc = C_RED;
+  } else if (!g_lastGoodApply ||
+             (int32_t)(nowMs - g_lastGoodApply) > (int32_t)AR_STALE_FEED_MS) {
+    snprintf(b, sizeof(b), "STALE");
+    sc = C_AMBER;
+  } else if (g_feedIsLocal) {
+    snprintf(b, sizeof(b), "%s · %lds", g_localSrcName, (long)ageS);
+    sc = C_CY;
+  } else {
+    snprintf(b, sizeof(b), "CLOUD · %lds", (long)ageS);
+    sc = C_IVORY2;
+  }
+  setTextCached(s_ovSrc, s_bufSrc, sizeof(s_bufSrc), b);
+  if (s_colSrc.full != sc.full) {
+    s_colSrc = sc;
+    lv_obj_set_style_text_color(s_ovSrc, sc, 0);
+  }
 }
 
 // ============================================================
@@ -523,12 +553,27 @@ static void updateSelectedIdentity(const Track* t) {
   sanitizeCallsign(t, cs, sizeof(cs));
   setTextCached(s_selCallsign, s_bufCall, sizeof(s_bufCall), cs);
 
-  if (strncmp(s_bufOwnOp, t->ownOp, sizeof(s_bufOwnOp)) != 0) {
-    snprintf(s_bufOwnOp, sizeof(s_bufOwnOp), "%s", t->ownOp);
+  // Cache key covers ownOp AND callsign — with no operator the initials come
+  // from the callsign, which changes per selection.
+  char opKey[24];
+  snprintf(opKey, sizeof(opKey), "%.12s|%.8s", t->ownOp, t->flight);
+  if (strncmp(s_bufOwnOp, opKey, sizeof(s_bufOwnOp)) != 0) {
+    snprintf(s_bufOwnOp, sizeof(s_bufOwnOp), "%s", opKey);
     lv_label_set_text(s_selOp, t->ownOp);
     char ini[3];
     lv_color_t bg;
-    monogramFor(t->ownOp, ini, &bg);
+    if (t->ownOp[0]) {
+      monogramFor(t->ownOp, ini, &bg);
+    } else {
+      // No operator in this feed: first two letters of the callsign on a
+      // neutral slate tile (never the red "--" tombstone).
+      int n = 0;
+      ini[0] = ini[1] = 0; ini[2] = 0;
+      for (const char* p = t->flight; *p && n < 2; p++)
+        if (isalpha((unsigned char)*p)) ini[n++] = toupper((unsigned char)*p);
+      if (!n) { ini[0] = 'A'; ini[1] = 'C'; }   // last resort: AirCraft
+      bg = lv_color_hex(0x33475c);
+    }
     lv_label_set_text(s_selIni, ini);
     lv_obj_set_style_bg_color(s_selTile, bg, 0);
   }

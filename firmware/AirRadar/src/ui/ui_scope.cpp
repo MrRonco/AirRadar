@@ -64,6 +64,16 @@ struct Blip {
   lv_obj_t* selRing;
   lv_obj_t* milBox;
   int16_t   tgtX, tgtY; // container-local blip centre we last animated toward
+  // Change caches — lv_obj_set_style_*/lv_label_set_text invalidate even when
+  // the value is identical; skipping no-op writes is what stops the constant
+  // scope repaints (visible as screen wiggle against the RGB-panel DMA).
+  bool      cInit;      // false until the first style pass fills the caches
+  uint16_t  cCol;       // recolor .full
+  lv_opa_t  cOpa;
+  int16_t   cAngle;
+  bool      cGlowHid, cSelHid, cMilHid, cLblHid;
+  bool      cLblGold;
+  char      cLbl[40];
 };
 static Blip s_blips[AR_MAX_TRACKS];
 
@@ -233,26 +243,35 @@ static void blipPlace(Blip& b, int cx, int cy, bool isNew) {
 
 static void blipSetLabel(Blip& b, const Track& t, bool selected) {
   bool show = g_set.showLabels || selected;
-  setHidden(b.lbl, !show);
+  if (!b.cInit || b.cLblHid != !show) {
+    setHidden(b.lbl, !show);
+    b.cLblHid = !show;
+  }
   if (!show) return;
   const char* name = t.flight[0] ? t.flight : t.hex;
+  char txt[40];
   if (selected) {
     float dKm = haversineKm(g_set.homeLat, g_set.homeLon, t.lat, t.lon);
     char dist[12];
     if (dKm < 10.0f) snprintf(dist, sizeof(dist), "%.1f", dKm);
     else             snprintf(dist, sizeof(dist), "%.0f", dKm);
-    char txt[64];
     if (t.altFt >= 0)
       snprintf(txt, sizeof(txt), "%s\nFL%03d · %s km", name, t.altFt / 100,
                dist);
     else
       snprintf(txt, sizeof(txt), "%s\n--- · %s km", name, dist);
-    lv_label_set_text(b.lbl, txt);
   } else {
-    lv_label_set_text(b.lbl, name);
+    strlcpy(txt, name, sizeof(txt));
   }
-  lv_obj_set_style_text_color(b.lbl, trackOnWatchlist(t) ? C_GOLD : C_IVORY2,
-                              0);
+  if (!b.cInit || strcmp(txt, b.cLbl) != 0) {
+    strlcpy(b.cLbl, txt, sizeof(b.cLbl));
+    lv_label_set_text(b.lbl, txt);
+  }
+  bool gold = trackOnWatchlist(t);
+  if (!b.cInit || gold != b.cLblGold) {
+    b.cLblGold = gold;
+    lv_obj_set_style_text_color(b.lbl, gold ? C_GOLD : C_IVORY2, 0);
+  }
 }
 
 static void blipStyle(Blip& b, const Track& t, uint32_t nowMs) {
@@ -265,21 +284,40 @@ static void blipStyle(Blip& b, const Track& t, uint32_t nowMs) {
   uint8_t r, g, bl;
   altColorRGB(t.altFt, r, g, bl);
   lv_color_t col = emergency ? C_RED : lv_color_make(r, g, bl);
-  lv_obj_set_style_img_recolor(b.jet, col, 0);
-  lv_obj_set_style_img_recolor(b.glow, col, 0);
+  if (!b.cInit || col.full != b.cCol) {
+    b.cCol = col.full;
+    lv_obj_set_style_img_recolor(b.jet, col, 0);
+    lv_obj_set_style_img_recolor(b.glow, col, 0);
+  }
 
   int angle = ((int)(t.trackDeg * 10.0f)) % 3600;
   if (angle < 0) angle += 3600;
-  lv_img_set_angle(b.jet, angle);
+  if (!b.cInit || (int16_t)angle != b.cAngle) {
+    b.cAngle = (int16_t)angle;
+    lv_img_set_angle(b.jet, angle);
+  }
 
   lv_opa_t jetOpa = coasting ? COAST_OPA : LV_OPA_COVER;
   if (emergency) jetOpa = ((nowMs / BLINK_HALF_MS) & 1) ? BLINK_HI : BLINK_LO;
-  lv_obj_set_style_img_opa(b.jet, jetOpa, 0);
+  if (!b.cInit || jetOpa != b.cOpa) {
+    b.cOpa = jetOpa;
+    lv_obj_set_style_img_opa(b.jet, jetOpa, 0);
+  }
 
-  setHidden(b.glow, coasting);
-  setHidden(b.selRing, !selected);
-  setHidden(b.milBox, !t.mil);
+  if (!b.cInit || b.cGlowHid != coasting) {
+    b.cGlowHid = coasting;
+    setHidden(b.glow, coasting);
+  }
+  if (!b.cInit || b.cSelHid != !selected) {
+    b.cSelHid = !selected;
+    setHidden(b.selRing, !selected);
+  }
+  if (!b.cInit || b.cMilHid != !t.mil) {
+    b.cMilHid = !t.mil;
+    setHidden(b.milBox, !t.mil);
+  }
   blipSetLabel(b, t, selected);
+  b.cInit = true;
 }
 
 static void blipRelease(Blip& b) {
@@ -288,6 +326,7 @@ static void blipRelease(Blip& b) {
   lv_obj_add_flag(b.holder, LV_OBJ_FLAG_HIDDEN);
   b.used = false;
   b.hex[0] = '\0';
+  b.cInit = false;      // caches are stale for the next occupant of this slot
 }
 
 static void warnPoolExhausted(uint32_t nowMs) {

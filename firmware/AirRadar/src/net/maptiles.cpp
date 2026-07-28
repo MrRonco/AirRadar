@@ -40,11 +40,14 @@ static const double   MERC_LAT_LIMIT   = 85.0;                 // usable Mercato
 static const size_t   PNG_SIG_LEN      = 8;
 
 // Blue tint ramp (matches the approved mock) + edge vignette.
-static const int   TINT_LUM_NUM      = 26;   // luminance boost x2.6
+// HARDWARE-TUNED: x2.6 lift (calibrated on a dark z8 tile) rendered water
+// neon-bright at the z9-z11 the scope actually uses. x1.6 + lower blue floor
+// matches the approved slate-dark mock on the real panel.
+static const int   TINT_LUM_NUM      = 16;   // luminance boost x1.6
 static const int   TINT_LUM_DEN      = 10;
-static const int   TINT_R_PCT        = 32,  TINT_R_ADD = 10;
-static const int   TINT_G_PCT        = 62,  TINT_G_ADD = 20;
-static const int   TINT_B_PCT        = 105, TINT_B_ADD = 34;
+static const int   TINT_R_PCT        = 32,  TINT_R_ADD = 7;
+static const int   TINT_G_PCT        = 62,  TINT_G_ADD = 14;
+static const int   TINT_B_PCT        = 105, TINT_B_ADD = 26;
 static const float VIGNETTE_STRENGTH = 0.55f;
 
 // ---------- module state ----------

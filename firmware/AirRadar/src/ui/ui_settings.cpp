@@ -131,7 +131,7 @@ static lv_obj_t* mkRow(lv_obj_t* group, const char* key, bool divider) {
   }
   lv_obj_t* r = lv_obj_create(group);
   lv_obj_remove_style_all(r);
-  lv_obj_set_size(r, LV_PCT(100), 36);
+  lv_obj_set_size(r, LV_PCT(100), 33);
   lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(r, LV_FLEX_ALIGN_SPACE_BETWEEN,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -158,7 +158,7 @@ static lv_obj_t* mkChevronValue(lv_obj_t* row, const char* val) {
   lv_obj_set_style_text_font(v, F_MONO13, 0);
   lv_obj_set_style_text_color(v, C_IVORY2, 0);
   lv_label_set_long_mode(v, LV_LABEL_LONG_DOT);
-  lv_obj_set_style_max_width(v, 150, 0);
+  lv_obj_set_style_max_width(v, 210, 0);   // was 150 — values were ellipsizing early
   lv_obj_t* c = lv_label_create(box);
   lv_label_set_text(c, "›");                 // ›
   lv_obj_set_style_text_font(c, F_MONO13, 0);
@@ -678,12 +678,19 @@ static void teKbEvent(lv_event_t* e) {
   }
 }
 
+static void teCancelBtn(lv_event_t*) {
+  s_ipStep = -1;                               // abort any chained flow
+  uiShow(SCR_SETTINGS);
+}
+
 void texteditOpen(const char* title, const char* initial, bool password,
                   void (*onSave)(const char*)) {
   s_editSeq++;
   lv_obj_t* root = uiScreenRoot(SCR_TEXTEDIT);
   lv_obj_clean(root);
   s_teOnSave = onSave;
+
+  mkCloseBtn(root, teCancelBtn);               // always an obvious way out
 
   s_teTitle = lv_label_create(root);
   lv_label_set_text(s_teTitle, title);
@@ -697,7 +704,7 @@ void texteditOpen(const char* title, const char* initial, bool password,
   lv_textarea_set_password_mode(s_teTa, password);
   lv_textarea_set_max_length(s_teTa, 160);
   lv_obj_set_size(s_teTa, 744, 52);
-  lv_obj_set_pos(s_teTa, 28, 58);
+  lv_obj_set_pos(s_teTa, 28, 72);              // clear of the close button
   lv_obj_set_style_bg_color(s_teTa, C_CARD_HI, 0);
   lv_obj_set_style_bg_opa(s_teTa, 150, 0);
   lv_obj_set_style_text_font(s_teTa, F_UI15, 0);
@@ -729,10 +736,14 @@ void settingsBuild() {
   lv_obj_t* colR = lv_obj_create(root);
   for (lv_obj_t* c : {colL, colR}) {
     lv_obj_remove_style_all(c);
-    lv_obj_set_size(c, 364, 362);
+    lv_obj_set_size(c, 364, 396);            // down to the screen edge
     lv_obj_set_flex_flow(c, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(c, 12, 0);
-    lv_obj_clear_flag(c, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_row(c, 10, 0);
+    // Content is taller than the screen — columns scroll vertically.
+    lv_obj_add_flag(c, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(c, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(c, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_pad_bottom(c, 30, 0);   // room past the footer overlay
   }
   lv_obj_set_pos(colL, 24, 74);
   lv_obj_set_pos(colR, 412, 74);
