@@ -78,6 +78,16 @@ extern Screen  g_screen;
 extern bool    g_wifiUp;                   // WiFi connected (loop-maintained)
 extern bool    g_timeSynced;               // NTP has produced a sane time
 
+// ---------- TLS gate ----------
+// mbedTLS needs ~50 KB internal heap PER handshake; two concurrent secure
+// fetches exhaust the ESP32-S3's internal RAM (field-verified: selecting an
+// aircraft fired logo+route+cloud TLS together and starved the feed).
+// Every task that opens a WiFiClientSecure MUST tlsTryAcquire() first and
+// tlsRelease() when its HTTP client is fully torn down; on failure, skip and
+// retry later. Atomic under g_dataMux — safe from any context.
+bool tlsTryAcquire();
+void tlsRelease();
+
 // ---------- misc helpers (implemented in state.cpp) ----------
 float haversineKm(double la1, double lo1, double la2, double lo2);
 float bearingTo(double la1, double lo1, double la2, double lo2);

@@ -211,6 +211,10 @@ static bool tryLocal(const FeederJob& job) {
 }
 
 static bool tryCloud(const FeederJob& job) {
+  if (!tlsTryAcquire()) {                   // another TLS fetch is running —
+    Serial.println("[feeder] TLS busy - cloud pass skipped");
+    return false;                           // next poll retries in 8s
+  }
   int radiusNm = (int)ceilf(job.rangeKm / KM_PER_NM);
   if (radiusNm > AR_CLOUD_RADIUS_NM_CAP) radiusNm = AR_CLOUD_RADIUS_NM_CAP;
   char url[CLOUD_URL_MAX];
@@ -224,12 +228,14 @@ static bool tryCloud(const FeederJob& job) {
   http.setTimeout(HTTP_CLOUD_TIMEOUT_MS);
   if (!http.begin(client, url)) {
     Serial.println("[feeder] cloud begin failed");
+    tlsRelease();
     return false;
   }
   http.addHeader("User-Agent", AR_USER_AGENT);
   int code = http.GET();
   bool ok = (code == 200) && fetchParse(http.getStream(), false, job);
   http.end();
+  tlsRelease();
   if (!ok) Serial.printf("[feeder] cloud -> HTTP %d\n", code);
   return ok;
 }

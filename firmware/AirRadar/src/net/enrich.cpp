@@ -42,33 +42,46 @@ static RouteJob s_routeJob;                    // written in loop ctx before spa
 // ============================================================
 //  Shared HTTPS GET -> JSON (task context)
 // ============================================================
+static volatile bool s_tlsDeferred = false;    // last httpsGetJson lost the gate
+static volatile uint32_t s_routeRetryAfterMs = 0;   // request cooldown after defer
+
 static bool httpsGetJson(const char* url, JsonDocument& doc,
                          JsonDocument* filter, const char* tag) {
-  WiFiClientSecure client;
-  client.setInsecure();                        // keyless public APIs, no pinning
-  HTTPClient http;
-  http.setTimeout(kHttpTimeoutMs);
-  http.useHTTP10(true);                        // no chunked TE -> stream parse safe
-  if (!http.begin(client, url)) {
-    Serial.printf("[enrich] %s: begin failed\n", tag);
-    return false;
+  s_tlsDeferred = false;
+  if (!tlsTryAcquire()) {                      // one TLS connection at a time
+    s_tlsDeferred = true;
+    Serial.printf("[enrich] %s: TLS busy - deferred\n", tag);
+    return false;                              // all callers re-poll later
   }
-  http.addHeader("User-Agent", AR_USER_AGENT);
-  int code = http.GET();
-  if (code != HTTP_CODE_OK) {
-    Serial.printf("[enrich] %s: http %d\n", tag, code);
+  bool ok = false;
+  {
+    WiFiClientSecure client;
+    client.setInsecure();                      // keyless public APIs, no pinning
+    HTTPClient http;
+    http.setTimeout(kHttpTimeoutMs);
+    http.useHTTP10(true);                      // no chunked TE -> stream parse safe
+    if (!http.begin(client, url)) {
+      Serial.printf("[enrich] %s: begin failed\n", tag);
+      tlsRelease();
+      return false;
+    }
+    http.addHeader("User-Agent", AR_USER_AGENT);
+    int code = http.GET();
+    if (code != HTTP_CODE_OK) {
+      Serial.printf("[enrich] %s: http %d\n", tag, code);
+      http.end();
+      tlsRelease();
+      return false;
+    }
+    DeserializationError err = filter
+      ? deserializeJson(doc, http.getStream(), DeserializationOption::Filter(*filter))
+      : deserializeJson(doc, http.getStream());
     http.end();
-    return false;
-  }
-  DeserializationError err = filter
-    ? deserializeJson(doc, http.getStream(), DeserializationOption::Filter(*filter))
-    : deserializeJson(doc, http.getStream());
-  http.end();
-  if (err) {
-    Serial.printf("[enrich] %s: json parse: %s\n", tag, err.c_str());
-    return false;
-  }
-  return true;
+    if (err) Serial.printf("[enrich] %s: json parse: %s\n", tag, err.c_str());
+    ok = !err;
+  }                                            // client fully destroyed here
+  tlsRelease();
+  return ok;
 }
 
 // ============================================================
@@ -178,6 +191,13 @@ static void routeTask(void*) {
     JsonVariantConst fr = doc["response"]["flightroute"];
     strlcpy(org, fr["origin"]["iata_code"]      | "", sizeof(org));
     strlcpy(dst, fr["destination"]["iata_code"] | "", sizeof(dst));
+  } else if (s_tlsDeferred) {
+    // Lost the TLS gate — NOT an answer. Don't mark tried; the main loop
+    // re-requests once the cooldown passes.
+    s_routeRetryAfterMs = millis() + 2500;
+    g_routeFetching = false;
+    vTaskDelete(NULL);
+    return;
   }
   // Post the result even when blank/failed — that is what marks the callsign
   // as tried (v6 semantics; callsign change resets routeTried for a retry).
@@ -203,6 +223,7 @@ static void trimCopy(char* out, size_t outLen, const char* in) {
 
 void enrichRequestRoute(const char* hex, const char* flight) {
   if (g_routeFetching) return;                 // dedupe: one lookup in flight
+  if ((int32_t)(millis() - s_routeRetryAfterMs) < 0) return;   // TLS-busy cooldown
   if (!hex || !hex[0] || !flight) return;
   char fl[sizeof(s_routeJob.flight)];
   trimCopy(fl, sizeof(fl), flight);

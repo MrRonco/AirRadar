@@ -267,12 +267,20 @@ static void resampleAndTint(const MapJob& job, int z, double cxPx, double cyPx) 
 // stitchedReady is set only after s_back is fully written; the in-flight
 // flag is cleared last so mapLoop never swaps under a live task.
 static void mapFetchTask(void*) {
+  if (!tlsTryAcquire()) {              // one TLS user at a time (heap budget)
+    Serial.println("[map] TLS busy - fetch deferred");
+    s_fetchFailed = true;              // existing retry path re-requests soon
+    s_fetchInFlight = false;
+    vTaskDelete(NULL);
+    return;
+  }
   const MapJob job = s_job;            // snapshot was taken in loop context
   const int z = chooseZoom(job.lat, job.rangeKm);
   Serial.printf("[map] fetch lat=%.4f lon=%.4f range=%dkm -> z%d\n",
                 job.lat, job.lon, job.rangeKm, z);
   double cxPx = 0.0, cyPx = 0.0;
   bool ok = buildMosaic(job, z, cxPx, cyPx);
+  tlsRelease();
   if (ok) {
     resampleAndTint(job, z, cxPx, cyPx);
     Serial.println("[map] stitch complete");

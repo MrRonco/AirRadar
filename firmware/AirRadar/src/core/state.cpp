@@ -128,6 +128,25 @@ void settingsSaveFavs() {
 }
 
 // ============================================================
+//  TLS gate (see state.h)
+// ============================================================
+static volatile bool s_tlsBusy = false;
+
+bool tlsTryAcquire() {
+  bool got = false;
+  portENTER_CRITICAL(&g_dataMux);
+  if (!s_tlsBusy) { s_tlsBusy = true; got = true; }
+  portEXIT_CRITICAL(&g_dataMux);
+  return got;
+}
+
+void tlsRelease() {
+  portENTER_CRITICAL(&g_dataMux);
+  s_tlsBusy = false;
+  portEXIT_CRITICAL(&g_dataMux);
+}
+
+// ============================================================
 //  Math
 // ============================================================
 static inline double d2r(double d) { return d * M_PI / 180.0; }

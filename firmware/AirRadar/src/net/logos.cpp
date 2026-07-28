@@ -48,11 +48,14 @@ static int slotAlloc() {
   return best;                              // evict least-recently-used
 }
 
+static volatile uint32_t s_retryAfterMs = 0;   // cooldown after transient failure
+
 // ---------- fetch task (core 0) ----------
-static bool fetchPng(const char* key, size_t* outLen) {
+// Returns HTTP code (200/404/...) or negative on transport failure.
+static int fetchPngCode(const char* key, size_t* outLen) {
   if (!s_png) {
     s_png = (uint8_t*)heap_caps_malloc(kPngMax, MALLOC_CAP_SPIRAM);
-    if (!s_png) { Serial.println("[logo] png buf alloc failed"); return false; }
+    if (!s_png) { Serial.println("[logo] png buf alloc failed"); return -1; }
   }
   char url[128];
   snprintf(url, sizeof(url), "%s%s.png", kUrlBase, key);
@@ -60,14 +63,14 @@ static bool fetchPng(const char* key, size_t* outLen) {
   client.setInsecure();
   HTTPClient http;
   http.setTimeout(kHttpTimeoutMs);
-  if (!http.begin(client, url)) return false;
+  if (!http.begin(client, url)) return -1;
   http.addHeader("User-Agent", AR_USER_AGENT);
   int code = http.GET();
   if (code != 200) {
     http.end();
     if (code != 404)                        // 404 = airline simply not in the pack
       Serial.printf("[logo] %s -> HTTP %d\n", key, code);
-    return false;
+    return code;
   }
   int clen = http.getSize();
   WiFiClient* st = http.getStreamPtr();
@@ -86,15 +89,28 @@ static bool fetchPng(const char* key, size_t* outLen) {
     }
   }
   http.end();
-  if (total < 100) return false;
+  if (total < 100) return -2;               // truncated transfer: transient
   *outLen = total;
-  return true;
+  return 200;
 }
 
 static void logoTask(void*) {
+  // TLS gate: never contend with the aircraft feed / map / route fetches —
+  // that contention starved mbedTLS and stalled the whole data pipeline.
+  if (!tlsTryAcquire()) {
+    s_resState = LOGO_UNKNOWN;              // not an answer: retry later
+    s_retryAfterMs = millis() + 3000;
+    s_resReady = true;
+    s_fetching = false;
+    vTaskDelete(NULL);
+    return;
+  }
   LogoState result = LOGO_MISS;
+  int code = -1;
   size_t len = 0;
-  if (WiFi.status() == WL_CONNECTED && fetchPng(s_jobKey, &len)) {
+  if (WiFi.status() == WL_CONNECTED) code = fetchPngCode(s_jobKey, &len);
+  tlsRelease();
+  if (code == 200) {
     // Decode + downscale 90 -> 46 into an offscreen sprite, then copy pixels.
     LGFX_Sprite spr(nullptr);
     spr.setColorDepth(16);
@@ -113,7 +129,12 @@ static void logoTask(void*) {
     } else {
       Serial.println("[logo] sprite alloc failed");
     }
-  }
+  } else if (code != 404) {
+    // Transient (timeout/TLS/heap): DON'T negative-cache — an American
+    // Airlines logo shouldn't vanish forever because one fetch hiccuped.
+    result = LOGO_UNKNOWN;
+    s_retryAfterMs = millis() + 5000;
+  }                                          // 404 stays LOGO_MISS (permanent)
   s_resState = result;
   s_resReady = true;                        // consumed by logosLoop
   s_fetching = false;
@@ -123,7 +144,9 @@ static void logoTask(void*) {
 // ---------- public API (loop context) ----------
 void logosRequest(const char* icao3) {
   if (!icao3 || strlen(icao3) != 3) return;
-  if (slotFind(icao3) >= 0) return;         // cached (any state)
+  if ((int32_t)(millis() - s_retryAfterMs) < 0) return;   // transient cooldown
+  int i = slotFind(icao3);
+  if (i >= 0 && s_slots[i].state != LOGO_UNKNOWN) return; // OK/MISS/PENDING: done
   if (s_reqKey[0] || s_fetching) return;    // one in flight; retried next tick
   strlcpy(s_reqKey, icao3, sizeof(s_reqKey));
 }
@@ -146,9 +169,11 @@ void logosLoop(uint32_t nowMs) {
     if (s_jobSlot >= 0) s_slots[s_jobSlot].state = s_resState;
     s_jobSlot = -1;
   }
-  // Launch the queued request.
+  // Launch the queued request. Reuse the key's existing slot (UNKNOWN retry)
+  // so a retried airline never occupies two cache entries.
   if (s_reqKey[0] && !s_fetching && g_wifiUp) {
-    int slot = slotAlloc();
+    int slot = slotFind(s_reqKey);
+    if (slot < 0) slot = slotAlloc();
     LogoSlot& sl = s_slots[slot];
     if (!sl.pix) {
       sl.pix = (uint16_t*)heap_caps_malloc(kPixBytes, MALLOC_CAP_SPIRAM);
