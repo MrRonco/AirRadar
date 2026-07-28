@@ -9,6 +9,8 @@
 // Security: HTTP Basic auth ("admin"/<panelPass>) guards EVERY handler when a
 // panel password is set. Stored passwords are never echoed into HTML or JSON.
 #include <WiFi.h>
+#include <WiFiClient.h>
+#include <HTTPClient.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <Update.h>
@@ -616,6 +618,38 @@ static void handleScreenBmp() {
 // ============================================================
 //  /metrics — Prometheus text exposition
 // ============================================================
+// GET /api/probe?url=http://x/y — the device fetches the URL itself and
+// reports what IT saw. Settles "is it my firewall or the firmware?" forever.
+// Plain-HTTP only (LAN diagnostics); blocking (~4s max) is fine for a manual
+// support call. Auth-guarded like everything else.
+static void handleApiProbe() {
+  if (!authed()) return;
+  String url = server.arg("url");
+  url.trim();
+  if (!url.startsWith("http://")) {
+    server.send(400, "application/json",
+                "{\"ok\":false,\"err\":\"http:// urls only\"}");
+    return;
+  }
+  WiFiClient net;
+  HTTPClient http;
+  http.setConnectTimeout(2000);
+  http.setTimeout(4000);
+  http.useHTTP10(true);
+  uint32_t t0 = millis();
+  int code = -100;                     // begin() refused the URL
+  int len = -1;
+  if (http.begin(net, url)) {
+    code = http.GET();                 // negative = HTTPClient error code
+    if (code > 0) len = http.getSize();
+    http.end();
+  }
+  char out[128];
+  snprintf(out, sizeof(out), "{\"ok\":true,\"code\":%d,\"ms\":%lu,\"len\":%d}",
+           code, (unsigned long)(millis() - t0), len);
+  server.send(200, "application/json", out);
+}
+
 static void handleMetrics() {
   if (!authed()) return;
   String s;
@@ -698,6 +732,7 @@ void webBegin() {
   server.on("/api/config", HTTP_POST, handleApiConfigPost);
   server.on("/screen.bmp", HTTP_GET, handleScreenBmp);
   server.on("/metrics", HTTP_GET, handleMetrics);
+  server.on("/api/probe", HTTP_GET, handleApiProbe);
   server.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   server.onNotFound(handleNotFound);
   // WebServer only retains headers we explicitly collect (for the CSRF guard).

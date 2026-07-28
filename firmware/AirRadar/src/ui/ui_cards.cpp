@@ -557,6 +557,14 @@ static void selApplyLogoLayout(bool logoEn) {
 static void updateSelectedIdentity(const Track* t) {
   char cs[12];
   sanitizeCallsign(t, cs, sizeof(cs));
+  // Adaptive size: >=6 chars overflow the tile row at 28px ("HUSK28" showed
+  // as "HUSK2"), so long callsigns drop to the 20px face and stay whole.
+  static const lv_font_t* csFont = nullptr;
+  const lv_font_t* want = (strlen(cs) >= 6) ? F_M20 : F_L28;
+  if (want != csFont) {
+    csFont = want;
+    lv_obj_set_style_text_font(s_selCallsign, want, 0);
+  }
   setTextCached(s_selCallsign, s_bufCall, sizeof(s_bufCall), cs);
 
   // Cache key covers ownOp AND callsign — with no operator the initials come

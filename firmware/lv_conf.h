@@ -20,12 +20,16 @@
 #define LV_COLOR_16_SWAP 0
 
 /*==== MEMORY ====*/
-/* Use stdlib malloc (Arduino-ESP32 spills large allocs to PSRAM). */
+/* HARDWARE-TUNED: LVGL's heap (widget tree, styles, label texts) lives in
+ * PSRAM. With plain malloc it all landed in internal SRAM and, together with
+ * the internal draw buffer, starved mbedTLS (~50 KB/handshake) — every HTTPS
+ * fetch (cloud aircraft, map tiles, routes, weather) failed. Widgets are cold
+ * data; PSRAM is the right home. free() releases PSRAM pointers fine. */
 #define LV_MEM_CUSTOM 1
-#define LV_MEM_CUSTOM_INCLUDE <stdlib.h>
-#define LV_MEM_CUSTOM_ALLOC   malloc
+#define LV_MEM_CUSTOM_INCLUDE "esp32-hal-psram.h"
+#define LV_MEM_CUSTOM_ALLOC   ps_malloc
 #define LV_MEM_CUSTOM_FREE    free
-#define LV_MEM_CUSTOM_REALLOC realloc
+#define LV_MEM_CUSTOM_REALLOC ps_realloc
 #define LV_MEMCPY_MEMSET_STD 1
 
 /*==== HAL ====*/
