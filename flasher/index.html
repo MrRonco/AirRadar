@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Install AirRadar</title>
+<!-- ESP Web Tools: flashes ESP32-S3 straight from Chrome/Edge over Web Serial -->
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+  :root{--ink:#05080d;--ink2:#0a1018;--ivory:#eef1f4;--ivory2:#aab4c0;--dim:#69757f;--cy:#54dcee;--cy-soft:#3fb6c8;--line:#1a2230;
+    --disp:"SF Pro Display",system-ui,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;--mono:"SF Mono",ui-monospace,Menlo,monospace;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(130% 110% at 50% -10%,#0c1119,#05080d 60%);color:var(--ivory);font-family:var(--disp);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px;-webkit-font-smoothing:antialiased;}
+  .card{max-width:460px;width:100%;text-align:center;}
+  .logo{display:inline-flex;align-items:center;gap:10px;margin-bottom:26px;}
+  .logo svg{width:30px;height:30px;color:var(--cy);}
+  .logo b{font-size:24px;font-weight:300;letter-spacing:.02em;}
+  h1{font-size:34px;font-weight:250;letter-spacing:-.02em;margin-bottom:14px;line-height:1.1;}
+  p{color:var(--ivory2);font-weight:300;line-height:1.65;margin-bottom:10px;font-size:15px;}
+  .sub{color:var(--dim);font-size:13px;}
+  .btnwrap{margin:34px 0 24px;}
+  esp-web-install-button{--esp-tools-button-color:#06222a;}
+  .fallback{display:inline-block;background:var(--cy);color:#06222a;font-weight:600;font-size:15px;
+    padding:14px 30px;border-radius:12px;box-shadow:0 10px 30px -12px var(--cy);}
+  .unsupported{display:none;color:#ff9aa5;font-size:13px;margin-top:10px}
+  .steps{text-align:left;background:rgba(20,30,42,.4);border:1px solid var(--line);border-radius:14px;padding:20px 24px;margin-top:26px;}
+  .steps ol{margin:0;padding-left:20px;} .steps li{color:var(--ivory2);font-weight:300;font-size:14px;margin:8px 0;}
+  .foot{margin-top:26px;font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.05em;}
+  .foot a{color:var(--cy-soft);text-decoration:none;}
+  code{font-family:var(--mono);font-size:.85em;background:#0d141d;padding:2px 6px;border-radius:5px;color:var(--ivory);}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l20-8-8 20-2.5-9.5z"/></svg>
+      <b>AirRadar</b>
+    </div>
+    <h1>Install in one click</h1>
+    <p>Flash AirRadar to your Waveshare ESP32-S3-Touch-LCD-7 directly from this page — no IDE, no drivers to fight.</p>
+    <p class="sub">Requires desktop <b>Chrome</b> or <b>Edge</b>. Connect the board by USB-C first.</p>
+
+    <div class="btnwrap">
+      <esp-web-install-button manifest="./manifest.json">
+        <button slot="activate" class="fallback">⚡ Connect &amp; Install</button>
+        <span slot="unsupported" class="unsupported">Your browser can't flash over USB — use desktop Chrome or Edge.</span>
+        <span slot="not-allowed" class="unsupported">Serial access was blocked — allow it and retry.</span>
+      </esp-web-install-button>
+    </div>
+
+    <div class="steps">
+      <ol>
+        <li>Plug the board into your computer with a USB-C data cable.</li>
+        <li>Flip the onboard UART switch to the flashing position if upload fails.</li>
+        <li>Click <b>Connect &amp; Install</b> and pick the <code>USB JTAG/serial</code> or <code>wchusbserial</code> port.</li>
+        <li>Wait for the flash to finish — the radar boots straight into first-run setup.</li>
+      </ol>
+    </div>
+
+    <div class="foot">v7.0 · <a href="https://github.com/MrRonco/AirRadar">github.com/MrRonco/AirRadar</a> · by Franco Raso</div>
+  </div>
+</body>
+</html>
