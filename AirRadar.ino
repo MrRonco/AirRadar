@@ -849,25 +849,33 @@ void drawTarget(Track &t){
                     (i==0)?2:1,plot.color565(r*f,g*f,bc*f));
   }
 
-  float nx,ny,rx,ry,lx,ly,cx2,cy2;
-  rotPt(0,-7,t.trackDeg,nx,ny);   rotPt(4.5,6,t.trackDeg,rx,ry);
-  rotPt(-4.5,6,t.trackDeg,lx,ly); rotPt(0,3,t.trackDeg,cx2,cy2);
-  if(coasting){
-    plot.drawTriangle(sx+nx,sy+ny,sx+rx,sy+ry,sx+cx2,sy+cy2,col);
-    plot.drawTriangle(sx+nx,sy+ny,sx+cx2,sy+cy2,sx+lx,sy+ly,col);
+  // top-down airplane silhouette, rotated to heading (local +y = tail, -y = nose)
+  // 0 nose,1 fuseL,2 fuseR,3 tail,4 wingRoot,5 wingTipL,6 wingTipR,7 stabL,8 stabR
+  static const float PL[9][2]={
+    {0,-8},{-1.6f,3},{1.6f,3},{0,7.5f},{0,-1},{-8,3.5f},{8,3.5f},{-3.6f,7.5f},{3.6f,7.5f}};
+  float px[9],py[9];
+  for(int i=0;i<9;i++){ float ox,oy; rotPt(PL[i][0],PL[i][1],t.trackDeg,ox,oy); px[i]=sx+ox; py[i]=sy+oy; }
+  if(coasting){                      // hollow wireframe when dead-reckoning
+    plot.drawLine(px[0],py[0],px[3],py[3],col);   // fuselage
+    plot.drawLine(px[5],py[5],px[6],py[6],col);   // main wing
+    plot.drawLine(px[7],py[7],px[8],py[8],col);   // tailplane
   }else{
-    plot.fillTriangle(sx+nx,sy+ny,sx+rx,sy+ry,sx+cx2,sy+cy2,col);
-    plot.fillTriangle(sx+nx,sy+ny,sx+cx2,sy+cy2,sx+lx,sy+ly,col);
+    plot.fillTriangle(px[0],py[0],px[1],py[1],px[2],py[2],col);   // fuselage front
+    plot.fillTriangle(px[1],py[1],px[2],py[2],px[3],py[3],col);   // fuselage rear
+    plot.fillTriangle(px[4],py[4],px[5],py[5],px[1],py[1],col);   // wing L
+    plot.fillTriangle(px[4],py[4],px[6],py[6],px[2],py[2],col);   // wing R
+    plot.fillTriangle(px[1],py[1],px[7],py[7],px[3],py[3],col);   // stab L
+    plot.fillTriangle(px[2],py[2],px[8],py[8],px[3],py[3],col);   // stab R
   }
-  if(t.mil){ plot.drawRect(sx-7,sy-7,14,14,colTxtHi); }   // military / interesting
+  if(t.mil){ plot.drawRect(sx-8,sy-8,16,16,colTxtHi); }   // military / interesting
   if(sel){
     plot.drawEllipse(sx,sy,(int)(13*X_CORR)+1,13,colTxtHi);
     plot.drawEllipse(sx,sy,(int)(15*X_CORR)+1,15,colAccDim);
   }
   if(t.gsKt>20&&!coasting){
     float L=t.gsKt/16.0f; if(L>30)L=30;
-    float ex,ey; rotPt(0,-7-L,t.trackDeg,ex,ey);
-    plot.drawLine(sx+nx,sy+ny,sx+ex,sy+ey,col);
+    float ex,ey; rotPt(0,-8-L,t.trackDeg,ex,ey);
+    plot.drawLine(px[0],py[0],sx+ex,sy+ey,col);      // speed leader from the nose
   }
 
   if(!showLabels&&!sel) return;
