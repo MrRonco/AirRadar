@@ -14,7 +14,13 @@
 
 enum LogoState : uint8_t { LOGO_UNKNOWN = 0, LOGO_PENDING, LOGO_OK, LOGO_MISS };
 
-void logosLoop(uint32_t nowMs);              // loop context: spawn queued fetch
+void logosBegin();                           // mount FATFS cache (call in setup)
+void logosLoop(uint32_t nowMs);              // loop context: land results, spawn
+                                             //  queued fetch, prefetch visible
 void logosRequest(const char* icao3);        // queue a lookup (no-op if cached)
 // LOGO_OK: *out points at a valid image descriptor (stable until slot reuse).
 LogoState logosGet(const char* icao3, const lv_img_dsc_t** out);
+
+// "JZA238" -> "JZA" when the callsign matches the airline pattern
+// (3 letters + digit); returns false for GA/reg-style callsigns.
+bool logosIcaoFromFlight(const char* flight, char out[4]);

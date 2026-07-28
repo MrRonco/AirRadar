@@ -680,13 +680,8 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
 static void updateSelLogo(const Track* t) {
   const lv_img_dsc_t* want = nullptr;
   if (g_set.logoEn && t) {
-    char icao[4] = "";
-    if (isalpha((unsigned char)t->flight[0]) &&
-        isalpha((unsigned char)t->flight[1]) &&
-        isalpha((unsigned char)t->flight[2]) &&
-        isdigit((unsigned char)t->flight[3])) {
-      for (int i = 0; i < 3; i++) icao[i] = toupper((unsigned char)t->flight[i]);
-      icao[3] = 0;
+    char icao[4];
+    if (logosIcaoFromFlight(t->flight, icao)) {
       const lv_img_dsc_t* d = nullptr;
       LogoState st = logosGet(icao, &d);
       if (st == LOGO_UNKNOWN) logosRequest(icao);

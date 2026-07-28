@@ -1,15 +1,25 @@
 // logos.cpp — airline logo fetch/cache. See logos.h for the contract.
+//
+// Three tiers: RAM slots (fast) -> FATFS /lg/<ICAO> (persistent, 4.2 KB per
+// rendered logo against a 9.9 MB partition) -> network fetch (TLS, gated).
+// After the first encounter an airline's logo loads from flash in
+// milliseconds, forever, with zero network. A gentle prefetcher walks the
+// currently visible aircraft so the cache converges on the local traffic mix.
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <FFat.h>
 #include <ctype.h>
 #include <string.h>
 #include "logos.h"
+#include "../core/tracks.h"
 
 static const char     kUrlBase[]     = "https://raw.githubusercontent.com/theqkash/esp32flight-logos/main/logos/";
-static const int      kSlots         = 8;                 // LRU-ish ring
+static const char     kFsDir[]       = "/lg";
+static const int      kSlots         = 12;                // LRU-ish ring
+static const uint32_t kPrefetchMs    = 6000;              // visible-aircraft walk
 static const size_t   kPngMax        = 96 * 1024;         // download cap
 static const uint32_t kHttpTimeoutMs = 8000;
 static const size_t   kPixBytes      = LOGO_PX * LOGO_PX * 2;
@@ -49,6 +59,61 @@ static int slotAlloc() {
 }
 
 static volatile uint32_t s_retryAfterMs = 0;   // cooldown after transient failure
+static bool     s_fsOk = false;                // FATFS cache mounted
+static uint32_t s_lastPrefetchMs = 0;
+
+// ---------- persistent tier (loop context only) ----------
+void logosBegin() {
+  // format_if_failed=true: first boot on a fresh FATFS partition formats it
+  // (takes a few seconds, once ever).
+  s_fsOk = FFat.begin(true);
+  if (!s_fsOk) { Serial.println("[logo] FATFS mount failed - no persistent cache"); return; }
+  if (!FFat.exists(kFsDir)) FFat.mkdir(kFsDir);
+  Serial.printf("[logo] FATFS cache up (%u KB free)\n",
+                (unsigned)(FFat.freeBytes() / 1024));
+}
+
+static void fsPathFor(const char* key, char* out, size_t cap) {
+  snprintf(out, cap, "%s/%s", kFsDir, key);
+}
+
+// Try to fill a slot's pixels from flash. Loop context; ~ms for 4.2 KB.
+static bool fsLoad(const char* key, uint16_t* pix) {
+  if (!s_fsOk) return false;
+  char path[16];
+  fsPathFor(key, path, sizeof(path));
+  File f = FFat.open(path, FILE_READ);
+  if (!f) return false;
+  bool ok = (f.size() == kPixBytes) &&
+            (f.read((uint8_t*)pix, kPixBytes) == kPixBytes);
+  f.close();
+  if (!ok) FFat.remove(path);          // corrupt/short file: refetch later
+  return ok;
+}
+
+// Persist freshly fetched pixels. Loop context (keeps FATFS single-threaded).
+static void fsSave(const char* key, const uint16_t* pix) {
+  if (!s_fsOk) return;
+  char path[16];
+  fsPathFor(key, path, sizeof(path));
+  File f = FFat.open(path, FILE_WRITE);
+  if (!f) { Serial.printf("[logo] fs write open failed %s\n", path); return; }
+  size_t w = f.write((const uint8_t*)pix, kPixBytes);
+  f.close();
+  if (w != kPixBytes) { FFat.remove(path); Serial.printf("[logo] fs write short %s\n", path); }
+  else Serial.printf("[logo] cached %s to flash\n", key);
+}
+
+bool logosIcaoFromFlight(const char* flight, char out[4]) {
+  out[0] = 0;
+  if (!flight) return false;
+  if (!isalpha((unsigned char)flight[0]) || !isalpha((unsigned char)flight[1]) ||
+      !isalpha((unsigned char)flight[2]) || !isdigit((unsigned char)flight[3]))
+    return false;
+  for (int i = 0; i < 3; i++) out[i] = (char)toupper((unsigned char)flight[i]);
+  out[3] = 0;
+  return true;
+}
 
 // ---------- fetch task (core 0) ----------
 // Returns HTTP code (200/404/...) or negative on transport failure.
@@ -162,12 +227,31 @@ LogoState logosGet(const char* icao3, const lv_img_dsc_t** out) {
 }
 
 void logosLoop(uint32_t nowMs) {
-  (void)nowMs;
-  // Land a finished fetch.
+  // Land a finished fetch (and persist wins to flash — loop context keeps
+  // FATFS access single-threaded).
   if (s_resReady) {
     s_resReady = false;
-    if (s_jobSlot >= 0) s_slots[s_jobSlot].state = s_resState;
+    if (s_jobSlot >= 0) {
+      s_slots[s_jobSlot].state = s_resState;
+      if (s_resState == LOGO_OK) fsSave(s_slots[s_jobSlot].key, s_slots[s_jobSlot].pix);
+    }
     s_jobSlot = -1;
+  }
+
+  // Prefetch: every kPrefetchMs, queue one visible airline whose logo we
+  // don't have yet. With the flash tier this converges to "everything the
+  // local sky ever shows loads instantly".
+  if (!s_reqKey[0] && !s_fetching && g_wifiUp &&
+      (int32_t)(nowMs - s_lastPrefetchMs) > (int32_t)kPrefetchMs) {
+    s_lastPrefetchMs = nowMs;
+    for (int i = 0; i < g_orderN; i++) {
+      char icao[4];
+      if (!logosIcaoFromFlight(g_tracks[g_orderIdx[i]].flight, icao)) continue;
+      int s = slotFind(icao);
+      if (s >= 0 && s_slots[s].state != LOGO_UNKNOWN) continue;
+      logosRequest(icao);
+      break;                            // one per interval — stay gentle
+    }
   }
   // Launch the queued request. Reuse the key's existing slot (UNKNOWN retry)
   // so a retried airline never occupies two cache entries.
@@ -188,6 +272,13 @@ void logosLoop(uint32_t nowMs) {
     sl.dsc.header.h  = LOGO_PX;
     sl.dsc.data_size = kPixBytes;
     sl.dsc.data      = (const uint8_t*)sl.pix;
+
+    // Persistent tier: flash hit means no task, no network, ~instant.
+    if (fsLoad(sl.key, sl.pix)) {
+      sl.state = LOGO_OK;
+      s_reqKey[0] = 0;
+      return;
+    }
 
     strlcpy(s_jobKey, s_reqKey, sizeof(s_jobKey));
     s_jobSlot  = slot;

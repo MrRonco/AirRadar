@@ -81,6 +81,7 @@ void setup() {
 
   feederUpdateSrcName();
   mapBegin();
+  logosBegin();                               // FATFS logo cache (formats once)
   if (g_wifiUp) {
     webBegin();
     mqttBegin();
