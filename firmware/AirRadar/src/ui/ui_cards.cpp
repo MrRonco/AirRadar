@@ -54,13 +54,13 @@ static const int SEL_HAIR_Y   = 150;
 static const int SEL_GRID_Y1  = 158;
 static const int SEL_GRID_Y2  = 204;
 static const int SEL_VAL_DY   = 14;            // key -> value offset in a grid cell
-static const int SEL_COL2_X   = 78;            // second grid column (~(CARD_W-34)/2)
+static const int SEL_COL2_X   = 72;            // two 64 px columns, 8 px gutter
 static const int SEL_DIST_Y   = 250;
 static const int SEL_SQK_Y    = 274;
 static const int SEL_DOT_D    = 7;             // LIVE dot diameter
 
 // Semantics
-static const int      FL_TRANSITION_FT = 18000;  // FLxxx display threshold
+static const int      FL_TRANSITION_FT = 10000;  // FLxxx above this; keeps values <=5 glyphs
 static const int      CLIMB_STRONG_FPM = 300;    // colored climb/descent
 static const uint32_t EMERG_BLINK_MS   = 500;
 
@@ -263,7 +263,7 @@ static void buildOverview(lv_obj_t* parent) {
   mkMicro(card, "FEED", 0, OV_FEED_Y);
   s_ovFeed = mkLbl(card, F_UI15, C_IVORY);
   lv_obj_align(s_ovFeed, LV_ALIGN_TOP_RIGHT, 0, OV_FEED_Y - 2);
-  mkMicro(card, "SOURCE", 0, OV_SRC_Y);
+  mkMicro(card, "SRC", 0, OV_SRC_Y);
   s_ovSrc = mkLbl(card, F_UI15, C_IVORY2);
   lv_obj_align(s_ovSrc, LV_ALIGN_TOP_RIGHT, 0, OV_SRC_Y - 2);
 
@@ -339,12 +339,12 @@ static void buildSelectedTop(lv_obj_t* cont) {
 
 static void buildSelectedBottom(lv_obj_t* cont) {
   mkHair(cont, SEL_HAIR_Y, CONTENT_W);
-  s_selAlt   = mkGridCell(cont, 0,          SEL_GRID_Y1, "ALT");
-  s_selSpd   = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y1, "SPEED");
-  s_selHdg   = mkGridCell(cont, 0,          SEL_GRID_Y2, "HEADING");
-  s_selClimb = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y2, "CLIMB");
+  s_selAlt   = mkGridCell(cont, 0,          SEL_GRID_Y1, "ALT ft");
+  s_selSpd   = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y1, "SPD kt");
+  s_selHdg   = mkGridCell(cont, 0,          SEL_GRID_Y2, "HDG");
+  s_selClimb = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y2, "V/S fpm");
 
-  mkMicro(cont, "DIST", 0, SEL_DIST_Y);
+  mkMicro(cont, "DIST km", 0, SEL_DIST_Y);
   s_selDist = mkLbl(cont, F_UI15, C_IVORY);
   lv_obj_align(s_selDist, LV_ALIGN_TOP_RIGHT, 0, SEL_DIST_Y - 2);
   mkMicro(cont, "SQK", 0, SEL_SQK_Y);
@@ -580,10 +580,12 @@ static void updateSelectedIdentity(const Track* t) {
 
 static void updateSelectedGrid(const Track* t) {
   char b[16];
+  // Units live in the key. "489 kt" was 82.6 px in a 64 px cell and clipped to
+  // "489 k"; "216° SW" ran into the next column's "+64".
   if (t->altFt >= FL_TRANSITION_FT)
     snprintf(b, sizeof(b), "FL%03d", t->altFt / 100);
   else if (t->altFt >= 0)
-    snprintf(b, sizeof(b), "%d ft", t->altFt);
+    snprintf(b, sizeof(b), "%d", t->altFt);
   else
     snprintf(b, sizeof(b), "---");
   setTextCached(s_selAlt, s_bufAlt, sizeof(s_bufAlt), b);
@@ -591,11 +593,11 @@ static void updateSelectedGrid(const Track* t) {
   altColorRGB(t->altFt, r, g, bl);
   setColorCached(s_selAlt, &s_colAlt, lv_color_make(r, g, bl));
 
-  snprintf(b, sizeof(b), "%d kt", (int)t->gsKt);
+  snprintf(b, sizeof(b), "%d", (int)t->gsKt);
   setTextCached(s_selSpd, s_bufSpd, sizeof(s_bufSpd), b);
 
   int hd = (((int)t->trackDeg) % 360 + 360) % 360;
-  snprintf(b, sizeof(b), "%03d\xC2\xB0 %s", hd, cardinal8(t->trackDeg));
+  snprintf(b, sizeof(b), "%03d\xC2\xB0", hd);   // cardinal dropped: it never fit
   setTextCached(s_selHdg, s_bufHdg, sizeof(s_bufHdg), b);
 
   snprintf(b, sizeof(b), "%+d", t->vRateFpm);
@@ -610,7 +612,7 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
   char b[24];
   float d = haversineKm(g_set.homeLat, g_set.homeLon, t->lat, t->lon);
   float brg = bearingTo(g_set.homeLat, g_set.homeLon, t->lat, t->lon);
-  snprintf(b, sizeof(b), "%.1f km %s", (double)d, cardinal8(brg));
+  snprintf(b, sizeof(b), "%.1f", (double)d);
   setTextCached(s_selDist, s_bufDist, sizeof(s_bufDist), b);
 
   bool emerg = sqIsEmergency(t->squawk);
