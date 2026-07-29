@@ -12,6 +12,7 @@
 #include <ArduinoJson.h>
 #include <ctype.h>
 #include <esp_heap_caps.h>
+#include <FFat.h>
 #include "enrich.h"
 #include "../core/tracks.h"
 #include "logos.h"                             // logosIcaoFromFlight: airline test
@@ -24,6 +25,81 @@ static const size_t   kIssDocBytes   = 1024;   // wheretheiss.at payload
 static const size_t   kRouteDocBytes = 2048;   // adsbdb filtered payload (v6-proven)
 static const size_t   kUrlMax        = 240;
 static const uint32_t kTlsRetryMs    = 30000;  // re-arm delay when the TLS gate is shut
+
+// ============================================================
+//  Persistent route cache
+// ============================================================
+// A callsign's route does not change, so asking adsbdb for it more than once
+// is waste — and worse, it makes routes hostage to internal heap: once free
+// heap falls under AR_TLS_HEAP_FLOOR the gate shuts and every lookup is shed,
+// which is why the origin/destination row kept going blank an hour into a
+// boot. Cached routes need no network, no TLS and no heap, so they survive
+// both the gate closing and a reboot.
+//
+// One flat table in PSRAM, mirrored to /rt/tbl. 192 x 48 B = 9 KB.
+struct RouteRec { char cs[10]; char org[5]; char dst[5]; char air[28]; };
+static const int    kRouteMax     = 192;
+static const char   kRouteFile[]  = "/rt/tbl";
+static const uint32_t kRouteFlushMs = 60000;     // batch writes; flash stalls the LCD
+static RouteRec*    s_rt          = nullptr;
+static int          s_rtN         = 0;
+static bool         s_rtDirty     = false;
+static uint32_t     s_rtFlushAt   = 0;
+static bool         s_rtFsOk      = false;
+
+static int routeFind(const char* cs) {
+  for (int i = 0; i < s_rtN; i++)
+    if (!strcmp(s_rt[i].cs, cs)) return i;
+  return -1;
+}
+
+void enrichRouteCacheBegin() {
+  s_rt = (RouteRec*)heap_caps_calloc(kRouteMax, sizeof(RouteRec), MALLOC_CAP_SPIRAM);
+  if (!s_rt) { Serial.println("[route] cache alloc failed"); return; }
+  s_rtFsOk = FFat.begin(true);
+  if (!s_rtFsOk) return;
+  if (!FFat.exists("/rt")) FFat.mkdir("/rt");
+  File f = FFat.open(kRouteFile, FILE_READ);
+  if (!f) return;
+  int n = f.size() / sizeof(RouteRec);
+  if (n > kRouteMax) n = kRouteMax;
+  if (n > 0 && f.read((uint8_t*)s_rt, n * sizeof(RouteRec)) == n * (int)sizeof(RouteRec))
+    s_rtN = n;
+  f.close();
+  Serial.printf("[route] %d cached routes loaded\n", s_rtN);
+}
+
+// Loop context. Batched: a flash write stalls the LCD DMA, so we do at most
+// one small write a minute rather than one per newly seen callsign.
+void enrichRouteCacheFlush(uint32_t nowMs) {
+  if (!s_rtDirty || !s_rtFsOk || !s_rt) return;
+  if ((int32_t)(nowMs - s_rtFlushAt) < 0) return;
+  File f = FFat.open(kRouteFile, FILE_WRITE);
+  if (f) {
+    f.write((const uint8_t*)s_rt, s_rtN * sizeof(RouteRec));
+    f.close();
+  }
+  s_rtDirty = false;
+}
+
+static void routeStore(const char* cs, const char* org, const char* dst,
+                       const char* air) {
+  if (!s_rt || !cs[0]) return;
+  int i = routeFind(cs);
+  if (i < 0) {
+    // Full: drop the oldest. Traffic turns over, and a stale entry costs one
+    // needless lookup, not a wrong answer.
+    if (s_rtN >= kRouteMax) { memmove(s_rt, s_rt + 1, (kRouteMax - 1) * sizeof(RouteRec)); s_rtN = kRouteMax - 1; }
+    i = s_rtN++;
+  }
+  memset(&s_rt[i], 0, sizeof(RouteRec));
+  strlcpy(s_rt[i].cs, cs, sizeof(s_rt[i].cs));
+  strlcpy(s_rt[i].org, org, sizeof(s_rt[i].org));
+  strlcpy(s_rt[i].dst, dst, sizeof(s_rt[i].dst));
+  strlcpy(s_rt[i].air, air, sizeof(s_rt[i].air));
+  s_rtDirty  = true;
+  s_rtFlushAt = millis() + kRouteFlushMs;
+}
 
 // ---------- weather job/flags ----------
 struct WxJob { double lat, lon; };
@@ -268,6 +344,7 @@ static void routeTask(void*) {
   g_routeResFinal = final;
   g_routeResReady = true;                      // ready flag LAST
   portEXIT_CRITICAL(&g_dataMux);
+  if (final) routeStore(safe, org, dst, airline);
   Serial.printf("[enrich] route %s: %s -> %s (%s)\n", s_routeJob.flight,
                 org[0] ? org : "?", dst[0] ? dst : "?",
                 airline[0] ? airline : "no airline");
@@ -290,6 +367,24 @@ void enrichRequestRoute(const char* hex, const char* flight) {
   // Check the gate HERE, not inside the task: loop() re-requests every pass
   // while the selected aircraft has no route, and each spawn costs a 12 KB
   // internal stack. Setting the cooldown also throttles the heap query.
+  // Cache first: a hit needs no task, no TLS and no heap, so routes keep
+  // working with the gate shut and straight after a reboot.
+  {
+    char fl2[sizeof(s_routeJob.flight)];
+    trimCopy(fl2, sizeof(fl2), flight);
+    int i = routeFind(fl2);
+    if (i >= 0) {
+      portENTER_CRITICAL(&g_dataMux);
+      strlcpy(g_routeResHex,     hex,           sizeof(g_routeResHex));
+      strlcpy(g_routeResOrigin,  s_rt[i].org,   sizeof(g_routeResOrigin));
+      strlcpy(g_routeResDest,    s_rt[i].dst,   sizeof(g_routeResDest));
+      strlcpy(g_routeResAirline, s_rt[i].air,   sizeof(g_routeResAirline));
+      g_routeResFinal = true;
+      g_routeResReady = true;
+      portEXIT_CRITICAL(&g_dataMux);
+      return;
+    }
+  }
   if (!tlsGateOpen()) { s_routeRetryAfterMs = millis() + 3000; return; }
   char fl[sizeof(s_routeJob.flight)];
   trimCopy(fl, sizeof(fl), flight);

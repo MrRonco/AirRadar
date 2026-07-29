@@ -4,14 +4,19 @@
 #include <ctype.h>
 
 #if AR_USE_INTER_FONTS
-LV_FONT_DECLARE(font_num56);
-LV_FONT_DECLARE(font_num36);
-LV_FONT_DECLARE(font_l28);
-LV_FONT_DECLARE(font_m20);
-LV_FONT_DECLARE(font_ui15);
-LV_FONT_DECLARE(font_ui12);
-LV_FONT_DECLARE(font_mono13);
-LV_FONT_DECLARE(font_mono11);
+// Six faces, down from eight. The retired sizes (11/12/13/15/20) sat inside an
+// 18% band and were invisible as hierarchy steps at 650 mm.
+//   hero56 / clock36  InterDisplay Light, tnum frozen
+//   id28              Inter Medium
+//   val22             Inter Medium, tnum frozen  <- every instrument value
+//   body18            Inter Regular
+//   micro13           JetBrains Mono Medium (monospaced => tabular by build)
+LV_FONT_DECLARE(font_hero56);
+LV_FONT_DECLARE(font_clock36);
+LV_FONT_DECLARE(font_id28);
+LV_FONT_DECLARE(font_val22);
+LV_FONT_DECLARE(font_body18);
+LV_FONT_DECLARE(font_micro13);
 #endif
 
 const lv_font_t* F_NUM56;
@@ -31,14 +36,16 @@ lv_style_t st_hair;
 
 void themeInit() {
 #if AR_USE_INTER_FONTS
-  F_NUM56 = &font_num56;
-  F_NUM36 = &font_num36;
-  F_L28   = &font_l28;
-  F_M20   = &font_m20;
-  F_UI15  = &font_ui15;
-  F_UI12  = &font_ui12;
-  F_MONO13= &font_mono13;
-  F_MONO11= &font_mono11;
+  // The old role names survive as aliases so call sites did not all have to
+  // change at once; what each one resolves to is the new scale.
+  F_NUM56 = &font_hero56;    // 56  hero numeral        (tabular)
+  F_NUM36 = &font_clock36;   // 36  clock               (tabular)
+  F_L28   = &font_id28;      // 28  callsign / route
+  F_M20   = &font_val22;     // 22  VALUES — 20 px was 14.5', under the 16' floor
+  F_UI15  = &font_body18;    // 18  body / distances
+  F_UI12  = &font_micro13;   // 13  keys and micro labels
+  F_MONO13= &font_micro13;
+  F_MONO11= &font_micro13;   // scope callsigns: 11 -> 13
 #else
   F_NUM56 = &lv_font_montserrat_48;
   F_NUM36 = &lv_font_montserrat_36;

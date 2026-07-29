@@ -33,7 +33,7 @@ static const int   HOLDER_SZ    = 34;           // = glow / selection-ring size
 static const int   HOLDER_HALF  = HOLDER_SZ / 2;
 static const int   JET_SZ       = 26;           // img_jet, pivot at centre
 static const int   MIL_BOX_SZ   = 30;
-static const int   LBL_W        = 104;          // generous: "FL350 · 122 km" + slack
+static const int   LBL_W        = 118;          // 13 px mono needs more than 11 px did
 static const int   LBL_H        = 28;           // two F_MONO11 lines
 static const lv_opa_t SEL_RING_OPA = 210;
 static const lv_opa_t MIL_BOX_OPA  = 170;

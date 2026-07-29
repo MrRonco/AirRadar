@@ -628,7 +628,10 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
   char b[24];
   float d = haversineKm(g_set.homeLat, g_set.homeLon, t->lat, t->lon);
   float brg = bearingTo(g_set.homeLat, g_set.homeLon, t->lat, t->lon);
-  snprintf(b, sizeof(b), "%.1f", (double)d);
+  // 22 px tabular digits are 14.25 px, so five glyphs ("119.9") would fill the
+  // 64 px cell exactly. Past 100 km a tenth of a kilometre is noise anyway.
+  if (d >= 100.0f) snprintf(b, sizeof(b), "%d", (int)(d + 0.5f));
+  else             snprintf(b, sizeof(b), "%.1f", (double)d);
   setTextCached(s_selDist, s_bufDist, sizeof(s_bufDist), b);
 
   bool emerg = sqIsEmergency(t->squawk);

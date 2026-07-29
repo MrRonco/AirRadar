@@ -82,6 +82,7 @@ void setup() {
   feederUpdateSrcName();
   mapBegin();
   logosBegin();                               // FATFS logo cache (formats once)
+  enrichRouteCacheBegin();                    // FATFS route cache
   if (g_wifiUp) {
     webBegin();
     mqttBegin();
@@ -109,6 +110,7 @@ void loop() {
   mapLoop(now);
   mqttLoop(now);
   logosLoop(now);
+  enrichRouteCacheFlush(now);
 
   // Route result first, then (maybe) a new request — ordering avoids a
   // guaranteed duplicate adsbdb fetch right after each lookup completes.

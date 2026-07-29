@@ -18,6 +18,12 @@ void enrichRequestRoute(const char* hex, const char* flight);
 // SELECTED aircraft ever gets a route. Loop context.
 void enrichRouteWalk(uint32_t nowMs);
 
+// Persistent route cache (PSRAM table mirrored to FATFS). Routes are static
+// per callsign, so caching them makes origin/destination survive both a reboot
+// and the TLS gate closing under heap pressure.
+void enrichRouteCacheBegin();
+void enrichRouteCacheFlush(uint32_t nowMs);
+
 // Loop-context: if a route result is ready, write it into the matching track
 // (marking routeTried) and return true so the UI can refresh.
 bool enrichApplyRoute();

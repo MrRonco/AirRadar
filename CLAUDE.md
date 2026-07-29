@@ -215,8 +215,19 @@ upload. Static/Wi-Fi changes reboot by design. v7 API (all behind HTTP Basic aut
   No greens — owner preference.
 - Every dynamic LVGL write must be change-cached (unchanged writes still invalidate
   and fight the panel DMA — this was the "wiggle").
-- Regenerate assets/fonts with `firmware/tools/genassets.py` + lv_font_conv (see
-  `docs/V7_PORT.md`); `firmware/lv_conf.h` must sit beside the lvgl library.
+- Regenerate images with `firmware/tools/genassets.py`; `firmware/lv_conf.h` must
+  sit beside the lvgl library.
+- **Fonts (v7.1): six faces, not eight.** `font_hero56` / `font_clock36`
+  (InterDisplay Light, **tnum frozen**), `font_id28` (Inter Medium),
+  `font_val22` (Inter Medium, **tnum frozen** — every instrument value),
+  `font_body18` (Inter Regular), `font_micro13` (JetBrains Mono Medium).
+  Regenerate with `lv_font_conv --bpp 4`; freeze tabular figures first with
+  `pyftfeatfreeze -f tnum` or digits will visibly jitter as they change.
+  Codepoint ranges are NOT uniform and dropping one breaks glyphs silently:
+  hero `0x30-0x39`, clock `0x30-0x3A`, id28 `0x20,0x2D,0x2E,0x30-0x39,0x41-0x5A,0xB0,0xB7`,
+  micro13 `0x20-0x7E,0xB0,0xB7,0x2039,0x203A` (the last two are the range
+  stepper's chevrons), val22/body18 `0x20-0x7E,0xB0,0xB7`.
+  The old F_* names survive in theme.cpp as aliases onto this scale.
 
 ## Roadmap (owner-approved parked ideas)
 
