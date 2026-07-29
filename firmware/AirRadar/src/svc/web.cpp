@@ -681,6 +681,9 @@ static void handleMetrics() {
   s += F("# TYPE airradar_tls_shed counter\n");
   snprintf(l, sizeof(l), "airradar_tls_shed %lu\n",
            (unsigned long)g_tlsShedCount); s += l;
+  s += F("# TYPE airradar_tls_conn counter\n");
+  snprintf(l, sizeof(l), "airradar_tls_conn %lu\n",
+           (unsigned long)g_tlsConnCount); s += l;
   s += F("# TYPE airradar_uptime_seconds gauge\n");
   snprintf(l, sizeof(l), "airradar_uptime_seconds %lu\n",
            (unsigned long)(millis() / 1000UL)); s += l;

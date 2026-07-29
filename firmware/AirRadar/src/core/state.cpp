@@ -142,6 +142,7 @@ static bool tlsHeapOk() {
 }
 
 uint32_t g_tlsShedCount = 0;           // exported in /metrics: RAM-shed forensics
+uint32_t g_tlsConnCount = 0;           // successful acquisitions == TLS sessions
 
 bool tlsTryAcquire(bool essential) {
   if (!essential && !tlsHeapOk()) {     // shed eye-candy before the feed starves
@@ -152,6 +153,9 @@ bool tlsTryAcquire(bool essential) {
   portENTER_CRITICAL(&g_dataMux);
   if (!s_tlsBusy) { s_tlsBusy = true; got = true; }
   portEXIT_CRITICAL(&g_dataMux);
+  // Pair this against heap_free over time and the per-session leak falls out as
+  // simple arithmetic instead of guesswork.
+  if (got) g_tlsConnCount++;
   return got;
 }
 

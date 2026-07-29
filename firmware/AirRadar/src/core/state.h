@@ -108,6 +108,9 @@ bool tlsGateOpen();
 // Without this, "this airline has no route" and "we are out of heap" look
 // identical from the outside. Exported by /metrics.
 extern uint32_t g_tlsShedCount;
+// Successful TLS acquisitions. heap_free delta / this delta = bytes leaked per
+// secure session — the number that tells you whether a leak is TLS-driven.
+extern uint32_t g_tlsConnCount;
 
 // ---------- misc helpers (implemented in state.cpp) ----------
 float haversineKm(double la1, double lo1, double la2, double lo2);

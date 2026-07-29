@@ -46,9 +46,17 @@ static const int   LBL_OFF_Y    = 10;
 // 4 Hz full-scope repaint; once that was fixed the ghost would have shown.
 // Bounding the children also lets us drop LV_OBJ_FLAG_OVERFLOW_VISIBLE, which
 // forced LVGL to draw all 13 holders even for invalid areas they don't touch.
-static const int   HOLDER_W     = LBL_OFF_X + LBL_W;
-static const int   HOLDER_H     = (LBL_OFF_Y + LBL_H > HOLDER_SZ)
-                                    ? (LBL_OFF_Y + LBL_H) : HOLDER_SZ;
+// The jet is rotated by heading, so its drawn bounding box is the 26 px image
+// diagonal (~37 px), not 26 — at 45 deg it overflows the 34 px cluster box by
+// ~1.4 px on each side. With OVERFLOW_VISIBLE gone the parent clips children,
+// so the cluster gets a pad and the blip centre moves to HOLDER_CX.
+static const int   CLUSTER_PAD  = 3;
+static const int   HOLDER_CX    = CLUSTER_PAD + HOLDER_HALF;  // blip centre, holder coords
+static const int   HOLDER_W     = CLUSTER_PAD + LBL_OFF_X + LBL_W;
+static const int   HOLDER_H     = (CLUSTER_PAD + LBL_OFF_Y + LBL_H
+                                     > 2 * CLUSTER_PAD + HOLDER_SZ)
+                                    ? (CLUSTER_PAD + LBL_OFF_Y + LBL_H)
+                                    : (2 * CLUSTER_PAD + HOLDER_SZ);
 static const int   MOVE_EPS_PX  = 3;            // ignore sub-blip jitter
 static const uint32_t BLINK_HALF_MS = 500;      // emergency blink half period
 static const lv_opa_t COAST_OPA = 150;
@@ -171,14 +179,15 @@ static void blipCreateObjects(Blip& b) {
 
   // Every child is placed from the holder's top-left so the 34x34 glyph
   // cluster keeps occupying 0..HOLDER_SZ regardless of the holder's real size
-  // — blipPlace() still centres the blip by offsetting HOLDER_HALF.
+  // — blipPlace() centres the blip by offsetting HOLDER_CX.
   b.glow = lv_img_create(b.holder);
   lv_img_set_src(b.glow, &img_glow);
-  lv_obj_set_pos(b.glow, 0, 0);
+  lv_obj_set_pos(b.glow, CLUSTER_PAD, CLUSTER_PAD);
   lv_obj_set_style_img_recolor_opa(b.glow, LV_OPA_COVER, 0);
 
   b.selRing = makeRing(b.holder, HOLDER_SZ, C_IVORY, SEL_RING_OPA);
-  lv_obj_align(b.selRing, LV_ALIGN_TOP_LEFT, 0, 0);   // makeRing centres by default
+  lv_obj_align(b.selRing, LV_ALIGN_TOP_LEFT,           // makeRing centres by default
+               CLUSTER_PAD, CLUSTER_PAD);
   lv_obj_add_flag(b.selRing, LV_OBJ_FLAG_HIDDEN);
 
   b.milBox = lv_obj_create(b.holder);
@@ -190,17 +199,19 @@ static void blipCreateObjects(Blip& b) {
   lv_obj_set_style_border_opa(b.milBox, MIL_BOX_OPA, 0);
   makeInert(b.milBox);
   lv_obj_align(b.milBox, LV_ALIGN_TOP_LEFT,
-               (HOLDER_SZ - MIL_BOX_SZ) / 2, (HOLDER_SZ - MIL_BOX_SZ) / 2);
+               CLUSTER_PAD + (HOLDER_SZ - MIL_BOX_SZ) / 2,
+               CLUSTER_PAD + (HOLDER_SZ - MIL_BOX_SZ) / 2);
   lv_obj_add_flag(b.milBox, LV_OBJ_FLAG_HIDDEN);
 
   b.jet = lv_img_create(b.holder);
   lv_img_set_src(b.jet, &img_jet);
-  lv_obj_set_pos(b.jet, (HOLDER_SZ - JET_SZ) / 2, (HOLDER_SZ - JET_SZ) / 2);
+  lv_obj_set_pos(b.jet, CLUSTER_PAD + (HOLDER_SZ - JET_SZ) / 2,
+                        CLUSTER_PAD + (HOLDER_SZ - JET_SZ) / 2);
   lv_img_set_pivot(b.jet, JET_SZ / 2, JET_SZ / 2);
   lv_obj_set_style_img_recolor_opa(b.jet, LV_OPA_COVER, 0);
 
   b.lbl = makeMicroLabel(b.holder, "", C_IVORY2);
-  lv_obj_set_pos(b.lbl, LBL_OFF_X, LBL_OFF_Y);
+  lv_obj_set_pos(b.lbl, CLUSTER_PAD + LBL_OFF_X, CLUSTER_PAD + LBL_OFF_Y);
   lv_obj_set_size(b.lbl, LBL_W, LBL_H);        // fixed box: no SIZE_CONTENT growth
   lv_label_set_long_mode(b.lbl, LV_LABEL_LONG_CLIP);
 
@@ -249,7 +260,7 @@ static void blipPlace(Blip& b, int cx, int cy, bool isNew) {
   if (isNew) {
     lv_anim_del(b.holder, blipAnimX);
     lv_anim_del(b.holder, blipAnimY);
-    lv_obj_set_pos(b.holder, cx - HOLDER_HALF, cy - HOLDER_HALF);
+    lv_obj_set_pos(b.holder, cx - HOLDER_CX, cy - HOLDER_CX);
     lv_obj_clear_flag(b.holder, LV_OBJ_FLAG_HIDDEN);
     b.tgtX = (int16_t)cx;
     b.tgtY = (int16_t)cy;
@@ -263,8 +274,8 @@ static void blipPlace(Blip& b, int cx, int cy, bool isNew) {
   b.tgtY = (int16_t)cy;
   lv_anim_del(b.holder, blipAnimX);
   lv_anim_del(b.holder, blipAnimY);
-  blipGlide(b.holder, blipAnimX, lv_obj_get_x(b.holder), cx - HOLDER_HALF);
-  blipGlide(b.holder, blipAnimY, lv_obj_get_y(b.holder), cy - HOLDER_HALF);
+  blipGlide(b.holder, blipAnimX, lv_obj_get_x(b.holder), cx - HOLDER_CX);
+  blipGlide(b.holder, blipAnimY, lv_obj_get_y(b.holder), cy - HOLDER_CX);
 }
 
 static void blipSetLabel(Blip& b, const Track& t, bool selected) {
