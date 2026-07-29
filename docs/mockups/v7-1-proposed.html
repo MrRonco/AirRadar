@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AirRadar v7.1 — proposed UI, for review</title>
+<style>
+  :root{
+    /* proposed panel tokens (UI_UX_REVIEW.md §6.4) */
+    --ink:#05080d; --surf:#182231; --surf-hi:#26344a; --line:#b4cde6;
+    --ivory:#eef1f4; --ivory2:#aab4c0; --dim:#8e9baa; --mute:#75828f; --faint:#39434e;
+    --cy:#54dcee; --cy-soft:#3fb6c8;
+    --alt-low:#ffc061; --alt-mid:#6fc7d8; --alt-high:#9b8ce0;
+    --alert:#ff8a94; --red:#ff6472; --gold:#ffd77a;
+    --ring:#2b4d5d; --ring-dim:#193040;
+    --mono:ui-monospace,"JetBrains Mono","SF Mono",Menlo,monospace;
+    --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0a0c10;color:#c8d2dd;font:15px/1.55 var(--sans);padding:40px 32px 80px}
+  .wrap{max-width:1760px;margin:0 auto}
+  h1{font:600 26px/1.2 var(--sans);color:#eef1f4;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:#75828f;margin:0 0 28px;max-width:80ch}
+  h2{font:600 17px/1.3 var(--sans);color:#eef1f4;margin:44px 0 4px;letter-spacing:-.005em}
+  h2 span{color:#54dcee;font-family:var(--mono);font-size:13px;margin-right:8px}
+  .note{color:#75828f;margin:0 0 18px;max-width:88ch;font-size:14px}
+  .pair{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+  .col h3{font:500 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;
+          color:#75828f;margin:0 0 10px}
+  .col h3 b{color:#ff8a94;font-weight:500}
+  .col h3 i{color:#54dcee;font-style:normal}
+  .frame{width:800px;height:480px;position:relative;overflow:hidden;
+         border-radius:6px;border:1px solid #1d2530;background:#05080d}
+  .frame img{display:block;width:800px;height:480px}
+  .cap{font:12px/1.5 var(--mono);color:#5b6672;margin-top:8px;max-width:800px}
+
+  /* ---------- proposed panel ---------- */
+  .p{position:absolute}
+  .card{background:var(--surf);border:1px solid rgba(180,205,230,.157);border-radius:17px;
+        padding:15px;overflow:hidden}
+  .inset{background:var(--surf-hi);border:1px solid rgba(180,205,230,.102);border-radius:8px}
+  .k{font:500 15px/20px var(--mono);letter-spacing:1px;color:var(--dim)}
+  .v22{font:500 22px/28px var(--sans);color:var(--ivory);font-variant-numeric:tabular-nums}
+  .v28{font:500 28px/36px var(--sans);color:var(--ivory)}
+  .b18{font:400 18px/24px var(--sans);color:var(--ivory2);font-variant-numeric:tabular-nums}
+  .m15{font:500 15px/20px var(--mono);color:var(--dim)}
+  .hair{height:1px;background:rgba(180,205,230,.157)}
+  .hero{font:300 56px/60px var(--sans);color:var(--ivory);font-variant-numeric:tabular-nums;
+        letter-spacing:-.02em}
+  .clock{font:200 36px/46px var(--sans);color:var(--ivory);font-variant-numeric:tabular-nums}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--cy);display:inline-block;
+       vertical-align:middle;margin-right:6px}
+
+  /* scope */
+  .disc{left:188px;top:28px;width:424px;height:424px;border-radius:50%;
+        background:radial-gradient(circle at 50% 45%, #0d1a24 0%, #0a141c 55%, #070f16 100%);
+        overflow:hidden}
+  .rr{position:absolute;border:1px solid var(--ring);border-radius:50%;left:50%;top:50%;
+      transform:translate(-50%,-50%)}
+  .cross{position:absolute;background:var(--ring-dim)}
+  .chip{position:absolute;font:500 15px/1 var(--mono);color:var(--dim);
+        background:var(--ink);padding:2px 5px;border-radius:4px;opacity:.78}
+  .tgt{position:absolute;transform:translate(-50%,-50%);text-align:center;white-space:nowrap}
+  .glyph{font-size:20px;line-height:1;display:block}
+  .tlbl{font:500 15px/1 var(--mono);color:var(--ivory2);margin-top:2px;display:block}
+  .selring{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;
+           border:1px solid var(--ivory);border-radius:50%;opacity:.82}
+
+  /* annotations */
+  /* numbered pins — never cover the content they point at */
+  .an{position:absolute;z-index:9;width:19px;height:19px;border-radius:50%;
+      font:600 11px/19px var(--sans);color:#05080d;background:#54dcee;text-align:center;
+      box-shadow:0 0 0 2px rgba(5,8,13,.85)}
+  .an.bad{background:#ff8a94}
+  body.hide-an .an{display:none}
+  .legend{margin:10px 0 0;padding:0;list-style:none;max-width:800px;
+          display:grid;grid-template-columns:1fr 1fr;gap:4px 18px}
+  .legend li{font:12px/1.5 var(--mono);color:#8e9baa;position:relative;padding-left:24px}
+  .legend b{position:absolute;left:0;top:1px;width:17px;height:17px;border-radius:50%;
+            background:#54dcee;color:#05080d;font:600 10px/17px var(--sans);text-align:center}
+  .legend li.bad b{background:#ff8a94}
+  .toggle{display:inline-flex;gap:8px;align-items:center;margin:0 0 24px;
+          font:500 13px/1 var(--mono);color:#8e9baa;cursor:pointer;user-select:none;
+          border:1px solid #232c38;background:#111721;padding:9px 13px;border-radius:8px}
+  .toggle input{accent-color:#54dcee;margin:0}
+
+  /* fix list */
+  table{border-collapse:collapse;width:100%;max-width:1100px;margin:14px 0 0;font-size:14px}
+  th,td{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid #1a212b;vertical-align:top}
+  th{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:#5b6672}
+  td code{font:13px var(--mono);color:#54dcee}
+  .sev{font:500 11px/1 var(--mono);padding:2px 6px;border-radius:4px;white-space:nowrap}
+  .c{background:#3a1a1f;color:#ff8a94}.h{background:#3a2c14;color:#ffc061}
+
+  /* web console */
+  .wc{width:1240px;background:#05080d;border:1px solid #1d2530;border-radius:8px;padding:16px;
+      transform-origin:top left}
+  .wcrow{display:grid;gap:12px;margin-bottom:12px}
+  .wcbox{background:var(--surf);border:1px solid rgba(180,205,230,.157);border-radius:13px;padding:14px}
+  .wct{font:500 11px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+       margin-bottom:10px}
+  .tile{background:#0d1420;border:1px solid rgba(180,205,230,.10);border-radius:8px;padding:10px 12px}
+  .tile .tk{font:500 10px/1 var(--mono);letter-spacing:.08em;color:#75828f;text-transform:uppercase}
+  .tile .tv{font:500 22px/1.3 var(--sans);color:var(--ivory);font-variant-numeric:tabular-nums}
+  .fld{margin-bottom:9px}
+  .fld label{display:block;font:500 11px/1.6 var(--mono);color:#8e9baa}
+  .fld div{background:#0d1420;border:1px solid #26313f;border-radius:6px;padding:7px 9px;
+           font:13px var(--mono);color:#c8d2dd}
+  .btn{display:inline-block;background:#54dcee;color:#05080d;font:600 12px/1 var(--sans);
+       padding:9px 14px;border-radius:7px}
+  .btn.ghost{background:transparent;color:#8e9baa;border:1px solid #2a3542}
+  .danger{border-color:rgba(255,100,114,.45)!important}
+  .danger .wct{color:#ff8a94}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>AirRadar v7.1 — proposed UI</h1>
+<p class="sub">Mockups for review. Nothing here is implemented. Geometry and colour are taken
+verbatim from <code>UI_UX_REVIEW.md</code> §5.3 and §6.4, so what you approve is what gets built.
+Panel frames are true 800×480. “Before” is a real framebuffer capture pulled off the device
+this morning, not a redrawing.</p>
+
+<label class="toggle"><input type="checkbox" id="t" checked> show annotations</label>
+
+<!-- ============ PANEL ============ -->
+<h2><span>A</span>Panel — main screen</h2>
+<p class="note">The thesis: <b style="color:#eef1f4">the disc is the product; everything else is a
+bezel.</b> Chrome loses area and luminance; the scope gains 17%. Chrome-to-disc ratio flips from
+1.26 : 1 to 0.82 : 1 <i>without</i> needing translucency, because the cards no longer overlap the
+circle.</p>
+
+<div class="pair">
+  <div class="col">
+    <h3><b>Before</b> — live capture, 800×480</h3>
+    <div class="frame"><img src="before-panel.png" alt="current AirRadar panel"></div>
+    <p class="cap">SETTINGS slab is the brightest object on a radar display.
+    Cards 151,616 px vs disc 120,687 px.</p>
+  </div>
+
+  <div class="col">
+    <h3><i>After</i> — proposed, 800×480</h3>
+    <div class="frame" id="panel">
+
+      <!-- weather pill (12,8) 168x36 -->
+      <div class="p card" style="left:12px;top:8px;width:168px;height:36px;border-radius:18px;
+           padding:0 14px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:15px">☀</span>
+        <span class="v22" style="font-size:18px;line-height:1">15°</span>
+        <span class="m15" style="margin-left:auto">N 16kt</span>
+      </div>
+      <div class="an" style="left:186px;top:16px">1</div>
+
+      <!-- gear (742,8) 44x44 -->
+      <div class="p card" style="left:742px;top:8px;width:44px;height:44px;padding:0;
+           display:flex;align-items:center;justify-content:center">
+        <span style="font-size:20px;color:var(--ivory2)">⚙</span>
+      </div>
+      <div class="an" style="left:722px;top:16px">2</div>
+
+      <!-- scope disc: cx400 cy240 r212 -->
+      <div class="p disc">
+        <div class="rr" style="width:424px;height:424px"></div>
+        <div class="rr" style="width:283px;height:283px;opacity:.62"></div>
+        <div class="rr" style="width:141px;height:141px;opacity:.44"></div>
+        <div class="cross" style="left:0;top:212px;width:424px;height:1px"></div>
+        <div class="cross" style="left:212px;top:0;width:1px;height:424px"></div>
+
+        <!-- N inside the clip, TOP_MID +15 -->
+        <div style="position:absolute;left:50%;top:15px;transform:translateX(-50%);
+             font:500 15px/1 var(--mono);color:var(--dim)">N</div>
+
+        <!-- ring scale chips on the 45° NE diagonal -->
+        <div class="chip" style="left:262px;top:148px">83</div>
+        <div class="chip" style="left:312px;top:98px">167</div>
+        <div class="chip" style="left:352px;top:58px">250</div>
+
+        <!-- targets: coords are disc-local (0..424) -->
+        <div class="tgt" style="left:150px;top:96px">
+          <span class="glyph" style="color:var(--alt-high);transform:scale(.86);display:inline-block">✈</span>
+          <span class="tlbl">ACA301</span></div>
+        <div class="tgt" style="left:246px;top:150px">
+          <span class="glyph" style="color:var(--alt-mid)">✈</span></div>
+        <div class="tgt" style="left:108px;top:196px">
+          <span class="glyph" style="color:var(--alt-low);transform:scale(1.17);display:inline-block">✈</span></div>
+
+        <!-- selected -->
+        <div class="tgt" style="left:212px;top:246px">
+          <span class="selring"></span>
+          <span class="glyph" style="color:var(--alt-mid)">✈</span>
+          <span class="tlbl" style="color:var(--ivory)">JZA233</span></div>
+
+        <div class="tgt" style="left:132px;top:300px">
+          <span class="glyph" style="color:var(--alt-low);transform:scale(1.17);display:inline-block">✈</span></div>
+        <div class="tgt" style="left:286px;top:308px">
+          <span class="glyph" style="color:var(--alt-high);transform:scale(.86);display:inline-block">✈</span></div>
+      </div>
+      <div class="an" style="left:390px;top:456px">3</div>
+
+      <!-- OVERVIEW card (12,56) 168x344 -->
+      <div class="p card" style="left:12px;top:56px;width:168px;height:344px">
+        <div style="font:500 24px/30px var(--sans);color:var(--ivory)">⌂ Home</div>
+        <div style="font:500 13px/18px var(--mono);letter-spacing:1px;color:var(--dim);margin-top:4px">WED · JUL 29</div>
+        <div class="hair" style="margin:12px 0"></div>
+        <div class="hero">8</div>
+        <div style="font:500 13px/18px var(--mono);letter-spacing:1px;color:var(--dim)">IN RANGE</div>
+        <div style="font:500 13px/18px var(--mono);color:var(--mute)">2 COASTING</div>
+        <div class="hair" style="margin:12px 0"></div>
+        <div style="font:500 13px/18px var(--mono);letter-spacing:1px;color:var(--dim)">NEAREST</div>
+        <div style="font:500 24px/30px var(--sans);color:var(--ivory)">JZA233</div>
+        <div style="font:400 17px/22px var(--sans);color:var(--ivory2)">10.4 km SE</div>
+        <div class="hair" style="margin:12px 0"></div>
+        <div style="font:500 13px/18px var(--mono);color:var(--dim);display:flex;align-items:center">
+          <span class="dot"></span>LOCAL · 1s<span style="margin-left:auto">24/s</span></div>
+      </div>
+      <div class="an" style="left:152px;top:196px">4</div>
+
+      <!-- SELECTED card (620,56) 168x344 -->
+      <div class="p card" style="left:620px;top:56px;width:168px;height:344px">
+        <div style="display:flex;gap:8px;align-items:center;height:36px">
+          <div class="inset" style="width:36px;height:36px;flex:0 0 36px;display:flex;
+               align-items:center;justify-content:center;font:600 14px var(--sans);color:var(--ivory)">AC</div>
+          <div style="min-width:0;flex:1">
+            <div style="font:500 20px/22px var(--sans);color:var(--ivory)">ACA165</div>
+            <div style="font:500 12px/14px var(--mono);color:var(--dim);overflow:hidden;
+                 text-overflow:ellipsis;white-space:nowrap">Air Canada</div>
+          </div>
+        </div>
+        <div style="margin-top:9px;font:500 22px/26px var(--sans);color:var(--cy);
+             display:flex;align-items:center;gap:5px">
+          YYZ <span style="color:var(--dim);font-size:15px">▶</span> YEG</div>
+        <div style="font:500 12px/16px var(--mono);color:var(--ivory2);margin-top:8px">A320 · C-FCUG</div>
+        <div class="hair" style="margin:8px 0"></div>
+        <div style="display:flex;gap:6px"><div style="width:65px"><div class="k"
+          style="font-size:12px;letter-spacing:.5px">ALT ft</div>
+          <div class="v22" style="font-size:20px;line-height:26px">FL285</div></div>
+          <div style="width:65px"><div class="k" style="font-size:12px;letter-spacing:.5px">SPD kt</div>
+          <div class="v22" style="font-size:20px;line-height:26px">455</div></div></div>
+        <div style="display:flex;gap:6px;margin-top:6px"><div style="width:65px">
+          <div class="k" style="font-size:12px;letter-spacing:.5px">HDG</div>
+          <div class="v22" style="font-size:20px;line-height:26px">315°</div></div>
+          <div style="width:65px"><div class="k" style="font-size:12px;letter-spacing:.5px">V/S fpm</div>
+          <div class="v22" style="font-size:20px;line-height:26px;color:var(--cy)">+960</div></div></div>
+        <div style="display:flex;gap:6px;margin-top:6px"><div style="width:65px">
+          <div class="k" style="font-size:12px;letter-spacing:.5px">DIST km</div>
+          <div class="v22" style="font-size:20px;line-height:26px">119.9</div></div>
+          <div style="width:65px"><div class="k" style="font-size:12px;letter-spacing:.5px">SQK</div>
+          <div class="v22" style="font-size:20px;line-height:26px">2233</div></div></div>
+        <div class="hair" style="margin:8px 0"></div>
+        <div style="font:500 13px/18px var(--mono);color:var(--dim);display:flex;align-items:center">
+          <span class="dot"></span>LIVE · 0s</div>
+      </div>
+      <!-- range stepper (12,412) 168x52 -->
+      <div class="p card" style="left:12px;top:412px;width:168px;height:52px;border-radius:26px;
+           padding:0;display:flex;align-items:center">
+        <div style="width:42px;text-align:center;color:var(--ivory2);font-size:17px">‹</div>
+        <div style="flex:1;text-align:center" class="v22">250 <span class="k">KM</span></div>
+        <div style="width:42px;text-align:center;color:var(--ivory2);font-size:17px">›</div>
+      </div>
+      <div class="an" style="left:186px;top:428px">6</div>
+
+      <!-- clock (620,412) 168x52 -->
+      <div class="p card" style="left:620px;top:412px;width:168px;height:52px;padding:0;
+           display:flex;align-items:center;justify-content:center">
+        <div class="clock">8:31</div>
+      </div>
+
+    </div>
+    <ol class="legend">
+      <li><b>1</b>Weather pill to (12,8) — vacates the vertical axis</li>
+      <li><b>2</b>Gear 44×44 at (742,8), was a 184×66 lit slab</li>
+      <li><b>3</b>Disc r196→212 (+17%); scope labels 11→15 px</li>
+      <li><b>4</b>“2 COASTING” replaces the in-range/heard contradiction</li>
+      <li class="bad"><b>5</b>HDG and V/S split — “315° NW+960” cannot collide</li>
+      <li><b>6</b>Range stepper arms 42 px, clears the 8 mm touch floor</li>
+    </ol>
+    <p class="cap">Disc 141,196 px (36.8%) · cards 116,256 px (30.3%) · ratio 0.82 : 1.</p>
+  </div>
+</div>
+
+<h2><span>B</span>What changed, and why</h2>
+<table>
+  <tr><th style="width:78px">Severity</th><th style="width:190px">Fix</th><th>Detail</th></tr>
+  <tr><td><span class="sev c">critical</span></td><td>Unknown altitude ≠ emergency</td>
+    <td><code>altColorRGB</code>’s else branch returns <code>0xff6472</code> — byte-identical to
+    <code>C_RED</code>. An aircraft with no altitude currently looks exactly like a 7700 squawk.
+    Unknown becomes <code>C_IVORY2</code>; emergency keeps a 2 px <code>C_RED</code> ring plus an
+    <code>#ff8a94</code> glyph.</td></tr>
+  <tr><td><span class="sev c">critical</span></td><td>Value cell overflow</td>
+    <td><code>315° NW+960</code> is an 82.6 px string in a 78 px cell. HDG and V/S split into two
+    63 px columns; every value is now ≤5 tabular glyphs.</td></tr>
+  <tr><td><span class="sev c">critical</span></td><td>Compass ghost</td>
+    <td>The <code>N</code> is drawn on the screen root under the weather pill and survives as a
+    ghost glyph. It moves inside <code>s_clip</code> (<code>LV_ALIGN_TOP_MID, 0, 15</code>) and the
+    pill moves to (12, 8), so occlusion is structurally impossible.</td></tr>
+  <tr><td><span class="sev c">critical</span></td><td>Legibility</td>
+    <td>Scope callsigns subtend 8.0′ at 650 mm against a 16′ ISO 9241-303 floor — a 96 PPI mock
+    shipped 1:1 onto a 133 PPI panel. Values go to 22 px (16.0′), scope labels 11→15 px.</td></tr>
+  <tr><td><span class="sev h">high</span></td><td>Count contradiction</td>
+    <td>“11 IN RANGE / of 8 heard” compares a 60 s coast window against a single poll. Replaced by
+    an explicit <code>2 COASTING</code> row that collapses when zero.</td></tr>
+  <tr><td><span class="sev h">high</span></td><td>Two measured no-ops removed</td>
+    <td>Card shadows buy 1.009:1 contrast for a 3,362 B uncached buffer + two blur passes per card
+    per repaint. <code>OPA_CARD 216</code> forces a full screen-root recomposite under every 1 Hz
+    label for a 1.057:1 difference. Both deleted — flat <code>C_SURF</code> at
+    <code>LV_OPA_COVER</code> gives a <i>stronger</i> 7.4× elevation step and restores the
+    <code>LV_COVER_RES_COVER</code> fast path.</td></tr>
+  <tr><td><span class="sev h">high</span></td><td>Altitude ramp readable without the legend</td>
+    <td>Luminance now descends monotonically (0.599 → 0.491 → 0.321) and glyph size shrinks with
+    altitude, so low = near = loud. Cyan is freed to mean “live” only. The 342-ink-unit legend at
+    1.9:1 contrast is deleted.</td></tr>
+</table>
+
+<!-- ============ WEB ============ -->
+<h2><span>C</span>Management console — desktop</h2>
+<p class="note">Reviewed separately and scored 1/10 on live state. The device already serves
+<code>/metrics</code>, <code>/api/state</code> and a live <code>/screen.bmp</code>; the page
+renders one value from all of it — the version string. This is ~2 KB of HTML, not firmware work.
+Shown at 1240 px, scaled to fit.</p>
+
+<div class="pair">
+  <div class="col">
+    <h3><b>Before</b> — 452 px column on a 1280 px screen</h3>
+    <div style="width:820px;height:520px;overflow:hidden;border:1px solid #1d2530;border-radius:6px">
+      <img src="before-webui.png" style="width:820px;display:block" alt="current web UI">
+    </div>
+    <p class="cap">64.7% of the viewport unused · 1,752 px tall · zero live values.</p>
+  </div>
+
+  <div class="col">
+    <h3><i>After</i> — 12-col grid, status above the fold</h3>
+    <div style="width:820px;overflow:hidden">
+    <div class="wc" style="transform:scale(.661)">
+      <div class="wcrow" style="grid-template-columns:1fr auto;align-items:center;margin-bottom:14px">
+        <div style="font:600 19px var(--sans);color:var(--ivory)">✈ AIRRADAR
+          <span class="m15" style="letter-spacing:0;margin-left:10px">airradar.local · 192.168.1.50</span></div>
+        <div class="m15" style="letter-spacing:0"><span class="dot"></span>LOCAL · 0s &nbsp; up 3d 04:11 &nbsp; v7.0.0</div>
+      </div>
+      <div class="wcrow" style="grid-template-columns:repeat(8,1fr)">
+        <div class="tile"><div class="tk">in range</div><div class="tv">8</div></div>
+        <div class="tile"><div class="tk">heard</div><div class="tv">8</div></div>
+        <div class="tile"><div class="tk">msg rate</div><div class="tv">32<span style="font-size:13px">/s</span></div></div>
+        <div class="tile"><div class="tk">source</div><div class="tv" style="color:var(--cy);font-size:18px">LOCAL</div></div>
+        <div class="tile"><div class="tk">rssi</div><div class="tv">−58</div></div>
+        <div class="tile"><div class="tk">heap free</div><div class="tv">118<span style="font-size:13px">K</span></div></div>
+        <div class="tile"><div class="tk">heap min</div><div class="tv">61<span style="font-size:13px">K</span></div></div>
+        <div class="tile"><div class="tk">tls shed</div><div class="tv">0</div></div>
+      </div>
+      <div class="wcrow" style="grid-template-columns:2fr 1fr">
+        <div class="wcbox"><div class="wct">Traffic</div>
+          <table style="font:13px var(--mono);color:#aab4c0;max-width:none">
+            <tr><th>callsign</th><th>type</th><th>route</th><th>alt</th><th>dist</th></tr>
+            <tr><td>ACA165</td><td>A320</td><td>YYZ → YEG</td><td>FL285</td><td>119.9 km</td></tr>
+            <tr><td>ETH574</td><td>B789</td><td>DUB → ORD</td><td>FL350</td><td>142.1 km</td></tr>
+            <tr><td>WJA381</td><td>B738</td><td>YYZ → YWG</td><td>FL370</td><td>168.4 km</td></tr>
+          </table></div>
+        <div class="wcbox"><div class="wct">Panel mirror</div>
+          <div style="background:#05080d;border-radius:6px;overflow:hidden;border:1px solid #1a222e">
+            <img src="before-panel.png" style="width:100%;display:block" alt="panel mirror"></div>
+          <div style="margin-top:9px"><span class="btn ghost">Refresh</span>
+            <span class="m15" style="letter-spacing:0;font-size:11px;margin-left:8px">manual — 1.1 MB, blocks the panel ~2 s</span></div>
+        </div>
+      </div>
+      <div class="wcrow" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="wcbox"><div class="wct">Radar &amp; feed</div>
+          <div class="fld"><label>Latitude</label><div>51.470000</div></div>
+          <div class="fld"><label>Longitude</label><div>−0.454300</div></div>
+          <div class="fld"><label>Feeder URL</label><div>http://adsb.local:8080/…</div></div>
+          <span class="btn">Save</span></div>
+        <div class="wcbox"><div class="wct">Network</div>
+          <div class="fld"><label>Mode</label><div>Static</div></div>
+          <div class="fld"><label>IP address</label><div>192.168.1.50</div></div>
+          <div class="fld"><label>Wi-Fi password <span style="color:#ffc061">(blank = keep)</span></label><div style="color:#5b6672">••••••••</div></div>
+          <span class="btn">Save &amp; reboot</span></div>
+        <div class="wcbox"><div class="wct">Integrations &amp; firmware</div>
+          <div class="fld"><label>Timezone</label><div>EST5EDT,M3.2.0,M11.1.0</div></div>
+          <div class="fld"><label>MQTT URI</label><div style="color:#5b6672">mqtt://user:pass@host</div></div>
+          <div class="fld"><label>Firmware · current 7.0.0</label><div>AirRadar.ino.bin</div></div>
+          <span class="btn">Upload &amp; flash</span></div>
+      </div>
+      <div class="wcrow" style="grid-template-columns:1fr">
+        <div class="wcbox danger"><div class="wct">⚠ Danger zone</div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <span class="m15" style="letter-spacing:0;color:#aab4c0">Forget Wi-Fi — the device
+              reboots and can only be re-provisioned at the physical touchscreen.</span>
+            <span class="btn" style="background:#ff6472;margin-left:auto">Forget Wi-Fi</span></div></div>
+      </div>
+    </div>
+    </div>
+    <p class="cap">Status above the fold from <code>/metrics</code> at 10 s (not 5 s — the web
+    server shares <code>loop()</code> with LVGL). Panel mirror is manual-refresh only.</p>
+  </div>
+</div>
+
+<h2><span>D</span>Two defects that are not design issues</h2>
+<table>
+  <tr><td><span class="sev c">high</span></td><td>Wi-Fi password wipe</td>
+    <td><code>handleWifi</code> writes <code>server.arg("pass")</code> unconditionally while the
+    field renders empty by design. “Fix a typo in the SSID → Save &amp; reboot” erases the stored
+    password and reboots into a device that can’t rejoin. Above, the field is labelled
+    <b style="color:#ffc061">blank = keep</b> — but the real fix is 3 lines of firmware.</td></tr>
+  <tr><td><span class="sev c">med-high</span></td><td>CSRF guard bypass</td>
+    <td><code>o.indexOf(hostHdr) &lt; 0</code> is a substring test, so
+    <code>http://airradar.local.evil.com</code> passes against <code>airradar.local</code>.
+    Compare against <code>"http://" + hostHdr</code> exactly.</td></tr>
+</table>
+
+<p class="note" style="margin-top:34px">Approve, amend, or reject any row. Phase 1 of the plan is
+~120 lines of pure constant and predicate edits — it closes every critical finding above and
+<i>frees</i> render headroom rather than spending it.</p>
+
+</div>
+<script>
+  const t=document.getElementById('t');
+  const sync=()=>document.body.classList.toggle('hide-an',!t.checked);
+  t.addEventListener('change',sync); sync();
+</script>
+</body>
+</html>
