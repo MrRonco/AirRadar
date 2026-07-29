@@ -72,6 +72,11 @@ static size_t   s_wrOff       = 0;
 static int      s_wrRange     = 0;
 static File     s_wrFile;
 static int      s_cacheOnlyRange = 0;            // >0 = fetch to cache, do not show
+// What the FRONT buffer currently depicts. Module scope because both mapBegin
+// (cache hit at boot) and mapLoop (fetch or cache load) publish it.
+static int      s_appliedRange = -1;
+static double   s_appliedLat = 999, s_appliedLon = 999;
+static double   s_keyLat = 999, s_keyLon = 999;  // coords the cache was built for
 
 // ---------- module state ----------
 // Buffers: front is read by LVGL (loop ctx); back is written by the fetch
@@ -115,6 +120,18 @@ static void cacheWipe() {
   char path[24];
   for (int km : steps) { cachePath(km, path, sizeof(path)); FFat.remove(path); }
   Serial.println("[map] cache wiped (location changed)");
+}
+
+// Home moved? Every blob is now wrong. Wipe and re-key.
+static void cacheValidateKey() {
+  if (!s_fsOk) return;
+  if (fabs(s_keyLat - g_set.homeLat) < 1e-6 &&
+      fabs(s_keyLon - g_set.homeLon) < 1e-6) return;
+  cacheWipe();
+  s_keyLat = g_set.homeLat; s_keyLon = g_set.homeLon;
+  char keyNow[40]; cacheKeyNow(keyNow, sizeof(keyNow));
+  File nf = FFat.open("/mp/key", FILE_WRITE);
+  if (nf) { nf.print(keyNow); nf.close(); }
 }
 
 static bool cacheHas(int km) {
@@ -457,9 +474,13 @@ void mapBegin() {
       if (nf) { nf.print(keyNow); nf.close(); }
     }
     // A cache hit means the map is on screen before Wi-Fi even associates.
+    s_keyLat = g_set.homeLat; s_keyLon = g_set.homeLon;
     if (cacheLoad(g_set.rangeKm, s_front)) {
-      s_haveImage = true;
+      s_haveImage    = true;
       s_generation++;
+      s_appliedRange = g_set.rangeKm;      // else the self-heal refetches at once
+      s_appliedLat   = g_set.homeLat;
+      s_appliedLon   = g_set.homeLon;
     }
   } else {
     Serial.println("[map] FATFS unavailable - map will re-fetch every boot");
@@ -473,8 +494,6 @@ void mapLoop(uint32_t nowMs) {
   if (!s_bufA) return;                          // boot allocation failed
 
   // 1) Publish a finished stitch (task done: ready set, in-flight cleared).
-  static int      s_appliedRange = -1;     // what the FRONT image was built for
-  static double   s_appliedLat = 999, s_appliedLon = 999;
   static uint32_t s_lastHealMs = 0;
   cachePumpWrite();                        // dribble any pending cache write out
 
@@ -564,6 +583,26 @@ void mapLoop(uint32_t nowMs) {
         Serial.printf("[map] prefetching r%d for cache\n", km);
       }
       break;
+    }
+  }
+
+  // 2c) Explicit refresh (range button, location edit): flash FIRST. A cached
+  //     range needs no tiles, no TLS and no Wi-Fi, so pressing the range button
+  //     changes the map instantly even with the gate shut. Without this the
+  //     refresh fell straight through to the network path below, deferred 30 s
+  //     when the gate was closed, and the map simply never changed scale.
+  if (s_refreshWanted && !s_fetchInFlight && !s_stitchedReady && !s_wrSrc &&
+      g_set.mapEn && s_fsOk) {
+    cacheValidateKey();
+    if (cacheLoad(g_set.rangeKm, s_front)) {
+      s_refreshWanted = false;
+      s_retryArmed    = false;
+      s_haveImage     = true;
+      s_generation++;
+      s_appliedRange  = g_set.rangeKm;
+      s_appliedLat    = g_set.homeLat;
+      s_appliedLon    = g_set.homeLon;
+      return;
     }
   }
 
