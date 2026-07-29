@@ -76,8 +76,8 @@
 // heads the Overview card, which vacates the vertical axis so the compass N can
 // never be occluded again.
 #define RNG_PILL_Y  CARD_BOT_Y
-#define CLOCK_X     556
-#define GEAR_X      736
+#define CLOCK_X     620   // aligns under the Selected card
+#define GEAR_X      556   // inboard of the clock
 #define GEAR_S      52
 
 // ============================================================

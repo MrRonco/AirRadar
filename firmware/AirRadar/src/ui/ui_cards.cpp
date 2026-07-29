@@ -412,6 +412,8 @@ static void buildSettingsBtn(lv_obj_t* parent) {
   lv_obj_set_style_pad_all(btn, 0, 0);
   lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(btn, onSettingsClicked, LV_EVENT_CLICKED, NULL);
+  // Capacitive touch with no visual acknowledgement reads as a dead control.
+  lv_obj_set_style_bg_color(btn, C_SURF_HI, LV_STATE_PRESSED);
   lv_obj_t* ico = mkLbl(btn, F_SYM16, C_IVORY2);
   lv_label_set_text(ico, LV_SYMBOL_SETTINGS);
   lv_obj_center(ico);
@@ -424,6 +426,7 @@ static void buildRangePill(lv_obj_t* parent) {
   lv_obj_set_size(pill, CARD_W, CARD_SHORT_H);
   lv_obj_set_pos(pill, CARD_L_X, RNG_PILL_Y);
   lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_bg_color(pill, C_SURF_HI, LV_STATE_PRESSED);
   lv_obj_add_event_cb(pill, onRangeClicked, LV_EVENT_CLICKED, NULL);
   s_rngLbl = mkLbl(pill, F_MONO13, C_DIM);
   lv_label_set_recolor(s_rngLbl, true);

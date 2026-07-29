@@ -66,6 +66,14 @@ static const int   ISS_W = 22, ISS_H = 12;      // img_iss dimensions (theme.h)
 static const int   ISS_LBL_GAP  = 4;
 static const uint32_t GESTURE_CLICK_GUARD_MS = 600; // swallow click after swipe
 static const uint32_t POOL_WARN_MIN_MS = 5000;  // rate-limit pool-full log
+// Label decluttering. Drawing a callsign on every blip produced an unreadable
+// pile-up; "nearest N" was no better, because the nearest targets are by
+// definition clustered around the centre of the scope. So the rule is spatial:
+// walk targets nearest-first and grant a label only when nothing already
+// labelled sits within LABEL_MIN_SEP_PX. Selection, watchlist and emergency
+// are granted unconditionally and are seeded first so they win any contest.
+static const int LABEL_MIN_SEP_PX = 46;
+static const int LABEL_MAX        = 8;    // ink ceiling regardless of spacing
 
 // 45deg-NE centre offsets for the two range labels (from container centre)
 static const int RING_LBL_FULL_OFF =
@@ -278,8 +286,9 @@ static void blipPlace(Blip& b, int cx, int cy, bool isNew) {
   blipGlide(b.holder, blipAnimY, lv_obj_get_y(b.holder), cy - HOLDER_CX);
 }
 
-static void blipSetLabel(Blip& b, const Track& t, bool selected) {
-  bool show = g_set.showLabels || selected;
+static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked) {
+  bool show = selected || (g_set.showLabels &&
+                           (ranked || trackOnWatchlist(t) || sqIsEmergency(t.squawk)));
   if (!b.cInit || b.cLblHid != !show) {
     setHidden(b.lbl, !show);
     b.cLblHid = !show;
@@ -311,7 +320,7 @@ static void blipSetLabel(Blip& b, const Track& t, bool selected) {
   }
 }
 
-static void blipStyle(Blip& b, const Track& t, uint32_t nowMs) {
+static void blipStyle(Blip& b, const Track& t, uint32_t nowMs, bool ranked) {
   bool selected  = g_selHex[0] && !strcmp(t.hex, g_selHex);
   bool emergency = sqIsEmergency(t.squawk);
   // Signed: applyPending can stamp lastApiMs a hair AFTER our caller's nowMs;
@@ -353,7 +362,7 @@ static void blipStyle(Blip& b, const Track& t, uint32_t nowMs) {
     b.cMilHid = !t.mil;
     setHidden(b.milBox, !t.mil);
   }
-  blipSetLabel(b, t, selected);
+  blipSetLabel(b, t, selected, ranked);
   b.cInit = true;
 }
 
@@ -512,6 +521,35 @@ void scopeUpdate(uint32_t nowMs) {
   scopeUpdateRangeLabels();
 
   bool seen[AR_MAX_TRACKS] = {false};
+
+  // ---- decide which targets get a callsign (spatial declutter) ----
+  bool  ranked[AR_MAX_TRACKS] = {false};
+  float lx[LABEL_MAX], ly[LABEL_MAX];
+  int   nLbl = 0;
+  const float sep2 = (float)LABEL_MIN_SEP_PX * (float)LABEL_MIN_SEP_PX;
+  for (int pass = 0; pass < 2; pass++) {
+    for (int oi = 0; oi < g_orderN && nLbl < LABEL_MAX; oi++) {
+      int idx = g_orderIdx[oi];
+      const Track& t = g_tracks[idx];
+      if (ranked[idx]) continue;
+      bool must = (g_selHex[0] && !strcmp(t.hex, g_selHex)) ||
+                  trackOnWatchlist(t) || sqIsEmergency(t.squawk);
+      if (pass == 0 && !must) continue;        // pass 0 seeds the must-haves
+      float sx = 0, sy = 0;
+      if (!scopeToScreen(t.lat, t.lon, sx, sy)) continue;
+      if (!must) {
+        bool clash = false;
+        for (int k = 0; k < nLbl && !clash; k++) {
+          float dx = lx[k] - sx, dy = ly[k] - sy;
+          if (dx * dx + dy * dy < sep2) clash = true;
+        }
+        if (clash) continue;
+      }
+      ranked[idx] = true;
+      lx[nLbl] = sx; ly[nLbl] = sy; nLbl++;
+    }
+  }
+
   for (int i = 0; i < AR_MAX_TRACKS; i++) {
     const Track& t = g_tracks[i];
     if (!t.valid || !trackPassesFilters(t)) continue;
@@ -526,7 +564,7 @@ void scopeUpdate(uint32_t nowMs) {
     Blip& b = s_blips[slot];
     blipPlace(b, (int)lroundf(sx) - SCOPE_X0, (int)lroundf(sy) - SCOPE_Y0,
               isNew);
-    blipStyle(b, t, nowMs);
+    blipStyle(b, t, nowMs, ranked[i]);
   }
 
   for (int i = 0; i < AR_MAX_TRACKS; i++)
