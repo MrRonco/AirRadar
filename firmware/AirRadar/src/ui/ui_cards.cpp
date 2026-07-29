@@ -17,19 +17,21 @@
 static const int CONTENT_W    = CARD_W - 32;   // st_card pad_all is 16
 
 // Overview card
-static const int OV_HOME_Y    = 0;
+static const int OV_HOME_Y    = 0;             // weather row
+static const int OV_DATE_Y    = 34;
 static const int OV_HAIR1_Y   = 62;
-static const int OV_COUNT_Y   = 70;
-static const int OV_INRANGE_DX= 8;             // gap count -> "IN RANGE"
-static const int OV_INRANGE_DY= -12;           // lift toward the numeral baseline
-static const int OV_HEARD_Y   = 138;
-static const int OV_EMERG_Y   = 162;
+static const int OV_COUNT_Y   = 72;            // hero numeral
+static const int OV_INRANGE_Y = 138;           // stacked UNDER the numeral
+static const int OV_COAST_Y   = 160;           // same face as IN RANGE
+static const int OV_EMERG_Y   = 186;
 static const int OV_EMERG_H   = 26;
-static const int OV_HAIR2_Y   = 196;
-static const int OV_NEAR_Y    = 206;
-static const int OV_NEARD_Y   = 228;
+static const int OV_HAIR2_Y   = 220;
+static const int OV_NEAR_Y    = 230;           // "NEAREST" key
+static const int OV_NEARNAME_Y= 250;           // callsign, larger
+static const int OV_NEARD_Y   = 278;           // distance, left, lighter face
+static const int OV_HAIR3_Y   = 310;
 static const int OV_FEED_Y    = 262;
-static const int OV_SRC_Y     = 288;           // single status row
+static const int OV_SRC_Y     = 322;           // single status row
 static const int OV_DOT_D     = 7;             // live dot
 static const int RAMP_W       = 46;            // altitude ramp bars
 static const int RAMP_H       = 5;
@@ -224,14 +226,16 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_align(s_wxWind, LV_ALIGN_TOP_RIGHT, 0, OV_HOME_Y + 4);
   s_tmDate = mkLbl(card, F_MONO13, C_DIM);
   lv_obj_set_style_text_letter_space(s_tmDate, 1, 0);
-  lv_obj_set_pos(s_tmDate, 0, OV_HOME_Y + 34);
+  lv_obj_set_pos(s_tmDate, 0, OV_DATE_Y);
   mkHair(card, OV_HAIR1_Y, CONTENT_W);
 
   s_ovCount = mkLbl(card, F_NUM56, C_IVORY);
   lv_obj_set_pos(s_ovCount, 0, OV_COUNT_Y);
-  s_ovInRange = mkMicro(card, "IN RANGE", 64, OV_COUNT_Y + 38);   // realigned on update
-  s_ovHeard = mkLbl(card, F_UI15, C_IVORY2);
-  lv_obj_set_pos(s_ovHeard, 0, OV_HEARD_Y);
+  s_ovInRange = mkMicro(card, "IN RANGE", 0, OV_INRANGE_Y);
+  // Same face as IN RANGE — they are two readings of one count, so they should
+  // not look like different kinds of thing.
+  s_ovHeard = mkMicro(card, "", 0, OV_COAST_Y);
+  lv_obj_set_style_text_color(s_ovHeard, C_MUTE, 0);
 
   s_ovEmergBox = mkBox(card);
   lv_obj_set_pos(s_ovEmergBox, 0, OV_EMERG_Y);
@@ -251,10 +255,11 @@ static void buildOverview(lv_obj_t* parent) {
 
   mkHair(card, OV_HAIR2_Y, CONTENT_W);
   mkMicro(card, "NEAREST", 0, OV_NEAR_Y);
-  s_ovNear = mkLbl(card, F_UI15, C_IVORY);
-  lv_obj_align(s_ovNear, LV_ALIGN_TOP_RIGHT, 0, OV_NEAR_Y - 2);
-  s_ovNearD = mkLbl(card, F_UI15, C_CY);
-  lv_obj_align(s_ovNearD, LV_ALIGN_TOP_RIGHT, 0, OV_NEARD_Y);
+  s_ovNear = mkLbl(card, F_M20, C_IVORY);          // identifier, larger
+  lv_obj_set_pos(s_ovNear, 0, OV_NEARNAME_Y);
+  s_ovNearD = mkLbl(card, F_UI15, C_CY);           // distance, lighter face
+  lv_obj_set_pos(s_ovNearD, 0, OV_NEARD_Y);
+  mkHair(card, OV_HAIR3_Y, CONTENT_W);             // separates the status line
   // One status line: a live dot, the source and its age on the left, message
   // rate on the right. Two labelled rows for what is really one fact.
   s_ovDot = mkBox(card);
@@ -263,7 +268,7 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_style_bg_color(s_ovDot, C_CY, 0);
   lv_obj_set_style_bg_opa(s_ovDot, LV_OPA_COVER, 0);
   lv_obj_set_pos(s_ovDot, 0, OV_SRC_Y + 6);
-  s_ovSrc = mkLbl(card, F_MONO13, C_IVORY2);
+  s_ovSrc = mkLbl(card, F_MONO13, C_DIM);   // matches the rate on the right
   lv_obj_set_pos(s_ovSrc, OV_DOT_D + 6, OV_SRC_Y);
   s_ovFeed = mkLbl(card, F_MONO13, C_DIM);
   lv_obj_align(s_ovFeed, LV_ALIGN_TOP_RIGHT, 0, OV_SRC_Y);
@@ -442,11 +447,7 @@ static void updateEmergencyStrip(uint32_t nowMs) {
 static void updateOverview(uint32_t nowMs) {
   char b[24];
   snprintf(b, sizeof(b), "%d", g_orderN);
-  if (setTextCached(s_ovCount, s_bufCount, sizeof(s_bufCount), b)) {
-    lv_obj_update_layout(s_ovCount);       // fresh width before manual re-align
-    lv_obj_align_to(s_ovInRange, s_ovCount, LV_ALIGN_OUT_RIGHT_BOTTOM,
-                    OV_INRANGE_DX, OV_INRANGE_DY);
-  }
+  setTextCached(s_ovCount, s_bufCount, sizeof(s_bufCount), b);
   // "N IN RANGE / of M heard" compared a 60 s coast window against a single
   // poll, so the two numbers openly disagreed. Name the difference instead:
   // the gap IS the coasting set. Row collapses when nothing is coasting.
@@ -506,7 +507,10 @@ static void updateOverview(uint32_t nowMs) {
   if (s_colSrc.full != sc.full) {
     s_colSrc = sc;
     lv_obj_set_style_text_color(s_ovSrc, sc, 0);
-    lv_obj_set_style_bg_color(s_ovDot, sc, 0);   // dot carries the same state
+    // Dot keeps full state colour even when the text has gone quiet.
+    lv_color_t dc = (sc.full == C_DIM.full)
+                        ? (g_feedIsLocal ? C_CY : C_IVORY2) : sc;
+    lv_obj_set_style_bg_color(s_ovDot, dc, 0);
   }
 }
 
