@@ -37,7 +37,7 @@ extern const lv_font_t* F_L28;     // callsign / route      ("ACA123", "YYZ")
 extern const lv_font_t* F_M20;     // medium titles         ("Home", "20°")
 extern const lv_font_t* F_UI15;    // body                  (keys, values)
 extern const lv_font_t* F_UI12;    // small body
-extern const lv_font_t* F_MONO13;  // mono values           ("adsb.local")
+extern const lv_font_t* F_MONO13;  // mono values           (IPs, feed rate)
 extern const lv_font_t* F_MONO11;  // micro labels (tracked) ("OVERVIEW")
 extern const lv_font_t* F_SYM16;   // symbol carrier (LV_SYMBOL_*)
 

@@ -11,6 +11,7 @@ void feederLoop(uint32_t nowMs);
 void feederKick();
 
 // Derive the short display name for the local source from g_set.feedUrl host
-// (e.g. "adsb.local" -> "LOCAL", "sudcrater.lan" -> "SUDCRATER").
+// (an IPv4 literal or *.local host -> "LOCAL"; a named host -> first DNS label
+// uppercased, e.g. "myfeeder.lan" -> "MYFEEDER").
 // Writes into g_localSrcName. Call at boot and when feedUrl changes.
 void feederUpdateSrcName();

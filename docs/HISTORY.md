@@ -23,9 +23,29 @@ full-screen chrome sprite, built once at boot), FreeSans typography, amber/cyan/
 altitude ramp. v4.1 added the local feeder: local-feeder-first polling at 2 s with
 airplanes.live fallback at 8 s, `seen_pos` staleness guard, live source tag.
 
-## v5 — current
+## v5
 Symmetric card layout; age + source on separate lines; tappable range pill
 (50/100/150/250 km, dynamic ring labels); local-time-only clock; NETWORK screen
 (DHCP/static IP/GW/mask/DNS on-device, reboot-to-apply); bottom bar removed; web page
 gained Wi-Fi and Network sections; stacked SELECTED/AIRCRAFT card title; centered
 headers; numpad recentered; `<` backspace.
+
+## v6 — layout redesign (immediate-mode, root AirRadar.ino)
+Settings card removed from the radar; both columns mirrored top-to-floor; time moved
+bottom-left, cog → full-width SETTINGS button; HOME in the Overview header; airplane
+glyphs replacing arrows; emergency flash; the first satellite/CARTO base experiments.
+Kept as the reference for proven data + hardware logic once v7 took over the UI.
+
+## v7 — current: the LVGL rewrite
+Full port to an LVGL 8.3 application (`firmware/AirRadar/`) chasing "past esp32flight":
+anti-aliased Inter/JetBrains-Mono type, CARTO dark base map with city labels, animated
+altitude-coloured aircraft glyphs, operator monogram + real airline logos (FATFS-cached),
+adsbdb routes, Open-Meteo weather, ISS overhead, night mode, filters/favourites/watchlist,
+Home-Assistant MQTT discovery, JSON API + `/screen.bmp` + `/metrics` + `/api/probe` + OTA.
+Data core (feeder-first, dead-reckon, coast/drop) ported intact from v6.
+
+First live hardware session settled a chain of physics: RGB panel wants byte-swapped 565;
+LVGL draw buffer in internal SRAM but its heap in PSRAM; one TLS connection at a time or
+mbedTLS starves; change-cache every widget write to stop redraw-vs-DMA wiggle; ISS on
+plain HTTP to dodge an esp-tls leak. See `docs/V7_PORT.md` for the full findings, and
+`firmware/BUILD.md` to build/flash. Installs one-click via `flasher/` (ESP Web Tools).

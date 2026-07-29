@@ -142,41 +142,60 @@ The author runs the feeder on a segmented network; adapt these to yours.
   pass rule for **TCP → <feeder-ip>:8080**. If the display shows CLOUD instead of the
   local source, suspect that rule (or a wrong feeder URL) first.
 
+## Enrichment sources (v7, all keyless)
+
+- **Routes** — adsbdb.com `/v0/callsign/<CS>`, TLS, looked up lazily per selected
+  aircraft, cached by hex. Callsign is sanitized to `[A-Za-z0-9]` before the URL.
+- **Weather** — Open-Meteo `current=` query, TLS, ~15 min.
+- **ISS** — open-notify `iss-now.json` over **plain HTTP on purpose**: repeated TLS
+  connections leak ~1.5 KB each in esp-tls, and a 15 s poll made that visible.
+- **Base map** — CARTO `dark_all` slippy tiles, TLS, a 3×3 stitch → blue-tint →
+  vignette → 392² RGB565, re-fetched on range/location change.
+- **Airline logos** — theqkash/esp32flight-logos (90×90 ICAO PNG), TLS, three-tier
+  cache: RAM → FATFS `/lg/<ICAO>` (persistent) → network; visible-aircraft prefetch.
+- **TLS discipline (non-negotiable):** one secure connection at a time
+  (`tlsTryAcquire`), aircraft feed has priority (`essential=true`), optional fetches
+  are shed below a 45 KB internal-heap floor. Concurrent TLS starves mbedTLS.
+
 ## NVS schema (Preferences namespace `"radar"`)
 
-| Key | Type | Meaning |
-|---|---|---|
-| ssid, pass | string | WiFi credentials (touch-provisioned) |
-| lat, lon | double | Home coordinates |
-| lbl | bool | Show target labels |
-| rng | int | Range km: 50/100/150/250 |
-| feed | string | Local feeder aircraft.json URL |
-| nstat | bool | Static IP mode |
-| nip, ngw, nmask, ndns | string | Static IP config (blank DNS → gateway) |
+v5/v6 keys kept for in-place upgrade: `ssid pass lat lon lbl rng feed nstat nip ngw
+nmask ndns`. v7 adds: `tz` (POSIX TZ), `ppass` (panel/API password), `mqtten mqtturi`,
+`nighten nightfr nightto` (quiet-hours minutes), `wxen issen logoen mapen` (layer
+toggles), `fcls` (class filter bitmask), `faltlo falthi` (altitude filter),
+`watch` (watchlist prefixes), `fav{0..2}{lat,lon,nam}` (favourite locations).
 
-## Web interface
+## Web interface & API
 
-`http://<ip>/` (also `http://airradar.local/`): settings form (lat/lon/feeder URL/labels),
-Wi-Fi section (SSID + password → `/wifi`, applies via reboot; stored password is never
-echoed into the page), Network section (DHCP/static + 4 fields → `/net`, validated with
-`IPAddress::fromString`, applies via reboot), Forget Wi-Fi (`/forget`). Static/WiFi
-changes reboot the device by design — reconfiguring the stack live under a running
-WebServer is how devices get bricked-until-power-cycle.
+`http://<ip>/` (also `http://airradar.local/`): the v6 settings/Wi-Fi/Network/Forget
+forms plus an Integrations section (MQTT, TZ, panel password) and a Firmware **OTA**
+upload. Static/Wi-Fi changes reboot by design. v7 API (all behind HTTP Basic auth
+`admin`/panel-password when set, with an Origin/Host CSRF guard):
+`GET /api/state` · `GET|POST /api/config` · `GET /screen.bmp` (live 800×480 BMP) ·
+`GET /metrics` (Prometheus incl. `heap_free/heap_min/heap_largest`) ·
+`GET /api/probe?url=` (device-side LAN fetch test — settles firewall-vs-firmware) ·
+`POST /update` (OTA). MQTT publishes Home-Assistant discovery sensors.
 
-## Conventions
+## Conventions (v7)
 
-- Keep it a single `.ino` + display header; no build system beyond Arduino.
-- New dynamic UI fields: chrome parts into `buildChrome()`, dynamic parts get a
-  `restore()` + transparent draw; check the field is outside the plot rect.
-- Palette lives in `setup()` (`col*` globals) + `altRGB()` (amber low / cyan mid /
-  violet high / red unknown+emergency). No greens — owner preference.
-- Layout constants at the top of the sketch are the single source of truth for both
-  drawers and touch hit zones — change them together.
+- Firmware is now a multi-file LVGL 8.3 app under `firmware/AirRadar/` — see
+  `docs/V7_PORT.md`. The root `AirRadar.ino` is the **legacy v6** reference.
+- **Threading contract (core/state.h):** loop() owns all LVGL + `g_tracks` + NVS;
+  network runs as short-lived core-0 tasks writing pending buffers under `g_dataMux`.
+- All geometry/timing/keys are named in `config.h` — no magic numbers in modules.
+- Palette + fonts in `ui/theme.h` tokens; `altColorRGB()` = amber/cyan/violet/red.
+  No greens — owner preference.
+- Every dynamic LVGL write must be change-cached (unchanged writes still invalidate
+  and fight the panel DMA — this was the "wiggle").
+- Regenerate assets/fonts with `firmware/tools/genassets.py` + lv_font_conv (see
+  `docs/V7_PORT.md`); `firmware/lv_conf.h` must sit beside the lvgl library.
 
 ## Roadmap (owner-approved parked ideas)
 
-- `dbFlags` military/interesting-aircraft glyph (present in local feed)
+Done in v7: military `dbFlags` glyph · `stats.json` msg-rate · `desc` airframe name ·
+airline logos · routes · weather · ISS · night mode · Home Assistant. Still parked:
+
 - Label decluttering for dense target clusters (alternating offsets)
-- Dusk dimming via palette scaling (backlight has no PWM, so scale colors by local time)
-- Feeder `stats.json` message-rate readout (position/msg per sec like the adsb.im homepage)
-- Show `desc` (full airframe name, local feed only) in the Selected Aircraft card
+- Aircraft photos (planespotters) on a tap-to-expand Selected view
+- Route ETA; session-stats screen; a served `/live` web page
+- Ship the logo pack pre-loaded to FATFS at flash time (vs fetch-on-demand)
