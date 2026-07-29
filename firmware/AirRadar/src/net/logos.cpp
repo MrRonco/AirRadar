@@ -18,7 +18,10 @@
 
 static const char     kUrlBase[]     = "https://raw.githubusercontent.com/theqkash/esp32flight-logos/main/logos/";
 static const char     kFsDir[]       = "/lg";
-static const int      kSlots         = 12;                // LRU-ish ring
+// Must comfortably exceed the number of distinct airlines visible at once, or
+// live entries get evicted and re-fetched. Only OK entries own a 4.2 KB PSRAM
+// pixel buffer, so an unused slot costs ~40 bytes of .bss.
+static const int      kSlots         = 24;                // LRU-ish ring
 static const uint32_t kPrefetchMs    = 6000;              // visible-aircraft walk
 static const size_t   kPngMax        = 96 * 1024;         // download cap
 static const uint32_t kHttpTimeoutMs = 8000;
@@ -245,6 +248,18 @@ void logosLoop(uint32_t nowMs) {
   if (!s_reqKey[0] && !s_fetching && g_wifiUp &&
       (int32_t)(nowMs - s_lastPrefetchMs) > (int32_t)kPrefetchMs) {
     s_lastPrefetchMs = nowMs;
+    // Pass 1: mark every visible airline as recently used. lastUse was only
+    // ever touched for the SELECTED aircraft, so prefetched entries were always
+    // the LRU victim — and evicting a LOGO_MISS throws away the "this airline
+    // has no logo" record, which means the next prefetch re-fetches it and
+    // takes another 404 over TLS. That churn is pure leaked heap.
+    for (int i = 0; i < g_orderN; i++) {
+      char icao[4];
+      if (!logosIcaoFromFlight(g_tracks[g_orderIdx[i]].flight, icao)) continue;
+      int s = slotFind(icao);
+      if (s >= 0) s_slots[s].lastUse = nowMs;
+    }
+    // Pass 2: request the first visible airline we still know nothing about.
     for (int i = 0; i < g_orderN; i++) {
       char icao[4];
       if (!logosIcaoFromFlight(g_tracks[g_orderIdx[i]].flight, icao)) continue;
