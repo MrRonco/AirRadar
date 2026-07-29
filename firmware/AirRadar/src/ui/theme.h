@@ -8,24 +8,38 @@
 // ---------- palette ----------
 #define C_INK      lv_color_hex(0x05080d)   // page ink (deep background)
 #define C_INK_HI   lv_color_hex(0x0c1119)   // background gradient top
-#define C_CARD_HI  lv_color_hex(0x1c2838)   // card gradient top
-#define C_CARD_LO  lv_color_hex(0x0a1018)   // card gradient bottom
+#define C_SURF     lv_color_hex(0x182231)   // card body — FLAT and opaque
+#define C_SURF_HI  lv_color_hex(0x26344a)   // inset tile (logo chip)
+// Kept so nothing that still references the old gradient fails to build.
+#define C_CARD_HI  C_SURF
+#define C_CARD_LO  C_SURF
 #define C_IVORY    lv_color_hex(0xeef1f4)   // primary text
 #define C_IVORY2   lv_color_hex(0xaab4c0)   // secondary text
-#define C_DIM      lv_color_hex(0x69757f)   // labels / muted
-#define C_FAINT    lv_color_hex(0x39434e)   // faintest text
+#define C_DIM      lv_color_hex(0x8e9baa)   // keys/labels — 5.65:1 on the card
+#define C_MUTE     lv_color_hex(0x75828f)   // genuinely optional text only, 4.07:1
+#define C_FAINT    lv_color_hex(0x39434e)   // DECORATION ONLY — never text (1.9:1)
 #define C_CY       lv_color_hex(0x54dcee)   // live / interactive accent
 #define C_CY_SOFT  lv_color_hex(0x3fb6c8)
 #define C_AMBER    lv_color_hex(0xf6b24a)   // altitude < 10k
 #define C_VIOLET   lv_color_hex(0xa98cff)   // altitude > 30k
-#define C_RED      lv_color_hex(0xff6472)   // emergency / error
+#define C_RED      lv_color_hex(0xff6472)   // emergency RING + error states
+#define C_ALERT    lv_color_hex(0xff8a94)   // emergency GLYPH (brighter than C_RED)
+// Altitude ramp, luminance now descending 0.599 -> 0.491 -> 0.321 so the band
+// reads low/near = loud, high/far = quiet without consulting a legend. Cyan is
+// no longer in this ramp: it means "live" and nothing else.
+#define C_ALT_LOW  lv_color_hex(0xffc061)
+#define C_ALT_MID  lv_color_hex(0x6fc7d8)
+#define C_ALT_HIGH lv_color_hex(0x9b8ce0)
 #define C_BORDER   lv_color_hex(0xb4cde6)   // card hairline (use with low opa)
 #define C_RING     lv_color_hex(0x2b4d5d)   // scope ring
 #define C_RING_DIM lv_color_hex(0x193040)   // crosshair
 #define C_GOLD     lv_color_hex(0xffd77a)   // watchlist highlight
 
-#define OPA_CARD     216    // card body opacity (over the map edge)
-#define OPA_BORDER    26    // 10% hairline
+// LV_OPA_COVER on purpose: at 216 every card returned LV_COVER_RES_NOT_COVER,
+// so each 1 Hz label repaint recomposited the whole screen root — to buy a
+// measured 1.057:1 difference. Opaque restores the LV_COVER_RES_COVER path.
+#define OPA_CARD     LV_OPA_COVER
+#define OPA_BORDER    40    // the only elevation cue now that shadows are gone
 #define OPA_PILL     168    // weather/range pill body
 
 // ---------- fonts ----------

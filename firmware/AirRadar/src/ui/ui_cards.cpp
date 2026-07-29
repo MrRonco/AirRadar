@@ -16,22 +16,22 @@ LV_IMG_DECLARE(img_arrowhead);          // 8x10 chevron; not exported via theme.
 // ============================================================
 //  Layout constants (content coords — st_card pad_all is 17)
 // ============================================================
-static const int CONTENT_W    = CARD_W - 34;   // 150 inside a card
+static const int CONTENT_W    = CARD_W - 32;   // st_card pad_all is 16
 
 // Overview card
-static const int OV_HOME_Y    = 20;
-static const int OV_HAIR1_Y   = 50;
-static const int OV_COUNT_Y   = 56;
+static const int OV_HOME_Y    = 0;
+static const int OV_HAIR1_Y   = 62;
+static const int OV_COUNT_Y   = 70;
 static const int OV_INRANGE_DX= 8;             // gap count -> "IN RANGE"
 static const int OV_INRANGE_DY= -12;           // lift toward the numeral baseline
-static const int OV_HEARD_Y   = 124;
-static const int OV_EMERG_Y   = 148;
+static const int OV_HEARD_Y   = 138;
+static const int OV_EMERG_Y   = 162;
 static const int OV_EMERG_H   = 26;
-static const int OV_HAIR2_Y   = 182;
-static const int OV_NEAR_Y    = 192;
-static const int OV_NEARD_Y   = 212;
-static const int OV_FEED_Y    = 236;
-static const int OV_SRC_Y     = 262;           // SOURCE row (name · age)
+static const int OV_HAIR2_Y   = 196;
+static const int OV_NEAR_Y    = 206;
+static const int OV_NEARD_Y   = 228;
+static const int OV_FEED_Y    = 262;
+static const int OV_SRC_Y     = 288;           // SOURCE row (name · age)
 static const int RAMP_W       = 46;            // altitude ramp bars
 static const int RAMP_H       = 5;
 static const int RAMP_DY      = -16;           // bar offset above its label
@@ -65,7 +65,7 @@ static const int      CLIMB_STRONG_FPM = 300;    // colored climb/descent
 static const uint32_t EMERG_BLINK_MS   = 500;
 
 // Recolor hex strings for the range pill (mirror C_DIM / C_CY in theme.h)
-static const char* RECOLOR_DIM = "69757f";
+static const char* RECOLOR_DIM = "8e9baa";
 static const char* RECOLOR_CY  = "54dcee";
 
 // ============================================================
@@ -104,7 +104,7 @@ static lv_obj_t *s_tmTime, *s_tmDate;
 static char s_bufTime[8], s_bufDate[20];
 
 // Weather pill
-static lv_obj_t *s_wxPill, *s_wxIcon, *s_wxTemp, *s_wxWind;
+static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxWind;   // rows in the Overview card
 static const lv_img_dsc_t* s_wxIconSrc = nullptr;
 static char s_bufTemp[8], s_bufWind[32];
 
@@ -141,7 +141,7 @@ static lv_obj_t* mkBox(lv_obj_t* p) {                 // bare container
 static lv_obj_t* mkHair(lv_obj_t* p, int y, int w) {
   lv_obj_t* o = mkBox(p);
   lv_obj_add_style(o, &st_hair, 0);
-  lv_obj_set_style_bg_opa(o, 22, 0);                  // st_hair opa (bg part)
+  lv_obj_set_style_bg_opa(o, OPA_BORDER, 0);          // matches the card hairline
   lv_obj_set_size(o, w, 1);
   lv_obj_set_pos(o, 0, y);
   return o;
@@ -209,31 +209,27 @@ static void onRangeClicked(lv_event_t* e)    { (void)e; uiCycleRange(+1); }
 // ============================================================
 //  Build — Overview card
 // ============================================================
-static void mkRampBar(lv_obj_t* card, lv_align_t a, lv_color_t c, const char* txt) {
-  lv_obj_t* bar = mkBox(card);
-  lv_obj_set_size(bar, RAMP_W, RAMP_H);
-  lv_obj_set_style_radius(bar, 3, 0);
-  lv_obj_set_style_bg_color(bar, c, 0);
-  lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-  lv_obj_align(bar, a, 0, RAMP_DY);
-  lv_obj_t* l = mkLbl(card, F_MONO11, C_FAINT);
-  lv_label_set_text(l, txt);
-  lv_obj_align(l, a, 0, 0);
-}
-
 static void buildOverview(lv_obj_t* parent) {
   lv_obj_t* card = mkBox(parent);
   lv_obj_add_style(card, &st_card, 0);
   lv_obj_set_pos(card, CARD_L_X, CARD_TOP_Y);
   lv_obj_set_size(card, CARD_W, CARD_TALL_H);
 
-  mkMicro(card, "OVERVIEW", 0, 0);
-  lv_obj_t* homeIco = mkLbl(card, F_SYM16, C_CY);
-  lv_label_set_text(homeIco, LV_SYMBOL_HOME);
-  lv_obj_set_pos(homeIco, 0, OV_HOME_Y);
-  lv_obj_t* homeLbl = mkLbl(card, F_M20, C_IVORY);
-  lv_label_set_text(homeLbl, "Home");
-  lv_obj_set_pos(homeLbl, 24, OV_HOME_Y - 2);
+  // Weather heads the card. It used to float in a pill on the vertical axis,
+  // directly over the map and on top of the compass N. "Home" is gone: it once
+  // meant "local feed vs cloud", and that lives in the SOURCE row below.
+  s_wxIcon = lv_img_create(card);
+  lv_img_set_src(s_wxIcon, wxIconFor(0));
+  lv_obj_set_pos(s_wxIcon, 0, OV_HOME_Y + 2);
+  s_wxTemp = mkLbl(card, F_M20, C_IVORY);
+  lv_label_set_text(s_wxTemp, "--");
+  lv_obj_set_pos(s_wxTemp, 30, OV_HOME_Y);
+  s_wxWind = mkLbl(card, F_MONO13, C_IVORY2);
+  lv_label_set_text(s_wxWind, "");
+  lv_obj_align(s_wxWind, LV_ALIGN_TOP_RIGHT, 0, OV_HOME_Y + 4);
+  s_tmDate = mkLbl(card, F_MONO13, C_DIM);
+  lv_obj_set_style_text_letter_space(s_tmDate, 1, 0);
+  lv_obj_set_pos(s_tmDate, 0, OV_HOME_Y + 34);
   mkHair(card, OV_HAIR1_Y, CONTENT_W);
 
   s_ovCount = mkLbl(card, F_NUM56, C_IVORY);
@@ -271,9 +267,6 @@ static void buildOverview(lv_obj_t* parent) {
   s_ovSrc = mkLbl(card, F_UI15, C_IVORY2);
   lv_obj_align(s_ovSrc, LV_ALIGN_TOP_RIGHT, 0, OV_SRC_Y - 2);
 
-  mkRampBar(card, LV_ALIGN_BOTTOM_LEFT,  C_AMBER,  "<10K");
-  mkRampBar(card, LV_ALIGN_BOTTOM_MID,   C_CY,     "10-30K");
-  mkRampBar(card, LV_ALIGN_BOTTOM_RIGHT, C_VIOLET, ">30K");
 }
 
 // ============================================================
@@ -394,74 +387,40 @@ static void buildSelected(lv_obj_t* parent) {
 static void buildTimeCard(lv_obj_t* parent) {
   lv_obj_t* card = mkBox(parent);
   lv_obj_add_style(card, &st_card, 0);
-  lv_obj_set_pos(card, CARD_L_X, CARD_BOT_Y);
+  lv_obj_set_pos(card, CLOCK_X, CARD_BOT_Y);
   lv_obj_set_size(card, CARD_W, CARD_SHORT_H);
   s_tmTime = mkLbl(card, F_NUM36, C_IVORY);
-  lv_obj_align(s_tmTime, LV_ALIGN_CENTER, 0, -10);   // breathing room over the date
-  s_tmDate = mkLbl(card, F_MONO11, C_DIM);
-  lv_obj_set_style_text_letter_space(s_tmDate, 2, 0);
-  lv_obj_align(s_tmDate, LV_ALIGN_CENTER, 0, 17);
+  lv_obj_center(s_tmTime);      // the date moved into the Overview header
 }
 
 static void buildSettingsBtn(lv_obj_t* parent) {
   lv_obj_t* btn = lv_btn_create(parent);
   lv_obj_remove_style_all(btn);
   lv_obj_add_style(btn, &st_card, 0);
-  lv_obj_set_pos(btn, CARD_R_X, CARD_BOT_Y);
-  lv_obj_set_size(btn, CARD_W, CARD_SHORT_H);
-  lv_obj_set_style_bg_color(btn, lv_color_mix(C_CY, C_CARD_HI, 46), 0);
-  lv_obj_set_style_bg_grad_color(btn, C_CARD_LO, 0);
-  lv_obj_set_style_border_color(btn, C_CY, 0);
-  lv_obj_set_style_border_opa(btn, 100, 0);
+  // 52x52 icon, not a 184x66 lit plate. The old button measured 7.26x denser
+  // and 14.7x brighter than the entire radar disc — the brightest object on an
+  // air-traffic display was the way to the settings screen.
+  lv_obj_set_pos(btn, GEAR_X, CARD_BOT_Y);
+  lv_obj_set_size(btn, GEAR_S, GEAR_S);
+  lv_obj_set_style_pad_all(btn, 0, 0);
   lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(btn, onSettingsClicked, LV_EVENT_CLICKED, NULL);
-
-  lv_obj_t* ico = mkLbl(btn, F_SYM16, C_CY);
+  lv_obj_t* ico = mkLbl(btn, F_SYM16, C_IVORY2);
   lv_label_set_text(ico, LV_SYMBOL_SETTINGS);
-  lv_obj_align(ico, LV_ALIGN_LEFT_MID, 6, 0);
-  lv_obj_t* lbl = mkLbl(btn, F_M20, C_IVORY);
-  lv_obj_set_style_text_letter_space(lbl, 2, 0);
-  lv_label_set_text(lbl, "SETTINGS");
-  lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 34, 0);
-}
-
-static void buildWeatherPill(lv_obj_t* parent) {
-  s_wxPill = mkBox(parent);
-  lv_obj_add_style(s_wxPill, &st_pill, 0);
-  lv_obj_set_size(s_wxPill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_set_flex_flow(s_wxPill, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(s_wxPill, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
-                        LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_column(s_wxPill, 10, 0);
-  lv_obj_align(s_wxPill, LV_ALIGN_TOP_MID, 0, WX_PILL_Y);
-
-  s_wxIcon = lv_img_create(s_wxPill);
-  lv_img_set_src(s_wxIcon, &img_wx_cloud);
-  lv_obj_set_style_img_recolor(s_wxIcon, C_IVORY2, 0);
-  lv_obj_set_style_img_recolor_opa(s_wxIcon, LV_OPA_COVER, 0);
-  s_wxIconSrc = &img_wx_cloud;
-  s_wxTemp = mkLbl(s_wxPill, F_M20, C_IVORY);
-  lv_obj_t* div = mkBox(s_wxPill);
-  lv_obj_set_size(div, 1, 18);
-  lv_obj_set_style_bg_color(div, C_BORDER, 0);
-  lv_obj_set_style_bg_opa(div, 60, 0);
-  lv_obj_t* wind = lv_img_create(s_wxPill);
-  lv_img_set_src(wind, &img_wx_wind);
-  lv_obj_set_style_img_recolor(wind, C_CY, 0);
-  lv_obj_set_style_img_recolor_opa(wind, LV_OPA_COVER, 0);
-  s_wxWind = mkLbl(s_wxPill, F_MONO13, C_IVORY2);
-  lv_obj_add_flag(s_wxPill, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_center(ico);
+  lv_obj_set_style_text_color(ico, C_CY, LV_STATE_PRESSED);
 }
 
 static void buildRangePill(lv_obj_t* parent) {
   lv_obj_t* pill = mkBox(parent);
   lv_obj_add_style(pill, &st_pill, 0);
-  lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_align(pill, LV_ALIGN_BOTTOM_MID, 0, -(SCR_H - RNG_PILL_Y - 24));
+  lv_obj_set_size(pill, CARD_W, CARD_SHORT_H);
+  lv_obj_set_pos(pill, CARD_L_X, RNG_PILL_Y);
   lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(pill, onRangeClicked, LV_EVENT_CLICKED, NULL);
   s_rngLbl = mkLbl(pill, F_MONO13, C_DIM);
   lv_label_set_recolor(s_rngLbl, true);
+  lv_obj_center(s_rngLbl);
 }
 
 // ============================================================
@@ -746,8 +705,13 @@ static void updateTimeCard() {
 }
 
 static void updateWeatherPill() {
+  // The pill is gone; these three widgets are rows in the Overview card now, so
+  // hide them individually. (s_wxPill no longer exists — calling
+  // setHiddenCached on it would dereference nullptr.)
   bool show = g_set.wxEn && g_wx.valid;
-  setHiddenCached(s_wxPill, !show);
+  setHiddenCached(s_wxIcon, !show);
+  setHiddenCached(s_wxTemp, !show);
+  setHiddenCached(s_wxWind, !show);
   if (!show) return;
 
   const lv_img_dsc_t* ic = wxIconFor(g_wx.wmoCode);
@@ -758,8 +722,8 @@ static void updateWeatherPill() {
   char b[32];
   snprintf(b, sizeof(b), "%d\xC2\xB0", (int)lroundf(g_wx.tempC));
   setTextCached(s_wxTemp, s_bufTemp, sizeof(s_bufTemp), b);
-  snprintf(b, sizeof(b), "%s %d \xC2\xB7 %s", cardinal8((float)g_wx.windDirDeg),
-           (int)lroundf(g_wx.windKmh), wxWordFor(g_wx.wmoCode));
+  snprintf(b, sizeof(b), "%s %d", cardinal8((float)g_wx.windDirDeg),
+           (int)lroundf(g_wx.windKmh));
   setTextCached(s_wxWind, s_bufWind, sizeof(s_bufWind), b);
 }
 
@@ -787,7 +751,6 @@ void cardsBuild(lv_obj_t* parent) {
   buildSelected(parent);
   buildTimeCard(parent);
   buildSettingsBtn(parent);
-  buildWeatherPill(parent);
   buildRangePill(parent);
   s_built = true;
   Serial.println("[cards] built");

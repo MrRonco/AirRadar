@@ -14,10 +14,10 @@ static lv_obj_t* makeRoot() {
   lv_obj_t* scr = lv_obj_create(NULL);
   lv_obj_remove_style_all(scr);
   lv_obj_set_size(scr, SCR_W, SCR_H);
-  // Deep background: vertical gradient standing in for the mock's radial wash.
-  lv_obj_set_style_bg_color(scr, C_INK_HI, 0);
-  lv_obj_set_style_bg_grad_color(scr, C_INK, 0);
-  lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
+  // Flat ink. The vertical gradient banded visibly in RGB565 and was recomputed
+  // on every screen-root repaint (LV_GRAD_CACHE_DEF_SIZE 0).
+  lv_obj_set_style_bg_color(scr, C_INK, 0);
+  lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_NONE, 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
   lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
   return scr;
@@ -41,7 +41,10 @@ void uiShow(Screen s) {
   if (s >= SCR_COUNT || !s_roots[s]) return;
   g_screen = s;
   if (s == SCR_SETTINGS) settingsRefresh();
-  lv_scr_load_anim(s_roots[s], LV_SCR_LOAD_ANIM_FADE_ON, 220, 0, false);
+  // No fade: a 220 ms cross-fade of two full 800x480 screens is the single most
+  // expensive thing this UI can ask the renderer to do, against a panel DMA that
+  // already needs 25 MB/s.
+  lv_scr_load_anim(s_roots[s], LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
 }
 
 void uiTick(uint32_t nowMs) {

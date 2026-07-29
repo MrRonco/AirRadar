@@ -60,21 +60,25 @@
 #define SCR_H 480
 // Scope (radar circle)
 #define SCOPE_CX 400
-#define SCOPE_CY 238
-#define SCOPE_R  196
+#define SCOPE_CY 240   // true centre
+#define SCOPE_R  212   // disc 120,687 -> 141,196 px (+17%)
 #define MAP_SIZE (SCOPE_R*2)              // 392x392 map image under the rings
 // Cards
-#define CARD_W   184
-#define CARD_TALL_H 346
-#define CARD_SHORT_H 66
-#define CARD_L_X  14
-#define CARD_R_X  (SCR_W - 14 - CARD_W)   // 602
-#define CARD_TOP_Y 46
-#define CARD_BOT_Y 400
+#define CARD_W   168   // tangent to the disc, 8 px gutter
+#define CARD_TALL_H 376
+#define CARD_SHORT_H 52
+#define CARD_L_X  12
+#define CARD_R_X  (SCR_W - 12 - CARD_W)   // 620
+#define CARD_TOP_Y 28
+#define CARD_BOT_Y 416
 #define CARD_RADIUS 17
-// Weather pill (top centre) / range pill (bottom centre)
-#define WX_PILL_Y   12
-#define RNG_PILL_Y  446
+// Bottom band: range stepper | clock | gear. The weather pill is gone — it now
+// heads the Overview card, which vacates the vertical axis so the compass N can
+// never be occluded again.
+#define RNG_PILL_Y  CARD_BOT_Y
+#define CLOCK_X     556
+#define GEAR_X      736
+#define GEAR_S      52
 
 // ============================================================
 //  Range steps (km)
