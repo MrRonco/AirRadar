@@ -31,7 +31,9 @@ static bool s_serverUp = false;
 
 // ---------- file-local constants (no magic numbers) ----------
 static const uint32_t kRebootDelayMs   = 400;    // let the response flush out
-static const size_t   kRootPageReserve = 4096;   // root page String pre-alloc
+static const size_t   kRootPageReserve = 12288;  // root page String pre-alloc
+// >4 KB so it lands in PSRAM (CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096), which
+// keeps the console's markup off the internal heap mbedTLS needs.
 static const size_t   kStateDocBytes   = 16384;  // /api/state JSON budget
 static const size_t   kCfgDocBytes     = 3072;   // /api/config JSON budget
 static const size_t   kStateOutReserve = 4096;   // serialize buffer pre-alloc
@@ -54,7 +56,13 @@ static bool authed() {
   if (server.hasHeader("Origin")) {
     String o = server.header("Origin");
     String hostHdr = server.hasHeader("Host") ? server.header("Host") : "";
-    if (o.length() && hostHdr.length() && o.indexOf(hostHdr) < 0) {
+    // Exact match only. indexOf() accepted any Origin merely CONTAINING the
+    // host, so http://airradar.local.evil.com passed against airradar.local —
+    // and with no panel password set this guard is the only thing protecting
+    // /forget and /update.
+    bool sameOrigin = o.equalsIgnoreCase("http://" + hostHdr) ||
+                      o.equalsIgnoreCase("https://" + hostHdr);
+    if (o.length() && hostHdr.length() && !sameOrigin) {
       Serial.printf("[web] cross-origin request blocked: %s\n", o.c_str());
       server.send(403, "text/plain", "cross-origin request rejected");
       return false;
@@ -132,92 +140,206 @@ static void webReboot(const String& msg) {
 //  Root page — v6 look (dark #0b0f15, cyan buttons) + v7 sections
 // ============================================================
 static void htmlAppendHead(String& h) {
-  h += F("<!doctype html><html><head><meta name=viewport content='width=device-width,"
-         "initial-scale=1'><title>AirRadar</title><style>body{font-family:system-ui;"
-         "background:#0b0f15;color:#dfe8f2;max-width:420px;margin:2em auto;padding:0 1em}"
-         "input,select{width:100%;padding:9px;margin:4px 0 14px;background:#151d28;"
-         "color:#dfe8f2;border:1px solid #33455c;border-radius:8px}"
-         "input[type=checkbox]{width:auto;margin:0 8px 0 0}input[type=file]{padding:6px}"
-         "button{padding:10px 20px;background:#4cc2ff;color:#08131c;border:0;"
-         "border-radius:8px;margin-right:8px;font-weight:600}.d{background:#e05555;"
-         "color:#fff}h3{margin:26px 0 6px;color:#8fa3b8}.n{color:#5f7488;font-size:.85em}"
-         "a{color:#8fa3b8}</style></head><body><h2>AirRadar settings</h2>");
+  // Desktop-only management console: no viewport meta, no mobile column.
+  // System font stacks only — the device may have no internet, so web fonts
+  // are not an option. Palette mirrors the panel tokens (theme.h).
+  h += F("<!doctype html><html lang=en><head><meta charset=utf-8>"
+         "<title>AirRadar</title><style>"
+         "*{box-sizing:border-box}"
+         "body{font:15px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;"
+         "background:#05080d;color:#eef1f4;margin:0;padding:22px 20px 56px}"
+         ".w{max-width:1240px;margin:0 auto}"
+         ".hd{display:flex;align-items:center;gap:14px;margin-bottom:14px}"
+         ".hd h1{font-size:19px;margin:0;font-weight:600;letter-spacing:-.01em}"
+         ".hd .r{margin-left:auto;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;"
+         "color:#8e9baa}"
+         ".g{display:grid;gap:12px;margin-bottom:12px;align-items:start}"
+         ".c8{grid-template-columns:repeat(8,1fr)}"
+         ".c3{grid-template-columns:repeat(3,1fr)}"
+         ".c21{grid-template-columns:2fr 1fr}"
+         ".b{background:#182231;border:1px solid rgba(180,205,230,.16);"
+         "border-radius:13px;padding:14px}"
+         ".t{font:500 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.09em;"
+         "text-transform:uppercase;color:#8e9baa;margin:0 0 10px}"
+         ".tile{background:#0d1420;border:1px solid rgba(180,205,230,.10);"
+         "border-radius:8px;padding:9px 11px}"
+         ".tk{font:500 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;"
+         "color:#75828f;text-transform:uppercase}"
+         ".tv{font:500 22px/1.35 system-ui;font-variant-numeric:tabular-nums}"
+         "label{display:block;font:500 11px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;"
+         "color:#8e9baa;margin-top:9px}"
+         "input,select{width:100%;padding:8px 9px;background:#0d1420;color:#eef1f4;"
+         "border:1px solid #26313f;border-radius:6px;"
+         "font:13px ui-monospace,SFMono-Regular,Menlo,monospace}"
+         "input[type=checkbox]{width:auto;margin:0 7px 0 0}input[type=file]{padding:6px}"
+         "button{padding:9px 15px;background:#54dcee;color:#05080d;border:0;border-radius:7px;"
+         "font:600 13px system-ui;cursor:pointer;margin-top:11px}"
+         "button.d{background:#ff6472;color:#fff}"
+         "table{width:100%;border-collapse:collapse;"
+         "font:13px ui-monospace,SFMono-Regular,Menlo,monospace}"
+         "th{text-align:left;font:500 10px/1 ui-monospace,monospace;letter-spacing:.07em;"
+         "text-transform:uppercase;color:#75828f;padding-bottom:7px}"
+         "td{padding:5px 0;color:#aab4c0;border-top:1px solid rgba(180,205,230,.08);"
+         "white-space:nowrap}"
+         ".dz{border-color:rgba(255,100,114,.45)}.dz .t{color:#ff8a94}"
+         ".n{color:#75828f;font-size:12px}a{color:#8e9baa}"
+         ".mir{width:100%;display:block;border-radius:6px;border:1px solid #1a222e;"
+         "background:#05080d}"
+         ".pill{display:inline-block;width:7px;height:7px;border-radius:50%;"
+         "background:#54dcee;margin-right:6px;vertical-align:middle}"
+         "</style></head><body><div class=w>");
+}
+
+// Header + the eight-tile status strip. Values are filled by JS from /metrics;
+// the markup ships with em-dashes so the page never renders a misleading zero.
+static void htmlAppendStatus(String& h) {
+  h += F("<div class=hd><h1>&#9992; AirRadar</h1>"
+         "<span class=n id=host></span>"
+         "<span class=r><span class=pill></span><span id=src>&mdash;</span>"
+         " &nbsp; up <span id=up>&mdash;</span> &nbsp; " AR_VERSION "</span></div>"
+         "<div class='g c8'>"
+         "<div class=tile><div class=tk>in range</div><div class=tv id=mR>&mdash;</div></div>"
+         "<div class=tile><div class=tk>heard</div><div class=tv id=mH>&mdash;</div></div>"
+         "<div class=tile><div class=tk>msg rate</div><div class=tv id=mM>&mdash;</div></div>"
+         "<div class=tile><div class=tk>source</div><div class=tv id=mS>&mdash;</div></div>"
+         "<div class=tile><div class=tk>rssi</div><div class=tv id=mW>&mdash;</div></div>"
+         "<div class=tile><div class=tk>heap free</div><div class=tv id=mF>&mdash;</div></div>"
+         "<div class=tile><div class=tk>heap min</div><div class=tv id=mN>&mdash;</div></div>"
+         "<div class=tile><div class=tk>tls shed</div><div class=tv id=mT>&mdash;</div></div>"
+         "</div>");
+}
+
+static void htmlAppendLive(String& h) {
+  h += F("<div class='g c21'>"
+         "<div class=b><p class=t>Traffic</p>"
+         "<table><thead><tr><th>callsign</th><th>type</th><th>operator</th>"
+         "<th>route</th><th>alt</th><th>dist</th></tr></thead>"
+         "<tbody id=tb><tr><td colspan=6 class=n>loading&hellip;</td></tr></tbody></table></div>"
+         "<div class=b><p class=t>Panel mirror</p>"
+         "<img class=mir id=mir alt='live panel' style=display:none>"
+         "<p class=n id=mirh>Not loaded. The panel is only mirrored on demand.</p>"
+         "<button type=button onclick=\"var m=$('mir');m.style.display='block';"
+         "$('mirh').style.display='none';m.src='/screen.bmp?t='+Date.now()\">Refresh</button>"
+         "<p class=n>Manual only &mdash; 1.1&nbsp;MB and it blocks the panel for ~2&nbsp;s.</p>"
+         "</div></div>");
 }
 
 static void htmlAppendSettings(String& h) {
-  h += F("<form method=post action=/save>Latitude<input name=lat value='");
+  h += F("<div class='g c3'>"
+         "<div class=b><p class=t>Radar &amp; feed</p><form method=post action=/save>"
+         "<label>Latitude</label><input name=lat value='");
   h += String(g_set.homeLat, 6);
-  h += F("'>Longitude<input name=lon value='");
+  h += F("'><label>Longitude</label><input name=lon value='");
   h += String(g_set.homeLon, 6);
-  h += F("'>Feeder URL<input name=feed value='");
+  h += F("'><label>Feeder URL</label><input name=feed value='");
   h += htmlEscape(g_set.feedUrl);
-  h += F("'>Labels <select name=lbl><option value=1");
+  h += F("'><label>Target labels</label><select name=lbl><option value=1");
   if (g_set.showLabels) h += F(" selected");
   h += F(">On</option><option value=0");
   if (!g_set.showLabels) h += F(" selected");
-  h += F(">Off</option></select><br><br><button type=submit>Save</button></form>");
-}
-
-static void htmlAppendWifi(String& h) {
-  h += F("<h3>Wi-Fi</h3>"
-         "<form method=post action=/wifi onsubmit='return confirm(\"Save Wi-Fi and reboot?\")'>"
-         "SSID<input name=ssid value='");
-  h += htmlEscape(g_set.wifiSsid);
-  h += F("'>Password<input type=password name=pass>"
-         "<button type=submit>Save &amp; reboot</button></form>");
+  h += F(">Off</option></select><button type=submit>Save</button></form></div>");
 }
 
 static void htmlAppendNetwork(String& h, const String& pIp, const String& pGw,
                               const String& pMk, const String& pDn) {
-  h += F("<h3>Network</h3>"
-         "<form method=post action=/net onsubmit='return confirm(\"Apply network settings and reboot?\")'>"
-         "Mode <select name=mode><option value=dhcp");
+  h += F("<div class=b><p class=t>Network</p>"
+         "<form method=post action=/net onsubmit='return confirm(\"Apply network settings? "
+         "The device reboots if the DHCP/static mode changes.\")'>"
+         "<label>Mode</label><select name=mode><option value=dhcp");
   if (!g_set.netStatic) h += F(" selected");
   h += F(">DHCP</option><option value=static");
   if (g_set.netStatic) h += F(" selected");
-  h += F(">Static</option></select>IP address<input name=nip value='");
+  h += F(">Static</option></select><label>IP address</label><input name=nip value='");
   h += htmlEscape(pIp);
-  h += F("'>Gateway<input name=ngw value='");
+  h += F("'><label>Gateway</label><input name=ngw value='");
   h += htmlEscape(pGw);
-  h += F("'>Subnet mask<input name=nmask value='");
+  h += F("'><label>Subnet mask</label><input name=nmask value='");
   h += htmlEscape(pMk);
-  h += F("'>DNS (blank = gateway)<input name=ndns value='");
+  h += F("'><label>DNS (blank = gateway)</label><input name=ndns value='");
   h += htmlEscape(pDn);
-  h += F("'><button type=submit>Save &amp; reboot</button></form>");
+  h += F("'><button type=submit>Save network</button></form>"
+         "<form method=post action=/wifi onsubmit='return confirm(\"Reboot and join this "
+         "network? If the password is wrong you must re-enter it on the panel.\")'>"
+         "<label>Wi-Fi SSID</label><input name=ssid value='");
+  h += htmlEscape(g_set.wifiSsid);
+  h += F("'><label>Wi-Fi password (blank = keep current)</label>"
+         "<input type=password name=pass autocomplete=off>"
+         "<button type=submit>Save &amp; reboot</button></form></div>");
 }
 
 static void htmlAppendIntegrations(String& h) {
-  h += F("<h3>Integrations</h3><form method=post action=/integrations>"
+  h += F("<div class=b><p class=t>Integrations &amp; firmware</p>"
+         "<form method=post action=/integrations>"
          "<label><input type=checkbox name=mqtten value=1");
   if (g_set.mqttEn) h += F(" checked");
-  h += F(">MQTT enabled</label><br><br>"
-         "MQTT URI (blank = keep, - = clear)<input name=mqtturi placeholder='");
+  h += F(">MQTT enabled</label>"
+         "<label>MQTT URI (blank = keep, - = clear)</label><input name=mqtturi placeholder='");
   if (g_set.mqttUri.length()) h += htmlEscape(mqttUriRedacted(g_set.mqttUri));
   else h += F("mqtt://user:pass@host:1883");
-  h += F("'>Timezone (POSIX TZ)<input name=tz value='");
+  h += F("'><label>Timezone (POSIX TZ)</label><input name=tz value='");
   h += htmlEscape(g_set.tz);
-  h += F("'>Panel password (blank = keep, - = clear)"
-         "<input type=password name=ppass>"
-         "<button type=submit>Save</button></form>");
-}
-
-static void htmlAppendFirmware(String& h) {
-  h += F("<h3>Firmware</h3><p class=n>Current: " AR_VERSION "</p>"
+  h += F("'><label>Panel password (blank = keep, - = clear)</label>"
+         "<input type=password name=ppass autocomplete=off>"
+         "<button type=submit>Save</button></form>"
          "<form method=post action=/update enctype='multipart/form-data' "
          "onsubmit='return confirm(\"Flash this firmware and reboot?\")'>"
+         "<label>Firmware &mdash; running " AR_VERSION "</label>"
          "<input type=file name=fw accept='.bin'>"
-         "<button type=submit>Upload &amp; flash</button></form>");
+         "<button type=submit>Upload &amp; flash</button></form></div></div>");
 }
 
 static void htmlAppendFooter(String& h) {
-  h += F("<br><form method=post action=/forget onsubmit='return confirm(\"Forget WiFi and reboot?\")'>"
-         "<button class=d>Forget Wi-Fi</button></form>"
+  h += F("<div class='g'><div class='b dz'><p class=t>&#9888; Danger zone</p>"
+         "<form method=post action=/forget onsubmit='return confirm(\"Forget Wi-Fi? The device "
+         "reboots and can then only be re-provisioned at the physical touchscreen.\")'>"
+         "<span class=n>Clears the stored network. The device reboots and can only be "
+         "re-provisioned at the panel.</span><br>"
+         "<button class=d>Forget Wi-Fi</button></form></div></div>"
          "<p class=n>AirRadar " AR_VERSION " &middot; "
-         "<a href='https://" AR_REPO_URL "'>" AR_REPO_URL "</a><br>"
-         AR_AUTHOR_LINE "<br>"
-         "<a href='/api/state'>/api/state</a> &middot; "
+         "<a href='https://" AR_REPO_URL "'>" AR_REPO_URL "</a> &middot; " AR_AUTHOR_LINE
+         "<br><a href='/api/state'>/api/state</a> &middot; "
          "<a href='/screen.bmp'>/screen.bmp</a> &middot; "
-         "<a href='/metrics'>/metrics</a></p></body></html>");
+         "<a href='/metrics'>/metrics</a></p></div>");
+  // Polling is deliberately gentle: the web server runs inside loop() next to
+  // LVGL, and every request is a fresh TCP connection against a 16-slot PCB
+  // pool. Hidden tabs stop polling entirely.
+  h += F("<script>"
+         "var $=function(i){return document.getElementById(i)};"
+         "function P(t){var m={};t.split('\\n').forEach(function(l){"
+         "if(l&&l[0]!='#'){var i=l.indexOf(' ');if(i>0)m[l.slice(0,i)]=+l.slice(i+1)}});return m}"
+         "function U(s){var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),"
+         "n=Math.floor(s%3600/60);return (d?d+'d ':'')+('0'+h).slice(-2)+':'+('0'+n).slice(-2)}"
+         "function K(b){return b>=1024?Math.round(b/1024)+'K':b}"
+         "function M(){fetch('/metrics').then(function(r){return r.text()}).then(function(t){"
+         "var m=P(t);"
+         "$('mR').textContent=m.airradar_in_range;"
+         "$('mH').textContent=m.airradar_heard;"
+         "$('mM').textContent=Math.round(m.airradar_msg_rate||0)+'/s';"
+         "var lo=m.airradar_feed_local==1;"
+         "$('mS').textContent=lo?'LOCAL':'CLOUD';"
+         "$('mS').style.color=lo?'#54dcee':'#8e9baa';$('src').textContent=lo?'LOCAL':'CLOUD';"
+         "$('mW').textContent=m.airradar_wifi_rssi;"
+         "$('mF').textContent=K(m.airradar_heap_free);"
+         "$('mN').textContent=K(m.airradar_heap_min);"
+         "var sh=m.airradar_tls_shed;$('mT').textContent=sh;"
+         "$('mT').style.color=sh>0?'#ffc061':'#eef1f4';"
+         "$('up').textContent=U(m.airradar_uptime_seconds);"
+         "}).catch(function(){})}"
+         "function T(){fetch('/api/state').then(function(r){return r.json()}).then(function(d){"
+         "var b='',f=d.flights||[];"
+         "if(!f.length){b='<tr><td colspan=6 class=n>no aircraft in range</td></tr>'}"
+         "else for(var i=0;i<f.length;i++){var a=f[i];"
+         "b+='<tr><td>'+(a.flight||'').trim()+'</td><td>'+(a.type||'')+'</td><td>'+"
+         "((a.op||'').slice(0,22))+'</td><td>'+((a.origin&&a.dest)?a.origin+'&rarr;'+a.dest:"
+         "'<span class=n>&mdash;</span>')+'</td><td>'+(a.alt_ft>=18000?'FL'+Math.round(a.alt_ft/100):"
+         "(a.alt_ft>=0?a.alt_ft+' ft':'&mdash;'))+'</td><td>'+a.dist_km.toFixed(1)+' km</td></tr>'}"
+         "$('tb').innerHTML=b}).catch(function(){})}"
+         "$('host').textContent=location.host;"
+         "var t1,t2;function GO(){M();T();t1=setInterval(M,10000);t2=setInterval(T,15000)}"
+         "function STOP(){clearInterval(t1);clearInterval(t2)}"
+         "document.addEventListener('visibilitychange',function(){"
+         "document.hidden?STOP():GO()});GO();"
+         "</script></body></html>");
 }
 
 static void handleRoot() {
@@ -232,11 +354,11 @@ static void handleRoot() {
   String h;
   h.reserve(kRootPageReserve);
   htmlAppendHead(h);
+  htmlAppendStatus(h);
+  htmlAppendLive(h);
   htmlAppendSettings(h);
-  htmlAppendWifi(h);
   htmlAppendNetwork(h, pIp, pGw, pMk, pDn);
   htmlAppendIntegrations(h);
-  htmlAppendFirmware(h);
   htmlAppendFooter(h);
   server.send(200, "text/html", h);
 }
@@ -282,9 +404,17 @@ static void handleWifi() {
     return;
   }
   g_set.wifiSsid = s;
-  g_set.wifiPass = server.arg("pass");
   g_prefs.putString("ssid", g_set.wifiSsid);
-  g_prefs.putString("pass", g_set.wifiPass);
+  // Blank = keep, matching the convention this page already uses for the MQTT
+  // URI and the panel password. The field renders empty on every load (a stored
+  // secret must never be echoed into HTML), so writing it unconditionally meant
+  // "fix a typo in the SSID and save" erased the password and rebooted into a
+  // device that could only be re-provisioned at the physical touchscreen.
+  String pw = server.arg("pass");
+  if (pw.length()) {
+    g_set.wifiPass = pw;
+    g_prefs.putString("pass", g_set.wifiPass);
+  }
   webReboot("Joining " + htmlEscape(s) +
             " - rebooting. Reconnect at the IP shown on the display.");
 }
