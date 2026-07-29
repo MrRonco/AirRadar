@@ -19,29 +19,9 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
-#include <lwip/sockets.h>
 #include <math.h>
 #include <string.h>
 #include "feeder.h"
-
-// Close the LAN socket with RST instead of FIN so it never enters TIME_WAIT.
-//
-// WHY: useHTTP10(true) sets HTTPClient::_reuse = false, so WE initiate every
-// close and therefore inherit TIME_WAIT. At one poll per 2 s that is ~30 dead
-// sockets per minute, each pinning ~2 KB of internal heap for 2*MSL. Measured
-// on hardware at exactly 2048 B per feeder run. The pool plateaus near 120 KB,
-// which is what dragged free heap under AR_TLS_HEAP_FLOOR and shut off routes,
-// weather and logo fetches for the rest of the boot.
-//
-// Only ever applied to the local feeder on the LAN: the body has already been
-// read by the time we call this, and aborting our own poll to our own Pi is
-// harmless. Public APIs keep the polite FIN handshake.
-static void abortiveClose(WiFiClient& net) {
-  struct linger lin;
-  lin.l_onoff  = 1;
-  lin.l_linger = 0;                          // 0 s linger -> RST on close()
-  net.setSocketOption(SOL_SOCKET, SO_LINGER, &lin, sizeof(lin));
-}
 
 // ---------- file-local constants (no magic numbers) ----------
 static const uint32_t HTTP_LAN_CONNECT_MS  = 1500;   // LAN: fail fast
@@ -223,7 +203,6 @@ static bool tryLocal(const FeederJob& job) {
     }
     int code = http.GET();
     bool ok = (code == 200) && fetchParse(http.getStream(), true, job);
-    abortiveClose(net);                      // body consumed; skip TIME_WAIT
     http.end();
     if (ok) return true;
     Serial.printf("[feeder] local %s -> HTTP %d\n", urls[u], code);
@@ -299,7 +278,6 @@ static void fetchStats(const FeederJob& job) {
   } else {
     Serial.printf("[feeder] stats -> HTTP %d\n", code);
   }
-  abortiveClose(net);                        // same LAN host, same reasoning
   http.end();
 }
 
