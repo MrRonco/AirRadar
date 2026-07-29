@@ -31,7 +31,8 @@ static const int OV_HAIR2_Y   = 196;
 static const int OV_NEAR_Y    = 206;
 static const int OV_NEARD_Y   = 228;
 static const int OV_FEED_Y    = 262;
-static const int OV_SRC_Y     = 288;           // SOURCE row (name · age)
+static const int OV_SRC_Y     = 288;           // single status row
+static const int OV_DOT_D     = 7;             // live dot
 static const int RAMP_W       = 46;            // altitude ramp bars
 static const int RAMP_H       = 5;
 static const int RAMP_DY      = -16;           // bar offset above its label
@@ -76,7 +77,7 @@ static bool s_built = false;
 // Overview
 static lv_obj_t *s_ovCount, *s_ovInRange, *s_ovHeard;
 static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl;
-static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc;
+static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24];
 static char s_bufNear[12], s_bufNearD[24], s_bufFeed[12], s_bufSrc[24];
 static lv_color_t s_colSrc = {};
@@ -260,12 +261,18 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_align(s_ovNear, LV_ALIGN_TOP_RIGHT, 0, OV_NEAR_Y - 2);
   s_ovNearD = mkLbl(card, F_UI15, C_CY);
   lv_obj_align(s_ovNearD, LV_ALIGN_TOP_RIGHT, 0, OV_NEARD_Y);
-  mkMicro(card, "FEED", 0, OV_FEED_Y);
-  s_ovFeed = mkLbl(card, F_UI15, C_IVORY);
-  lv_obj_align(s_ovFeed, LV_ALIGN_TOP_RIGHT, 0, OV_FEED_Y - 2);
-  mkMicro(card, "SRC", 0, OV_SRC_Y);
-  s_ovSrc = mkLbl(card, F_UI15, C_IVORY2);
-  lv_obj_align(s_ovSrc, LV_ALIGN_TOP_RIGHT, 0, OV_SRC_Y - 2);
+  // One status line: a live dot, the source and its age on the left, message
+  // rate on the right. Two labelled rows for what is really one fact.
+  s_ovDot = mkBox(card);
+  lv_obj_set_size(s_ovDot, OV_DOT_D, OV_DOT_D);
+  lv_obj_set_style_radius(s_ovDot, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(s_ovDot, C_CY, 0);
+  lv_obj_set_style_bg_opa(s_ovDot, LV_OPA_COVER, 0);
+  lv_obj_set_pos(s_ovDot, 0, OV_SRC_Y + 6);
+  s_ovSrc = mkLbl(card, F_MONO13, C_IVORY2);
+  lv_obj_set_pos(s_ovSrc, OV_DOT_D + 6, OV_SRC_Y);
+  s_ovFeed = mkLbl(card, F_MONO13, C_DIM);
+  lv_obj_align(s_ovFeed, LV_ALIGN_TOP_RIGHT, 0, OV_SRC_Y);
 
 }
 
@@ -447,8 +454,19 @@ static void updateOverview(uint32_t nowMs) {
     lv_obj_align_to(s_ovInRange, s_ovCount, LV_ALIGN_OUT_RIGHT_BOTTOM,
                     OV_INRANGE_DX, OV_INRANGE_DY);
   }
-  snprintf(b, sizeof(b), "of %d heard", g_heardCount);
-  setTextCached(s_ovHeard, s_bufHeard, sizeof(s_bufHeard), b);
+  // "N IN RANGE / of M heard" compared a 60 s coast window against a single
+  // poll, so the two numbers openly disagreed. Name the difference instead:
+  // the gap IS the coasting set. Row collapses when nothing is coasting.
+  int coasting = 0;
+  for (int i = 0; i < g_orderN; i++) {
+    const Track& t = g_tracks[g_orderIdx[i]];
+    if ((int32_t)(nowMs - t.lastApiMs) > (int32_t)AR_STALE_TRACK_MS) coasting++;
+  }
+  setHiddenCached(s_ovHeard, coasting == 0);
+  if (coasting > 0) {
+    snprintf(b, sizeof(b), "%d COASTING", coasting);
+    setTextCached(s_ovHeard, s_bufHeard, sizeof(s_bufHeard), b);
+  }
 
   updateEmergencyStrip(nowMs);
 
@@ -469,7 +487,7 @@ static void updateOverview(uint32_t nowMs) {
   if (g_feedIsLocal && g_feedMsgRate >= 0.0f)
     snprintf(b, sizeof(b), "%d/s", (int)(g_feedMsgRate + 0.5f));
   else
-    snprintf(b, sizeof(b), "--");
+    snprintf(b, sizeof(b), "");
   setTextCached(s_ovFeed, s_bufFeed, sizeof(s_bufFeed), b);
 
   // SOURCE row: where the data is coming from + how fresh it is.
@@ -495,6 +513,7 @@ static void updateOverview(uint32_t nowMs) {
   if (s_colSrc.full != sc.full) {
     s_colSrc = sc;
     lv_obj_set_style_text_color(s_ovSrc, sc, 0);
+    lv_obj_set_style_bg_color(s_ovDot, sc, 0);   // dot carries the same state
   }
 }
 
