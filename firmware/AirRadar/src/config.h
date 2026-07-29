@@ -30,6 +30,11 @@
 #define AR_POLL_STATS_MS    15000         // feeder stats.json (msg rate)
 #define AR_POLL_WEATHER_MS  (15UL*60UL*1000UL)   // Open-Meteo
 #define AR_POLL_ISS_MS      15000         // wheretheiss.at
+// Background route walk: one adsbdb lookup per interval for a visible aircraft
+// that hasn't been tried yet. Routes used to resolve for the SELECTED aircraft
+// only, so at most one flight on screen could ever show origin/dest. Keep this
+// interval polite — adsbdb is a free keyless API run by one person.
+#define AR_POLL_ROUTE_MS     9000
 #define AR_STALE_TRACK_MS   20000         // fresh -> coasting
 #define AR_DROP_TRACK_MS    60000         // coasting -> dropped
 #define AR_STALE_FEED_MS    30000         // "STALE" banner threshold

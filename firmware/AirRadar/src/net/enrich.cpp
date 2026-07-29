@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include "enrich.h"
 #include "../core/tracks.h"
+#include "logos.h"                             // logosIcaoFromFlight: airline test
 
 // ---------- file-local constants ----------
 static const uint32_t kHttpTimeoutMs = 8000;   // internet convention (8..12 s)
@@ -332,6 +333,29 @@ bool enrichApplyRoute() {
 // ============================================================
 //  Scheduler (loop context)
 // ============================================================
+// Walk the distance-sorted in-range list and give ONE untried aircraft a route
+// lookup per interval. Nearest first, so the aircraft the user is most likely
+// to care about resolve soonest. enrichRequestRoute() does the deduping, the
+// cooldown and the TLS gating, so this stays a simple picker.
+void enrichRouteWalk(uint32_t nowMs) {
+  static uint32_t lastWalkMs = 0;
+  if (!g_wifiUp || g_routeFetching || g_routeResReady) return;
+  if ((int32_t)(nowMs - lastWalkMs) < (int32_t)AR_POLL_ROUTE_MS) return;
+  if (!tlsGateOpen()) { lastWalkMs = nowMs; return; }   // throttle the heap query
+  for (int i = 0; i < g_orderN; i++) {
+    Track& t = g_tracks[g_orderIdx[i]];
+    if (t.routeTried || !t.flight[0]) continue;
+    // Only airline-style callsigns have routes; skip GA tails so we don't burn
+    // the interval on lookups adsbdb will 404 anyway.
+    char icao[4];
+    if (!logosIcaoFromFlight(t.flight, icao)) continue;
+    lastWalkMs = nowMs;
+    enrichRequestRoute(t.hex, t.flight);
+    return;                                    // one per interval
+  }
+  lastWalkMs = nowMs;                          // nothing to do; re-check later
+}
+
 void enrichLoop(uint32_t nowMs) {
   if (!g_wifiUp) return;
 

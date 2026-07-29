@@ -116,7 +116,9 @@ void loop() {
   if (!g_routeFetching && !g_routeResReady) {
     Track* sel = tracksSelected();
     if (sel && !sel->routeTried && sel->flight[0])
-      enrichRequestRoute(sel->hex, sel->flight);
+      enrichRequestRoute(sel->hex, sel->flight);   // selection always wins
+    else
+      enrichRouteWalk(now);                        // then fill in the rest
   }
 
   // New aircraft data. Use a FRESH timestamp for the refresh: applyPending

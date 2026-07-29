@@ -13,6 +13,11 @@ void enrichLoop(uint32_t nowMs);
 // g_routeResReady=true; loop applies it via enrichApplyRoute().
 void enrichRequestRoute(const char* hex, const char* flight);
 
+// Background walk: one adsbdb lookup per AR_POLL_ROUTE_MS for a visible
+// aircraft that has not been tried yet, nearest first. Without it only the
+// SELECTED aircraft ever gets a route. Loop context.
+void enrichRouteWalk(uint32_t nowMs);
+
 // Loop-context: if a route result is ready, write it into the matching track
 // (marking routeTried) and return true so the UI can refresh.
 bool enrichApplyRoute();
