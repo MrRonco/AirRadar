@@ -53,6 +53,53 @@ static uint32_t  s_lastFetchStart = 0;       // loop-context only
 static uint32_t  s_lastStatsStart = 0;       // fetch-task only (serialized)
 static ApiPlane* s_parseBuf       = nullptr; // fetch-task only, lazy PSRAM
 
+// Persistent TCP socket for the local feeder.
+//
+// WHY: the 2 s poll opened a fresh connection every time — ~30 per minute — and
+// measured instrumentation attributed the entire ~72 B/s internal-heap drain to
+// feeder run count (iss contributed exactly 0). The drain plateaued below
+// AR_TLS_HEAP_FLOOR, which is what silently shut off routes, weather and logo
+// fetches for the rest of every boot.
+//
+// The feeder speaks HTTP/1.0 deliberately: HTTP/1.0 has no chunked transfer
+// encoding, so deserializeJson(doc, http.getStream()) can never be fed chunk
+// headers. HTTP/1.0 also defaults to close-per-request — unless the client asks
+// for persistence explicitly. Verified against the real feeder: nginx answers an
+// HTTP/1.0 request carrying "Connection: keep-alive" with both
+// "Connection: keep-alive" AND "Content-Length". So we get connection reuse and
+// keep the no-chunking guarantee. One connection per boot instead of 30/min.
+//
+// Task context only, and one feeder task exists at a time (g_fetchInProgress),
+// so a single static socket needs no lock.
+static WiFiClient s_lan;
+static char       s_lanAuth[FEED_URL_MAX] = "";   // scheme://host:port in use
+
+// "http://h:8080/a/b.json" -> "http://h:8080". Empty on a malformed URL.
+static void urlAuthority(const char* url, char* out, size_t outSz) {
+  out[0] = '\0';
+  const char* p = strstr(url, "://");
+  if (!p) return;
+  const char* slash = strchr(p + 3, '/');
+  size_t n = slash ? (size_t)(slash - url) : strlen(url);
+  if (n >= outSz) return;
+  memcpy(out, url, n);
+  out[n] = '\0';
+}
+
+// Hand back the shared socket, dropping it first if the target moved. Without
+// this, editing the feeder URL would send the new path down the old server's
+// still-open connection — HTTPClient::connect() reuses on connected() alone and
+// never re-checks the host.
+static WiFiClient& lanSocket(const char* url) {
+  char auth[FEED_URL_MAX];
+  urlAuthority(url, auth, sizeof(auth));
+  if (strcmp(auth, s_lanAuth) != 0) {
+    s_lan.stop();
+    strlcpy(s_lanAuth, auth, sizeof(s_lanAuth));
+  }
+  return s_lan;
+}
+
 // ============================================================
 //  Small helpers (task context)
 // ============================================================
@@ -192,18 +239,20 @@ static bool tryLocal(const FeederJob& job) {
   if (buildAltUrl(job.feedUrl, alt, sizeof(alt))) urls[1] = alt;
 
   for (int u = 0; u < 2 && urls[u]; u++) {
-    WiFiClient net;
+    WiFiClient& net = lanSocket(urls[u]);
     HTTPClient http;
     http.setConnectTimeout(HTTP_LAN_CONNECT_MS);
     http.setTimeout(HTTP_LAN_TIMEOUT_MS);
-    http.useHTTP10(true);
+    http.useHTTP10(true);        // no chunked encoding, ever
+    http.setReuse(true);         // ...but keep the socket (useHTTP10 clears this)
     if (!http.begin(net, urls[u])) {
       Serial.printf("[feeder] bad local url %s\n", urls[u]);
       continue;
     }
+    http.addHeader("Connection", "keep-alive");   // HTTP/1.0 needs this spelled out
     int code = http.GET();
     bool ok = (code == 200) && fetchParse(http.getStream(), true, job);
-    http.end();
+    http.end();                                   // reuse=true -> socket stays open
     if (ok) return true;
     Serial.printf("[feeder] local %s -> HTTP %d\n", urls[u], code);
   }
@@ -251,12 +300,14 @@ static void fetchStats(const FeederJob& job) {
   url[dirLen] = '\0';
   strlcat(url, STATS_FILE, sizeof(url));
 
-  WiFiClient net;
+  WiFiClient& net = lanSocket(url);
   HTTPClient http;
   http.setConnectTimeout(HTTP_LAN_CONNECT_MS);
   http.setTimeout(HTTP_LAN_TIMEOUT_MS);
   http.useHTTP10(true);
+  http.setReuse(true);
   if (!http.begin(net, url)) return;
+  http.addHeader("Connection", "keep-alive");
   int code = http.GET();
   if (code == 200) {
     StaticJsonDocument<STATS_FILTER_BYTES> filt;
