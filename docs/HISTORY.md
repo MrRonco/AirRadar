@@ -49,3 +49,27 @@ LVGL draw buffer in internal SRAM but its heap in PSRAM; one TLS connection at a
 mbedTLS starves; change-cache every widget write to stop redraw-vs-DMA wiggle; ISS on
 plain HTTP to dodge an esp-tls leak. See `docs/V7_PORT.md` for the full findings, and
 `firmware/BUILD.md` to build/flash. Installs one-click via `flasher/` (ESP Web Tools).
+
+### v7.0.1 — the memory-starvation round
+A second live session found the wiggle had returned *and* the device was silently
+rebooting itself. Metrics forensics (plus a controlled quiet-vs-busy experiment, because
+polling `/metrics` perturbs the very heap it reports) showed internal SRAM falling ~66 B/s
+from boot, hitting a fragmentation cliff — 30 KB free but only a 10 KB largest block —
+and latching at ~17 KB, permanently below the 45 KB TLS floor. Everything optional was
+shed forever: no routes, no weather, no new logos. Airline logos still appeared, which is
+exactly why the symptom looked like a data bug rather than a RAM bug — they load from the
+FATFS cache with no TLS.
+
+Four root causes, all distinct: (1) `setHidden()` wasn't change-cached and LVGL flag
+writes invalidate unconditionally, repainting the whole map 4×/s — the wiggle;
+(2) the 96 KB internal draw buffer was starving mbedTLS, and below the floor every
+optional fetch still spawned a 12 KB-stack task just to find the gate shut, which was
+itself the fragmentation engine; (3) `setSwapBytes(true)` silently disabled LovyanGFX's
+per-row `memcpy`, making every flushed pixel an individual store into the PSRAM
+framebuffer; (4) carrier names came only from the feeder's FAA/Transport-Canada database,
+so foreign registrations had none — while adsbdb was returning `airline.name` in a
+response we were already fetching and filtering out.
+
+Result on hardware: free internal heap 17 KB → 159 KB, largest block 10 KB → 65 KB,
+minimum-ever 124 B → 51 KB, weather and routes alive again. Routes also now walk the
+visible list instead of resolving for the selected aircraft only.

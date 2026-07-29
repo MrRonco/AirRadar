@@ -86,7 +86,35 @@ arduino-cli monitor -p /dev/cu.wchusbserial* -c baudrate=115200
    (This was the disappearing range-pill bug.)
 7. **FreeSans GFX fonts are 7-bit ASCII.** No degree symbol (0xF8) or other high
    glyphs — they render as garbage boxes.
-8. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
+8. **(v7) LVGL flag writes invalidate unconditionally.** `lv_obj_add_flag`/
+   `clear_flag` repaint the object even when the flag already had that value.
+   `setHidden()` was called every tick on the map image, so the whole 392×392
+   map repainted ~4×/s (~2.5 MB/s of PSRAM traffic against a panel DMA that
+   needs 25 MB/s) — that was the "wiggle", and it's why it only ever appeared
+   once a map image existed. Every dynamic LVGL write must be change-cached,
+   flags included.
+9. **(v7) The LVGL draw buffer is 800×30 (48 KB) internal SRAM — not 60 lines.**
+   96 KB starved everything else: internal heap settled ~17 KB, permanently
+   below `AR_TLS_HEAP_FLOOR`, so routes/weather/logos were shed forever and the
+   device eventually rebooted. It must stay in internal SRAM (PSRAM buffers
+   contend with the panel DMA), just not that large.
+10. **(v7) `lcd.setSwapBytes(false)` — we byte-swap in `flush_cb` ourselves.**
+   With the flag on, LovyanGFX resolves `pushImage` through the `rgb565_t`
+   pixelcopy specialisation, which sets `no_convert=false` and skips
+   `Panel_FrameBufferBase::writeImage`'s per-row `memcpy` — every flushed pixel
+   became an individual convert-and-store into PSRAM. Swapping in internal SRAM
+   first keeps the bulk `memcpy`. `halReadRect()` undoes it for `/screen.bmp`.
+11. **(v7) Check the TLS gate in LOOP context before spawning a task.**
+   Network tasks take a 12 KB *internal* stack; spawning one only to discover
+   the gate is shut burns the very RAM the gate protects (~80 no-op
+   create/destroy cycles a minute — the fragmentation engine that pinned
+   `heap_largest` at 10 KB). Use `tlsGateOpen()`. The gate tests free size *and*
+   largest free block, because mbedTLS needs a ~16.4 KB contiguous buffer.
+12. **(v7) A blip holder must bound its children.** `lv_obj_move_to()`
+   invalidates only the holder's own rect — `lv_obj_move_children_by()` shifts
+   children without invalidating them — so a label hanging outside leaves a
+   ghost at its old position.
+13. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
    decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
    over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,
    ±noise, top highlight, bottom shade. Chrome changes require editing `buildChrome()`
