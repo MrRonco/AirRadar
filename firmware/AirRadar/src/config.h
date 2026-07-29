@@ -62,7 +62,15 @@
 #define SCOPE_CX 400
 #define SCOPE_CY 240   // true centre
 #define SCOPE_R  212   // disc 120,687 -> 141,196 px (+17%)
-#define MAP_SIZE (SCOPE_R*2)              // 392x392 map image under the rings
+#define MAP_SIZE (SCOPE_R*2)              // disc diameter — the map's SCALE reference
+// The base map is full-bleed: it fills the panel and is dimmed outside the
+// coverage circle, so the disc reads as a lens over live receiver coverage.
+// Dimming is not decoration — it is what lets the cards stay LV_OPA_COVER over
+// the map instead of needing translucency (and losing LV_COVER_RES_COVER).
+#define MAP_W 800
+#define MAP_H 480
+#define MAP_DIM_PCT   30                  // brightness outside the circle, %
+#define MAP_DIM_FEATHER 10                // px of soft falloff at the edge
 // Cards
 #define CARD_W   168   // tangent to the disc, 8 px gutter
 #define CARD_TALL_H 376

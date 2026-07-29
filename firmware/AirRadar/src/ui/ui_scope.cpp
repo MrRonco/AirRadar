@@ -464,22 +464,27 @@ void scopeBuild(lv_obj_t* parent) {
   s_lastMapGen = 0;
   s_lastRangeShown = -1;
 
+  // Full-bleed base map on the screen root, behind everything. It is dimmed to
+  // MAP_DIM_PCT outside the range circle by the resampler, so the disc still
+  // reads as the edge of receiver coverage and the cards can stay opaque.
+  s_mapImg = lv_img_create(parent);
+  lv_obj_set_pos(s_mapImg, 0, 0);
+  lv_obj_add_flag(s_mapImg, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_background(s_mapImg);
+
   s_clip = lv_obj_create(parent);
   lv_obj_remove_style_all(s_clip);
   lv_obj_set_pos(s_clip, SCOPE_X0, SCOPE_Y0);
   lv_obj_set_size(s_clip, SCOPE_D, SCOPE_D);
-  lv_obj_set_style_radius(s_clip, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_clip_corner(s_clip, true, 0);
-  lv_obj_set_style_bg_color(s_clip, C_INK, 0);   // dark floor when no map
-  lv_obj_set_style_bg_opa(s_clip, LV_OPA_COVER, 0);
+  // Transparent, and NO clip_corner. Nothing needs clipping — scopeToScreen()
+  // rejects anything beyond the range ring, so a blip can never leave the
+  // circle — and clip_corner made LVGL answer COVER_CHECK with MASKED, which
+  // forced every invalidation inside the scope to redraw from the screen root.
+  lv_obj_set_style_bg_opa(s_clip, LV_OPA_TRANSP, 0);
   lv_obj_clear_flag(s_clip, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(s_clip, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(s_clip, scopeEventCb, LV_EVENT_CLICKED, nullptr);
   lv_obj_add_event_cb(s_clip, scopeEventCb, LV_EVENT_GESTURE, nullptr);
-
-  s_mapImg = lv_img_create(s_clip);            // src set by scopeApplyMapImage
-  lv_obj_set_pos(s_mapImg, 0, 0);
-  lv_obj_add_flag(s_mapImg, LV_OBJ_FLAG_HIDDEN);
 
   scopeBuildRingsAndCross();
   scopeBuildRangeLabels();

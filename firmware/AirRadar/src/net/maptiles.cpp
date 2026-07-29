@@ -25,13 +25,18 @@
 
 // ---------- file-local constants ----------
 static const int      TILE_PX          = 256;                  // slippy tile edge
-static const int      GRID_N           = 3;                    // 3x3 tile grid
-static const int      MOSAIC_PX        = TILE_PX * GRID_N;     // 768
+// 5x3, not 3x3: the output is now 800x480 at the disc's metres-per-pixel, so a
+// 768 px mosaic no longer spans it. Worst-case centring needs 2 tiles of margin
+// horizontally and 1 vertically.
+static const int      GRID_W           = 5;
+static const int      GRID_H           = 3;
+static const int      MOSAIC_W         = TILE_PX * GRID_W;     // 1280
+static const int      MOSAIC_H         = TILE_PX * GRID_H;     // 768
 static const int      ZOOM_MIN         = 3;
 static const int      ZOOM_MAX         = 12;
 static const size_t   TILE_BUF_BYTES   = 80 * 1024;            // PNG download buffer
-static const size_t   MAP_BUF_BYTES    = (size_t)MAP_SIZE * MAP_SIZE * 2;
-static const size_t   MOSAIC_BUF_BYTES = (size_t)MOSAIC_PX * MOSAIC_PX * 2;
+static const size_t   MAP_BUF_BYTES    = (size_t)MAP_W * MAP_H * 2;   // 768,000
+static const size_t   MOSAIC_BUF_BYTES = (size_t)MOSAIC_W * MOSAIC_H * 2;
 static const uint32_t HTTP_TIMEOUT_MS  = 10000;
 static const uint32_t STALL_TIMEOUT_MS = 4000;                 // mid-stream stall guard
 static const uint32_t RETRY_DELAY_MS   = 30000;
@@ -166,7 +171,7 @@ static bool decodeTileToMosaic(LGFX_Sprite& spr, size_t pngLen, int gx, int gy) 
   const uint16_t* src = (const uint16_t*)spr.getBuffer();
   if (!src) return false;
   for (int row = 0; row < TILE_PX; row++) {
-    memcpy(&s_mosaic[(size_t)(gy * TILE_PX + row) * MOSAIC_PX + gx * TILE_PX],
+    memcpy(&s_mosaic[(size_t)(gy * TILE_PX + row) * MOSAIC_W + gx * TILE_PX],
            &src[(size_t)row * TILE_PX], (size_t)TILE_PX * 2);
   }
   return true;
@@ -182,8 +187,8 @@ static bool buildMosaic(const MapJob& job, int z, double& cxPx, double& cyPx) {
   const double ytF    = (1.0 - asinh(tan(latRad)) / M_PI) / 2.0 * (double)n;
   const int    xt     = (int)floor(xtF);
   const int    yt     = (int)floor(ytF);
-  cxPx = (xtF - (double)(xt - 1)) * TILE_PX;
-  cyPx = (ytF - (double)(yt - 1)) * TILE_PX;
+  cxPx = (xtF - (double)(xt - GRID_W / 2)) * TILE_PX;
+  cyPx = (ytF - (double)(yt - GRID_H / 2)) * TILE_PX;
 
   memset(s_mosaic, 0, MOSAIC_BUF_BYTES);
 
@@ -198,11 +203,11 @@ static bool buildMosaic(const MapJob& job, int z, double& cxPx, double& cyPx) {
   WiFiClientSecure client;
   client.setInsecure();                 // keyless public CDN, no cert pinning
   bool ok = true;
-  for (int gy = 0; gy < GRID_N && ok; gy++) {
-    const int ty = yt - 1 + gy;
+  for (int gy = 0; gy < GRID_H && ok; gy++) {
+    const int ty = yt - GRID_H / 2 + gy;
     if (ty < 0 || ty >= n) continue;    // beyond the poles: leave black
-    for (int gx = 0; gx < GRID_N && ok; gx++) {
-      int tx = (xt - 1 + gx) % n;       // wrap across the antimeridian
+    for (int gx = 0; gx < GRID_W && ok; gx++) {
+      int tx = (xt - GRID_W / 2 + gx) % n;   // wrap across the antimeridian
       if (tx < 0) tx += n;
       size_t len = 0;
       if (!fetchTileToBuf(client, z, tx, ty, len) ||
@@ -224,24 +229,25 @@ static void resampleAndTint(const MapJob& job, int z, double cxPx, double cyPx) 
   const double mpp    = MERC_MPP_Z0 * cos(latRad) / (double)(1 << z);
   const double halfPx = ((double)job.rangeKm * 1000.0) / mpp; // scope radius, mosaic px
   const double step   = (halfPx * 2.0) / (double)MAP_SIZE;    // mosaic px per out px
-  const int    half   = MAP_SIZE / 2;
-  const float  r2     = (float)(half * half);
+  const int    ocx    = MAP_W / 2;
+  const int    ocy    = MAP_H / 2;
+  const float  rIn    = (float)(SCOPE_R - MAP_DIM_FEATHER);
+  const float  rOut   = (float)(SCOPE_R + MAP_DIM_FEATHER);
 
-  for (int oy = 0; oy < MAP_SIZE; oy++) {
-    const double my = cyPx + ((double)oy + 0.5 - half) * step;
+  for (int oy = 0; oy < MAP_H; oy++) {
+    const double my = cyPx + ((double)oy + 0.5 - ocy) * step;
     int syi = (int)my;
-    if (syi < 0) syi = 0; else if (syi >= MOSAIC_PX) syi = MOSAIC_PX - 1;
-    const uint16_t* srcRow = &s_mosaic[(size_t)syi * MOSAIC_PX];
-    uint16_t*       dstRow = &s_back[(size_t)oy * MAP_SIZE];
-    const int dy = oy - half;
+    if (syi < 0) syi = 0; else if (syi >= MOSAIC_H) syi = MOSAIC_H - 1;
+    const uint16_t* srcRow = &s_mosaic[(size_t)syi * MOSAIC_W];
+    uint16_t*       dstRow = &s_back[(size_t)oy * MAP_W];
+    const int dy = oy - ocy;
 
-    for (int ox = 0; ox < MAP_SIZE; ox++) {
-      const int   dx = ox - half;
-      const float d2 = (float)(dx * dx + dy * dy);
-      if (d2 > r2) { dstRow[ox] = 0x0000; continue; }
-      const double mx = cxPx + ((double)ox + 0.5 - half) * step;
+    for (int ox = 0; ox < MAP_W; ox++) {
+      const int   dx = ox - ocx;
+      const float d  = sqrtf((float)(dx * dx + dy * dy));
+      const double mx = cxPx + ((double)ox + 0.5 - ocx) * step;
       int sxi = (int)mx;
-      if (sxi < 0) sxi = 0; else if (sxi >= MOSAIC_PX) sxi = MOSAIC_PX - 1;
+      if (sxi < 0) sxi = 0; else if (sxi >= MOSAIC_W) sxi = MOSAIC_W - 1;
 
       const uint16_t c = __builtin_bswap16(srcRow[sxi]);      // swap565 -> rgb565
       const int r8 = ((c >> 11) & 0x1F) << 3;
@@ -250,14 +256,26 @@ static void resampleAndTint(const MapJob& job, int z, double cxPx, double cyPx) 
       int lum = (r8 * 77 + g8 * 150 + b8 * 29) >> 8;
       lum = (lum * TINT_LUM_NUM) / TINT_LUM_DEN;
       if (lum > 255) lum = 255;
-      int r = (lum * TINT_R_PCT) / 100 + TINT_R_ADD;          // max 91
-      int g = (lum * TINT_G_PCT) / 100 + TINT_G_ADD;          // max 178
+      int r = (lum * TINT_R_PCT) / 100 + TINT_R_ADD;
+      int g = (lum * TINT_G_PCT) / 100 + TINT_G_ADD;
       int b = (lum * TINT_B_PCT) / 100 + TINT_B_ADD;
       if (b > 255) b = 255;
-      const float vig = 1.0f - VIGNETTE_STRENGTH * (d2 / r2);
-      r = (int)((float)r * vig);
-      g = (int)((float)g * vig);
-      b = (int)((float)b * vig);
+
+      // Coverage lens: full brightness inside the range circle, MAP_DIM_PCT
+      // outside it, with a short feather across the boundary. The circle then
+      // means something — it is the edge of what the receiver can see — and the
+      // darkened field is what lets the cards stay opaque on top of the map.
+      float k;
+      if (d <= rIn)       k = 1.0f - VIGNETTE_STRENGTH * (d * d) / (float)(SCOPE_R * SCOPE_R);
+      else if (d >= rOut) k = MAP_DIM_PCT / 100.0f;
+      else {
+        const float t  = (d - rIn) / (rOut - rIn);           // 0..1 across the edge
+        const float in = 1.0f - VIGNETTE_STRENGTH;
+        k = in + (MAP_DIM_PCT / 100.0f - in) * t;
+      }
+      r = (int)((float)r * k);
+      g = (int)((float)g * k);
+      b = (int)((float)b * k);
       dstRow[ox] = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
     }
   }
@@ -276,6 +294,15 @@ static void mapFetchTask(void*) {
   }
   const MapJob job = s_job;            // snapshot was taken in loop context
   const int z = chooseZoom(job.lat, job.rangeKm);
+  s_mosaic = (uint16_t*)heap_caps_malloc(MOSAIC_BUF_BYTES, MALLOC_CAP_SPIRAM);
+  if (!s_mosaic) {
+    Serial.println("[map] mosaic alloc failed - skipping this refresh");
+    tlsRelease();
+    s_fetchFailed = true;
+    s_fetchInFlight = false;
+    vTaskDelete(NULL);
+    return;
+  }
   Serial.printf("[map] fetch lat=%.4f lon=%.4f range=%dkm -> z%d\n",
                 job.lat, job.lon, job.rangeKm, z);
   double cxPx = 0.0, cyPx = 0.0;
@@ -283,6 +310,10 @@ static void mapFetchTask(void*) {
   tlsRelease();
   if (ok) {
     resampleAndTint(job, z, cxPx, cyPx);
+  }
+  heap_caps_free(s_mosaic);            // 1.9 MB back to PSRAM immediately
+  s_mosaic = nullptr;
+  if (ok) {
     Serial.println("[map] stitch complete");
     s_stitchedReady = true;
   } else {
@@ -300,13 +331,13 @@ static void mapFetchTask(void*) {
 void mapBegin() {
   s_bufA    = (uint16_t*)heap_caps_malloc(MAP_BUF_BYTES, MALLOC_CAP_SPIRAM);
   s_bufB    = (uint16_t*)heap_caps_malloc(MAP_BUF_BYTES, MALLOC_CAP_SPIRAM);
-  s_mosaic  = (uint16_t*)heap_caps_malloc(MOSAIC_BUF_BYTES, MALLOC_CAP_SPIRAM);
+  // s_mosaic is allocated per fetch and freed again — at 1.9 MB it is not worth
+  // holding for the whole session just to re-stitch on a range change.
   s_tileBuf = (uint8_t*)heap_caps_malloc(TILE_BUF_BYTES, MALLOC_CAP_SPIRAM);
-  if (!s_bufA || !s_bufB || !s_mosaic || !s_tileBuf) {
+  if (!s_bufA || !s_bufB || !s_tileBuf) {
     Serial.println("[map] PSRAM alloc failed - map layer disabled");
     if (s_bufA)    { heap_caps_free(s_bufA);    s_bufA = nullptr; }
     if (s_bufB)    { heap_caps_free(s_bufB);    s_bufB = nullptr; }
-    if (s_mosaic)  { heap_caps_free(s_mosaic);  s_mosaic = nullptr; }
     if (s_tileBuf) { heap_caps_free(s_tileBuf); s_tileBuf = nullptr; }
     return;
   }
@@ -316,13 +347,13 @@ void mapBegin() {
 
   s_imgDsc.header.always_zero = 0;
   s_imgDsc.header.cf = LV_IMG_CF_TRUE_COLOR;
-  s_imgDsc.header.w  = MAP_SIZE;
-  s_imgDsc.header.h  = MAP_SIZE;
+  s_imgDsc.header.w  = MAP_W;
+  s_imgDsc.header.h  = MAP_H;
   s_imgDsc.data_size = MAP_BUF_BYTES;
   s_imgDsc.data      = (const uint8_t*)s_front;
-  Serial.printf("[map] buffers ready (%u KB PSRAM)\n",
-                (unsigned)((MAP_BUF_BYTES * 2 + MOSAIC_BUF_BYTES +
-                            TILE_BUF_BYTES) / 1024));
+  Serial.printf("[map] buffers ready (%u KB PSRAM resident, +%u KB per fetch)\n",
+                (unsigned)((MAP_BUF_BYTES * 2 + TILE_BUF_BYTES) / 1024),
+                (unsigned)(MOSAIC_BUF_BYTES / 1024));
 }
 
 void mapLoop(uint32_t nowMs) {
