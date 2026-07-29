@@ -22,6 +22,7 @@ static const int      kSlots         = 12;                // LRU-ish ring
 static const uint32_t kPrefetchMs    = 6000;              // visible-aircraft walk
 static const size_t   kPngMax        = 96 * 1024;         // download cap
 static const uint32_t kHttpTimeoutMs = 8000;
+static const uint32_t kTlsShutRetryMs = 30000;            // gate shut: back right off
 static const size_t   kPixBytes      = LOGO_PX * LOGO_PX * 2;
 
 struct LogoSlot {
@@ -273,9 +274,21 @@ void logosLoop(uint32_t nowMs) {
     sl.dsc.data_size = kPixBytes;
     sl.dsc.data      = (const uint8_t*)sl.pix;
 
-    // Persistent tier: flash hit means no task, no network, ~instant.
+    // Persistent tier: flash hit means no task, no network, ~instant. This
+    // still works with the TLS gate shut — which is why logos keep appearing
+    // when routes and weather do not.
     if (fsLoad(sl.key, sl.pix)) {
       sl.state = LOGO_OK;
+      s_reqKey[0] = 0;
+      return;
+    }
+
+    // Network tier: check the gate HERE. logoTask used to spawn a 12 KB
+    // internal stack, discover the gate was shut, and die — several times a
+    // minute, burning the very heap the gate protects.
+    if (!tlsGateOpen()) {
+      sl.state = LOGO_UNKNOWN;                 // not an answer: retry later
+      s_retryAfterMs = millis() + kTlsShutRetryMs;
       s_reqKey[0] = 0;
       return;
     }

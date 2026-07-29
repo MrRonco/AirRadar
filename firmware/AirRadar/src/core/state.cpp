@@ -29,6 +29,8 @@ volatile bool g_pendingOk = false;
 
 char g_routeResHex[8] = "";
 char g_routeResOrigin[5] = "", g_routeResDest[5] = "";
+char g_routeResAirline[28] = "";
+volatile bool g_routeResFinal = false;
 volatile bool g_routeResReady = false;
 
 volatile bool g_fetchInProgress = false;
@@ -132,15 +134,29 @@ void settingsSaveFavs() {
 // ============================================================
 static volatile bool s_tlsBusy = false;
 
+// Both tests matter: total free covers the handshake's many small allocations,
+// largest-block covers mbedTLS's single ~16.4 KB contiguous record buffer.
+static bool tlsHeapOk() {
+  return heap_caps_get_free_size(MALLOC_CAP_INTERNAL) >= AR_TLS_HEAP_FLOOR &&
+         heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) >= AR_TLS_BLOCK_FLOOR;
+}
+
+uint32_t g_tlsShedCount = 0;           // exported in /metrics: RAM-shed forensics
+
 bool tlsTryAcquire(bool essential) {
-  if (!essential &&
-      heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < AR_TLS_HEAP_FLOOR)
-    return false;                      // shed eye-candy before the feed starves
+  if (!essential && !tlsHeapOk()) {     // shed eye-candy before the feed starves
+    g_tlsShedCount++;
+    return false;
+  }
   bool got = false;
   portENTER_CRITICAL(&g_dataMux);
   if (!s_tlsBusy) { s_tlsBusy = true; got = true; }
   portEXIT_CRITICAL(&g_dataMux);
   return got;
+}
+
+bool tlsGateOpen() {
+  return !s_tlsBusy && tlsHeapOk();
 }
 
 void tlsRelease() {

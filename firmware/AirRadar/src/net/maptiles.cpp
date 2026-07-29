@@ -385,6 +385,16 @@ void mapLoop(uint32_t nowMs) {
   //    still waiting to be published (it owns s_back until the swap).
   if (s_refreshWanted && !s_fetchInFlight && !s_stitchedReady &&
       g_set.mapEn && g_wifiUp) {
+    // Gate in loop context. mapFetchTask used to spawn a 12 KB internal stack
+    // just to find the gate shut, and the 15 s self-heal re-armed it forever.
+    // Clearing the want flag first is what stops this from re-testing the heap
+    // on every single loop pass; the armed retry brings us back.
+    if (!tlsGateOpen()) {
+      s_refreshWanted = false;
+      s_retryArmed    = true;                  // quiet retry, no task, no churn
+      s_retryAtMs     = nowMs + RETRY_DELAY_MS;
+      return;
+    }
     s_refreshWanted = false;
     double lat = g_set.homeLat;
     if (lat >  MERC_LAT_LIMIT) lat =  MERC_LAT_LIMIT;
@@ -396,7 +406,11 @@ void mapLoop(uint32_t nowMs) {
     if (xTaskCreatePinnedToCore(mapFetchTask, "mapfetch", AR_NET_TASK_STACK,
                                 NULL, 1, NULL, 0) != pdPASS) {
       s_fetchInFlight = false;
-      s_refreshWanted = true;                   // try again next loop pass
+      // Arm the delayed retry rather than re-setting s_refreshWanted: the
+      // latter retried on the very next loop pass, so a heap too fragmented
+      // for a 12 KB stack produced a spawn-fail storm at loop rate.
+      s_retryArmed = true;
+      s_retryAtMs  = nowMs + RETRY_DELAY_MS;
       Serial.println("[map] task spawn failed");
     }
   }

@@ -97,6 +97,7 @@ static char s_bufAlt[16], s_bufSpd[16], s_bufHdg[16], s_bufClimb[16];
 static char s_bufDist[24], s_bufSqk[8], s_bufLive[20];
 static lv_color_t s_colAlt = {}, s_colClimb = {}, s_colSqk = {};
 static lv_color_t s_colLive = {}, s_colLiveDot = {};
+static lv_color_t s_colOrigin = {}, s_colDest = {};   // dimmed while unresolved
 
 // Time card
 static lv_obj_t *s_tmTime, *s_tmDate;
@@ -314,7 +315,6 @@ static void buildSelectedTop(lv_obj_t* cont) {
   s_selRoute = mkBox(cont);
   lv_obj_set_pos(s_selRoute, 0, SEL_ROUTE_Y);
   lv_obj_set_size(s_selRoute, CONTENT_W, SEL_ROUTE_H);
-  lv_obj_add_flag(s_selRoute, LV_OBJ_FLAG_HIDDEN);
   s_selOrigin = mkLbl(s_selRoute, F_L28, C_IVORY);
   lv_obj_set_pos(s_selOrigin, 0, 0);
   s_selDest = mkLbl(s_selRoute, F_L28, C_IVORY);
@@ -592,15 +592,16 @@ static void updateSelectedIdentity(const Track* t) {
     lv_obj_set_style_bg_color(s_selTile, bg, 0);
   }
 
-  bool hasRoute = t->origin[0] && t->dest[0];
-  setHiddenCached(s_selRoute, !hasRoute);
-  if (hasRoute) {
-    char code[8];
-    upCopy(code, sizeof(code), t->origin);
-    setTextCached(s_selOrigin, s_bufOrigin, sizeof(s_bufOrigin), code);
-    upCopy(code, sizeof(code), t->dest);
-    setTextCached(s_selDest, s_bufDest, sizeof(s_bufDest), code);
-  }
+  // The row stays visible with "--" placeholders rather than vanishing: a row
+  // that appears and disappears shifted everything below it, and a blank
+  // reads as "no data" when the truth is usually "lookup still pending".
+  char code[8];
+  upCopy(code, sizeof(code), t->origin[0] ? t->origin : "--");
+  setTextCached(s_selOrigin, s_bufOrigin, sizeof(s_bufOrigin), code);
+  upCopy(code, sizeof(code), t->dest[0] ? t->dest : "--");
+  setTextCached(s_selDest, s_bufDest, sizeof(s_bufDest), code);
+  setColorCached(s_selOrigin, &s_colOrigin, t->origin[0] ? C_IVORY : C_DIM);
+  setColorCached(s_selDest,   &s_colDest,   t->dest[0]   ? C_IVORY : C_DIM);
 
   setTextCached(s_selFrame, s_bufFrame, sizeof(s_bufFrame),
                 t->desc[0] ? t->desc : t->typeCode);

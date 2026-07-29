@@ -69,6 +69,15 @@ extern volatile bool g_pendingOk;
 // route lookup result (single slot)
 extern char g_routeResHex[8];
 extern char g_routeResOrigin[5], g_routeResDest[5];
+// adsbdb also knows the operator. Feeder databases are FAA/TC-centric, so
+// foreign-registered aircraft (Etihad, Royal Jordanian, ...) arrive with an
+// empty ownOp; this fills that gap. "" when adsbdb has no airline either.
+extern char g_routeResAirline[28];
+// Definitive answer (HTTP 200 parsed, or a 404 "unknown callsign") vs a
+// transient miss (timeout / TLS busy / parse error). Only a definitive answer
+// may set Track::routeTried — otherwise one network hiccup blanks a flight's
+// route until its callsign changes.
+extern volatile bool g_routeResFinal;
 extern volatile bool g_routeResReady;
 
 // ---------- runtime flags ----------
@@ -91,6 +100,14 @@ extern bool    g_timeSynced;               // NTP has produced a sane time
 // eye-candy first and the feed last.
 bool tlsTryAcquire(bool essential = false);
 void tlsRelease();
+// Loop-context advisory: would an optional tlsTryAcquire() succeed right now?
+// Spawning a 12 KB-stack task only for it to discover the gate is shut burns
+// the very internal RAM the gate is protecting — check this BEFORE spawning.
+bool tlsGateOpen();
+// How many optional TLS fetches have been refused for want of internal RAM.
+// Without this, "this airline has no route" and "we are out of heap" look
+// identical from the outside. Exported by /metrics.
+extern uint32_t g_tlsShedCount;
 
 // ---------- misc helpers (implemented in state.cpp) ----------
 float haversineKm(double la1, double lo1, double la2, double lo2);

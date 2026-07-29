@@ -676,6 +676,11 @@ static void handleMetrics() {
   s += F("# TYPE airradar_heap_largest gauge\n");
   snprintf(l, sizeof(l), "airradar_heap_largest %u\n",
            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); s += l;
+  // Rising tls_shed = optional fetches refused for want of internal RAM, i.e.
+  // blank routes/weather are a memory problem, not a data problem.
+  s += F("# TYPE airradar_tls_shed counter\n");
+  snprintf(l, sizeof(l), "airradar_tls_shed %lu\n",
+           (unsigned long)g_tlsShedCount); s += l;
   s += F("# TYPE airradar_uptime_seconds gauge\n");
   snprintf(l, sizeof(l), "airradar_uptime_seconds %lu\n",
            (unsigned long)(millis() / 1000UL)); s += l;

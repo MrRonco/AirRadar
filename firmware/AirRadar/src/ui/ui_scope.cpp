@@ -90,7 +90,15 @@ static uint32_t  s_lastGestureMs  = 0;
 // ============================================================
 //  Small helpers
 // ============================================================
+// Change-cached on purpose. lv_obj_add_flag/clear_flag INVALIDATE the object
+// unconditionally in LVGL 8.3 — they do not check whether the flag already had
+// that value. scopeApplyMapImage() and scopeUpdateIss() call this every tick,
+// so the unguarded version repainted the whole 392x392 map image ~4x/second
+// (614 kpx/s, ~2.5 MB/s of extra PSRAM traffic) against a panel DMA that needs
+// 25 MB/s continuous. That is the "wiggle", and it explains why it only ever
+// appeared once a map image existed.
 static inline void setHidden(lv_obj_t* o, bool hide) {
+  if (hide == lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) return;   // no-op write
   if (hide) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
   else      lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
 }

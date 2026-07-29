@@ -21,6 +21,7 @@ static const size_t   kWxDocBytes    = 1536;   // Open-Meteo "current" payload
 static const size_t   kIssDocBytes   = 1024;   // wheretheiss.at payload
 static const size_t   kRouteDocBytes = 2048;   // adsbdb filtered payload (v6-proven)
 static const size_t   kUrlMax        = 240;
+static const uint32_t kTlsRetryMs    = 30000;  // re-arm delay when the TLS gate is shut
 
 // ---------- weather job/flags ----------
 struct WxJob { double lat, lon; };
@@ -28,6 +29,10 @@ static WxJob         s_wxJob;                  // written in loop ctx before spa
 static volatile bool s_wxBusy   = false;       // wx task alive
 static bool          s_wxForce  = true;        // loop-ctx only: fetch ASAP
 static uint32_t      s_wxLastKick = 0;
+// Set by wxTask when it loses the TLS gate after being spawned. Without it the
+// task silently consumed its 15-minute slot, so one lost race meant no weather
+// for the rest of the boot (field-observed: wx.valid stayed false all session).
+static volatile bool s_wxRetrySoon = false;
 
 // ---------- ISS job/flags ----------
 static volatile bool s_issBusy    = false;     // iss task alive
@@ -42,14 +47,23 @@ static RouteJob s_routeJob;                    // written in loop ctx before spa
 // ============================================================
 //  Shared HTTPS GET -> JSON (task context)
 // ============================================================
-static volatile bool s_tlsDeferred = false;    // last httpsGetJson lost the gate
 static volatile uint32_t s_routeRetryAfterMs = 0;   // request cooldown after defer
 
+// outCode (optional) receives the HTTP status, or 0 when the request never got
+// far enough to have one (TLS gate shut / begin failed). Callers use it to tell
+// "the server answered: no such callsign" (404 — cache it) from "we never got
+// an answer" (timeout/-1 — retry later).
+// outDeferred must be a CALLER-LOCAL bool, not a file static: wxTask and
+// routeTask have independent busy flags and both run on core 0, so a shared
+// flag could be cleared by one task inside the other's read window — which
+// silently converted a deferral into a permanent "no route".
 static bool httpsGetJson(const char* url, JsonDocument& doc,
-                         JsonDocument* filter, const char* tag) {
-  s_tlsDeferred = false;
+                         JsonDocument* filter, const char* tag,
+                         int* outCode = nullptr, bool* outDeferred = nullptr) {
+  if (outCode) *outCode = 0;
+  if (outDeferred) *outDeferred = false;
   if (!tlsTryAcquire()) {                      // one TLS connection at a time
-    s_tlsDeferred = true;
+    if (outDeferred) *outDeferred = true;
     Serial.printf("[enrich] %s: TLS busy - deferred\n", tag);
     return false;                              // all callers re-poll later
   }
@@ -67,6 +81,7 @@ static bool httpsGetJson(const char* url, JsonDocument& doc,
     }
     http.addHeader("User-Agent", AR_USER_AGENT);
     int code = http.GET();
+    if (outCode) *outCode = code;
     if (code != HTTP_CODE_OK) {
       Serial.printf("[enrich] %s: http %d\n", tag, code);
       http.end();
@@ -94,7 +109,8 @@ static void wxTask(void*) {
            "&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code",
            AR_WX_API, s_wxJob.lat, s_wxJob.lon);
   DynamicJsonDocument doc(kWxDocBytes);
-  if (httpsGetJson(url, doc, nullptr, "wx")) {
+  bool deferred = false;
+  if (httpsGetJson(url, doc, nullptr, "wx", nullptr, &deferred)) {
     JsonVariantConst cur = doc["current"];
     if (!cur.isNull() && cur["temperature_2m"].is<float>()) {
       float tempC   = cur["temperature_2m"]    | 0.0f;
@@ -115,6 +131,8 @@ static void wxTask(void*) {
     } else {
       Serial.println("[enrich] wx: payload missing 'current' block");
     }
+  } else if (deferred) {
+    s_wxRetrySoon = true;   // don't swallow the 15-minute slot over a lost race
   }
   s_wxBusy = false;
   vTaskDelete(NULL);
@@ -182,7 +200,8 @@ static void issTask(void*) {
 //  Route — adsbdb (AR_ROUTE_API + callsign), single-slot result
 // ============================================================
 static void routeTask(void*) {
-  char org[5] = "", dst[5] = "";
+  char org[5] = "", dst[5] = "", airline[sizeof(g_routeResAirline)] = "";
+  bool final = false;                          // may we mark the callsign tried?
   // Callsign comes straight off the ADS-B wire — allow only [A-Za-z0-9] into
   // the URL so a hostile broadcast can't inject path/query segments.
   char safe[sizeof(s_routeJob.flight)];
@@ -195,6 +214,8 @@ static void routeTask(void*) {
     strlcpy(g_routeResHex, s_routeJob.hex, sizeof(g_routeResHex));
     g_routeResOrigin[0] = 0;
     g_routeResDest[0] = 0;
+    g_routeResAirline[0] = 0;
+    g_routeResFinal = true;                    // a blank callsign never resolves
     g_routeResReady = true;
     portEXIT_CRITICAL(&g_dataMux);
     g_routeFetching = false;
@@ -206,29 +227,47 @@ static void routeTask(void*) {
   StaticJsonDocument<512> filt;                // v6-proven filter + doc sizes
   filt["response"]["flightroute"]["origin"]["iata_code"]      = true;
   filt["response"]["flightroute"]["destination"]["iata_code"] = true;
+  // The same response carries the operator. Feeder aircraft databases are
+  // FAA/Transport-Canada centric, so foreign registrations arrive with an
+  // empty ownOp and used to show only callsign initials.
+  filt["response"]["flightroute"]["airline"]["name"]          = true;
   DynamicJsonDocument doc(kRouteDocBytes);
-  if (httpsGetJson(url, doc, &filt, "route")) {
+  int  code = 0;
+  bool deferred = false;
+  if (httpsGetJson(url, doc, &filt, "route", &code, &deferred)) {
     JsonVariantConst fr = doc["response"]["flightroute"];
     strlcpy(org, fr["origin"]["iata_code"]      | "", sizeof(org));
     strlcpy(dst, fr["destination"]["iata_code"] | "", sizeof(dst));
-  } else if (s_tlsDeferred) {
+    strlcpy(airline, fr["airline"]["name"]      | "", sizeof(airline));
+    final = true;                              // the server answered
+  } else if (deferred) {
     // Lost the TLS gate — NOT an answer. Don't mark tried; the main loop
     // re-requests once the cooldown passes.
     s_routeRetryAfterMs = millis() + 2500;
     g_routeFetching = false;
     vTaskDelete(NULL);
     return;
+  } else if (code == 404) {
+    final = true;    // adsbdb genuinely has no route for this callsign; cache it
+  } else {
+    // Timeout, DNS failure, 5xx, truncated JSON — we learned nothing. Posting
+    // this as "tried" is what made routes vanish permanently after one hiccup.
+    s_routeRetryAfterMs = millis() + 10000;
+    g_routeFetching = false;
+    vTaskDelete(NULL);
+    return;
   }
-  // Post the result even when blank/failed — that is what marks the callsign
-  // as tried (v6 semantics; callsign change resets routeTried for a retry).
   portENTER_CRITICAL(&g_dataMux);
-  strlcpy(g_routeResHex,    s_routeJob.hex, sizeof(g_routeResHex));
-  strlcpy(g_routeResOrigin, org,            sizeof(g_routeResOrigin));
-  strlcpy(g_routeResDest,   dst,            sizeof(g_routeResDest));
+  strlcpy(g_routeResHex,     s_routeJob.hex, sizeof(g_routeResHex));
+  strlcpy(g_routeResOrigin,  org,            sizeof(g_routeResOrigin));
+  strlcpy(g_routeResDest,    dst,            sizeof(g_routeResDest));
+  strlcpy(g_routeResAirline, airline,        sizeof(g_routeResAirline));
+  g_routeResFinal = final;
   g_routeResReady = true;                      // ready flag LAST
   portEXIT_CRITICAL(&g_dataMux);
-  Serial.printf("[enrich] route %s: %s -> %s\n", s_routeJob.flight,
-                org[0] ? org : "?", dst[0] ? dst : "?");
+  Serial.printf("[enrich] route %s: %s -> %s (%s)\n", s_routeJob.flight,
+                org[0] ? org : "?", dst[0] ? dst : "?",
+                airline[0] ? airline : "no airline");
   g_routeFetching = false;
   vTaskDelete(NULL);
 }
@@ -245,6 +284,10 @@ void enrichRequestRoute(const char* hex, const char* flight) {
   if (g_routeFetching) return;                 // dedupe: one lookup in flight
   if ((int32_t)(millis() - s_routeRetryAfterMs) < 0) return;   // TLS-busy cooldown
   if (!hex || !hex[0] || !flight) return;
+  // Check the gate HERE, not inside the task: loop() re-requests every pass
+  // while the selected aircraft has no route, and each spawn costs a 12 KB
+  // internal stack. Setting the cooldown also throttles the heap query.
+  if (!tlsGateOpen()) { s_routeRetryAfterMs = millis() + 3000; return; }
   char fl[sizeof(s_routeJob.flight)];
   trimCopy(fl, sizeof(fl), flight);
   if (!fl[0]) return;                          // blank callsign -> nothing to ask
@@ -254,24 +297,35 @@ void enrichRequestRoute(const char* hex, const char* flight) {
   if (xTaskCreatePinnedToCore(routeTask, "route", AR_NET_TASK_STACK,
                               NULL, 1, NULL, 0) != pdPASS) {
     g_routeFetching = false;
+    // Cooldown is essential here: loop() re-requests every pass, so without it
+    // a failing spawn becomes a failed 12 KB malloc plus a Serial line at loop
+    // rate — which blocks loop() on the UART and stalls LVGL entirely.
+    s_routeRetryAfterMs = millis() + 5000;
     Serial.println("[enrich] route: task spawn failed");
   }
 }
 
 bool enrichApplyRoute() {
   if (!g_routeResReady) return false;
-  char hex[8], org[5], dst[5];
+  char hex[8], org[5], dst[5], airline[sizeof(g_routeResAirline)];
+  bool final;
   portENTER_CRITICAL(&g_dataMux);
-  strlcpy(hex, g_routeResHex,    sizeof(hex));
-  strlcpy(org, g_routeResOrigin, sizeof(org));
-  strlcpy(dst, g_routeResDest,   sizeof(dst));
+  strlcpy(hex,     g_routeResHex,     sizeof(hex));
+  strlcpy(org,     g_routeResOrigin,  sizeof(org));
+  strlcpy(dst,     g_routeResDest,    sizeof(dst));
+  strlcpy(airline, g_routeResAirline, sizeof(airline));
+  final = g_routeResFinal;
   g_routeResReady = false;
   portEXIT_CRITICAL(&g_dataMux);
   Track* t = tracksFindByHex(hex);
   if (!t) return false;                        // track dropped while fetching
-  strlcpy(t->origin, org, sizeof(t->origin));
-  strlcpy(t->dest,   dst, sizeof(t->dest));
-  t->routeTried = true;
+  if (org[0]) strlcpy(t->origin, org, sizeof(t->origin));
+  if (dst[0]) strlcpy(t->dest,   dst, sizeof(t->dest));
+  // Fill the operator only when the feeder didn't know it — a local aircraft
+  // database entry is more specific than adsbdb's airline name. mergePlane()
+  // never overwrites ownOp with a blank, so this survives later polls.
+  if (airline[0] && !t->ownOp[0]) strlcpy(t->ownOp, airline, sizeof(t->ownOp));
+  t->routeTried = final;                       // transient failure -> retry later
   return g_selHex[0] && !strcmp(g_selHex, hex);   // true only for selected a/c
 }
 
@@ -282,17 +336,29 @@ void enrichLoop(uint32_t nowMs) {
   if (!g_wifiUp) return;
 
   // Weather: cadence AR_POLL_WEATHER_MS, or forced by enrichKickWeather().
+  if (s_wxRetrySoon && !s_wxBusy) {            // task lost the gate: re-arm short
+    s_wxRetrySoon = false;
+    s_wxLastKick = nowMs - AR_POLL_WEATHER_MS + kTlsRetryMs;
+  }
   if (g_set.wxEn && !s_wxBusy &&
       (s_wxForce || nowMs - s_wxLastKick >= AR_POLL_WEATHER_MS)) {
-    s_wxForce = false;
-    s_wxLastKick = nowMs;
-    s_wxJob.lat = g_set.homeLat;               // snapshot in loop ctx (torn-read rule)
-    s_wxJob.lon = g_set.homeLon;
-    s_wxBusy = true;
-    if (xTaskCreatePinnedToCore(wxTask, "wx", AR_NET_TASK_STACK,
-                                NULL, 1, NULL, 0) != pdPASS) {
-      s_wxBusy = false;
-      Serial.println("[enrich] wx: task spawn failed");
+    // Gate in loop context — spawning a 12 KB-stack task only for it to find
+    // the TLS gate shut wastes the internal RAM the gate exists to protect.
+    // Re-arm on a short retry instead of re-testing the heap every loop pass.
+    if (!tlsGateOpen()) {
+      s_wxForce = false;
+      s_wxLastKick = nowMs - AR_POLL_WEATHER_MS + kTlsRetryMs;
+    } else {
+      s_wxForce = false;
+      s_wxLastKick = nowMs;
+      s_wxJob.lat = g_set.homeLat;             // snapshot in loop ctx (torn-read rule)
+      s_wxJob.lon = g_set.homeLon;
+      s_wxBusy = true;
+      if (xTaskCreatePinnedToCore(wxTask, "wx", AR_NET_TASK_STACK,
+                                  NULL, 1, NULL, 0) != pdPASS) {
+        s_wxBusy = false;
+        Serial.println("[enrich] wx: task spawn failed");
+      }
     }
   }
 

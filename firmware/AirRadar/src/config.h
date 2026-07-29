@@ -88,6 +88,11 @@
 // in the esp-tls layer (field-measured); open-notify needs no TLS at all.
 #define AR_ISS_API     "http://api.open-notify.org/iss-now.json"
 #define AR_TLS_HEAP_FLOOR (45 * 1024)   // below this, optional TLS is shed
+// Free SIZE alone is the wrong test: mbedTLS wants a ~16.4 KB CONTIGUOUS
+// record buffer, so a fragmented 60 KB heap still fails the handshake while
+// reporting plenty free. Field-measured: heap_largest sat at 11 KB while
+// heap_free was 30 KB. Both tests must pass before an optional TLS fetch runs.
+#define AR_TLS_BLOCK_FLOOR (20 * 1024)
 #define AR_TILE_HOST   "basemaps.cartocdn.com"                       // CARTO dark_all
 #define AR_TILE_STYLE  "dark_all"
 #define AR_TILE_ATTRIB "(C) OSM - CARTO"
