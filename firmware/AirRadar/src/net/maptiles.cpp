@@ -19,6 +19,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <esp_heap_caps.h>
+#include <FFat.h>
 #include <math.h>
 #include <string.h>
 #include "maptiles.h"
@@ -55,6 +56,23 @@ static const int   TINT_G_PCT        = 62,  TINT_G_ADD = 14;
 static const int   TINT_B_PCT        = 105, TINT_B_ADD = 26;
 static const float VIGNETTE_STRENGTH = 0.55f;
 
+// ---------- persistent tile cache ----------
+// The stitched map only depends on {lat, lon, rangeKm}. Coordinates change
+// almost never, so re-fetching 15 tiles on every boot and every range change
+// was pure waste — and it ran on TLS, the one subsystem that stops working
+// when internal heap degrades. Cached blobs make the map survive reboots and
+// work with the TLS gate shut.
+//   /mp/key    "lat,lon" the cache was built for
+//   /mp/r<km>  raw RGB565, MAP_BUF_BYTES
+static const char   kCacheDir[]   = "/mp";
+static const size_t kCacheChunk   = 32 * 1024;   // per loop pass — see below
+static bool     s_fsOk        = false;
+static const uint16_t* s_wrSrc = nullptr;        // pending chunked write
+static size_t   s_wrOff       = 0;
+static int      s_wrRange     = 0;
+static File     s_wrFile;
+static int      s_cacheOnlyRange = 0;            // >0 = fetch to cache, do not show
+
 // ---------- module state ----------
 // Buffers: front is read by LVGL (loop ctx); back is written by the fetch
 // task; mosaic + tileBuf are task-private scratch. All PSRAM.
@@ -81,6 +99,78 @@ static bool     s_refreshWanted = false;
 static bool     s_retryUsed     = false;       // one retry per refresh request
 static bool     s_retryArmed    = false;
 static uint32_t s_retryAtMs     = 0;
+
+static void cachePath(int km, char* out, size_t cap) {
+  snprintf(out, cap, "%s/r%d", kCacheDir, km);
+}
+
+static void cacheKeyNow(char* out, size_t cap) {
+  snprintf(out, cap, "%.6f,%.6f", g_set.homeLat, g_set.homeLon);
+}
+
+// Drop every cached range. Called when the home coordinates move.
+static void cacheWipe() {
+  if (!s_fsOk) return;
+  static const int steps[] = AR_RANGE_STEPS;
+  char path[24];
+  for (int km : steps) { cachePath(km, path, sizeof(path)); FFat.remove(path); }
+  Serial.println("[map] cache wiped (location changed)");
+}
+
+static bool cacheHas(int km) {
+  if (!s_fsOk) return false;
+  char path[24];
+  cachePath(km, path, sizeof(path));
+  File f = FFat.open(path, FILE_READ);
+  if (!f) return false;
+  bool ok = (f.size() == MAP_BUF_BYTES);
+  f.close();
+  return ok;
+}
+
+// Load a cached range straight into the FRONT buffer. Loop context; ~750 KB of
+// cached flash reads, which go through the cache and do not stall the panel.
+static bool cacheLoad(int km, uint16_t* dst) {
+  if (!s_fsOk) return false;
+  char path[24];
+  cachePath(km, path, sizeof(path));
+  File f = FFat.open(path, FILE_READ);
+  if (!f) return false;
+  bool ok = (f.size() == MAP_BUF_BYTES) &&
+            (f.read((uint8_t*)dst, MAP_BUF_BYTES) == (int)MAP_BUF_BYTES);
+  f.close();
+  if (!ok) { FFat.remove(path); Serial.printf("[map] cache r%d corrupt\n", km); }
+  else     Serial.printf("[map] cache hit r%d (no network)\n", km);
+  return ok;
+}
+
+// Queue a chunked write. Flash WRITES disable the cache and stall the LCD DMA
+// (flash and PSRAM share the MSPI bus), so a single 750 KB blocking write would
+// visibly tear the panel for over a second. Dribbling it out kCacheChunk at a
+// time across loop passes keeps each stall imperceptible.
+static void cacheQueueWrite(int km, const uint16_t* src) {
+  if (!s_fsOk || s_wrSrc) return;
+  char path[24];
+  cachePath(km, path, sizeof(path));
+  s_wrFile = FFat.open(path, FILE_WRITE);
+  if (!s_wrFile) { Serial.printf("[map] cache open failed r%d\n", km); return; }
+  s_wrSrc = src; s_wrOff = 0; s_wrRange = km;
+}
+
+static void cachePumpWrite() {
+  if (!s_wrSrc) return;
+  size_t n = MAP_BUF_BYTES - s_wrOff;
+  if (n > kCacheChunk) n = kCacheChunk;
+  size_t w = s_wrFile.write((const uint8_t*)s_wrSrc + s_wrOff, n);
+  s_wrOff += w;
+  if (w != n || s_wrOff >= MAP_BUF_BYTES) {
+    bool ok = (s_wrOff >= MAP_BUF_BYTES);
+    s_wrFile.close();
+    if (!ok) { char p2[24]; cachePath(s_wrRange, p2, sizeof(p2)); FFat.remove(p2); }
+    Serial.printf("[map] cache r%d %s\n", s_wrRange, ok ? "written" : "write failed");
+    s_wrSrc = nullptr; s_wrOff = 0;
+  }
+}
 
 // ============================================================
 //  Task-side helpers (core 0) — module buffers only
@@ -351,6 +441,29 @@ void mapBegin() {
   s_imgDsc.header.h  = MAP_H;
   s_imgDsc.data_size = MAP_BUF_BYTES;
   s_imgDsc.data      = (const uint8_t*)s_front;
+
+  // FFat.begin() returns true if another module already mounted it.
+  s_fsOk = FFat.begin(true);
+  if (s_fsOk) {
+    if (!FFat.exists(kCacheDir)) FFat.mkdir(kCacheDir);
+    char keyNow[40]; cacheKeyNow(keyNow, sizeof(keyNow));
+    char keyOld[40] = "";
+    File kf = FFat.open("/mp/key", FILE_READ);
+    if (kf) { size_t n = kf.read((uint8_t*)keyOld, sizeof(keyOld) - 1);
+              keyOld[n] = 0; kf.close(); }
+    if (strcmp(keyNow, keyOld) != 0) {
+      cacheWipe();
+      File nf = FFat.open("/mp/key", FILE_WRITE);
+      if (nf) { nf.print(keyNow); nf.close(); }
+    }
+    // A cache hit means the map is on screen before Wi-Fi even associates.
+    if (cacheLoad(g_set.rangeKm, s_front)) {
+      s_haveImage = true;
+      s_generation++;
+    }
+  } else {
+    Serial.println("[map] FATFS unavailable - map will re-fetch every boot");
+  }
   Serial.printf("[map] buffers ready (%u KB PSRAM resident, +%u KB per fetch)\n",
                 (unsigned)((MAP_BUF_BYTES * 2 + TILE_BUF_BYTES) / 1024),
                 (unsigned)(MOSAIC_BUF_BYTES / 1024));
@@ -363,17 +476,26 @@ void mapLoop(uint32_t nowMs) {
   static int      s_appliedRange = -1;     // what the FRONT image was built for
   static double   s_appliedLat = 999, s_appliedLon = 999;
   static uint32_t s_lastHealMs = 0;
+  cachePumpWrite();                        // dribble any pending cache write out
+
   if (s_stitchedReady && !s_fetchInFlight) {
     s_stitchedReady = false;
-    uint16_t* t = s_front;
-    s_front = s_back;
-    s_back  = t;
-    s_imgDsc.data = (const uint8_t*)s_front;
-    s_haveImage = true;
-    s_generation++;
-    s_appliedRange = s_job.rangeKm;        // one fetch at a time: s_job is stable
-    s_appliedLat   = s_job.lat;
-    s_appliedLon   = s_job.lon;
+    if (s_cacheOnlyRange) {
+      // Prefetched for the cache only — persist it, leave the display alone.
+      cacheQueueWrite(s_cacheOnlyRange, s_back);
+      s_cacheOnlyRange = 0;
+    } else {
+      uint16_t* t = s_front;
+      s_front = s_back;
+      s_back  = t;
+      s_imgDsc.data = (const uint8_t*)s_front;
+      s_haveImage = true;
+      s_generation++;
+      s_appliedRange = s_job.rangeKm;      // one fetch at a time: s_job is stable
+      s_appliedLat   = s_job.lat;
+      s_appliedLon   = s_job.lon;
+      cacheQueueWrite(s_appliedRange, s_front);
+    }
   }
 
   // 1b) Self-heal: if the shown map doesn't match the current settings (range
@@ -387,9 +509,21 @@ void mapLoop(uint32_t nowMs) {
                     fabs(s_appliedLon - g_set.homeLon) > 0.01;
     if (mismatch) {
       s_lastHealMs = nowMs;
-      s_retryUsed  = false;                // fresh attempt gets a retry again
-      s_refreshWanted = true;
-      Serial.println("[map] self-heal refetch (range/location/image mismatch)");
+      // Flash first. A cached range needs no tiles, no TLS and no heap, so the
+      // map keeps working even with the TLS gate shut.
+      if (fabs(s_appliedLat - g_set.homeLat) <= 0.01 &&
+          fabs(s_appliedLon - g_set.homeLon) <= 0.01 &&
+          !s_wrSrc && cacheLoad(g_set.rangeKm, s_front)) {
+        s_haveImage    = true;
+        s_generation++;
+        s_appliedRange = g_set.rangeKm;
+        s_appliedLat   = g_set.homeLat;
+        s_appliedLon   = g_set.homeLon;
+      } else {
+        s_retryUsed     = false;           // fresh attempt gets a retry again
+        s_refreshWanted = true;
+        Serial.println("[map] self-heal refetch (range/location/image mismatch)");
+      }
     }
   }
 
@@ -409,6 +543,28 @@ void mapLoop(uint32_t nowMs) {
   if (s_retryArmed && (int32_t)(nowMs - s_retryAtMs) >= 0) {
     s_retryArmed    = false;
     s_refreshWanted = true;
+  }
+
+  // 2b) With the shown range cached and nothing else going on, quietly fill in
+  //     the other selectable ranges so future range changes are instant and
+  //     offline. One at a time, gated exactly like any other optional fetch.
+  if (!s_refreshWanted && !s_fetchInFlight && !s_stitchedReady && !s_wrSrc &&
+      s_fsOk && g_set.mapEn && g_wifiUp && s_haveImage &&
+      s_appliedRange == g_set.rangeKm && tlsGateOpen()) {
+    static const int steps[] = AR_RANGE_STEPS;
+    for (int km : steps) {
+      if (km == g_set.rangeKm || cacheHas(km)) continue;
+      s_cacheOnlyRange = km;
+      s_job.lat = g_set.homeLat; s_job.lon = g_set.homeLon; s_job.rangeKm = km;
+      s_fetchInFlight = true;
+      if (xTaskCreatePinnedToCore(mapFetchTask, "mapfetch", AR_NET_TASK_STACK,
+                                  NULL, 1, NULL, 0) != pdPASS) {
+        s_fetchInFlight = false; s_cacheOnlyRange = 0;
+      } else {
+        Serial.printf("[map] prefetching r%d for cache\n", km);
+      }
+      break;
+    }
   }
 
   // 3) Spawn at most one fetch; snapshot settings here (loop context only).
