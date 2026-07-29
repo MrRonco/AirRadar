@@ -300,7 +300,13 @@ static void fetchAircraft(const FeederJob& job) {
 
 static void fetchTask(void* param) {
   const FeederJob* job = (const FeederJob*)param;
+  // Sampled inside the task so our own 12 KB stack is present in both readings
+  // and cancels out; what's left is what the fetch itself failed to give back.
+  uint32_t h0 = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
   fetchAircraft(*job);
+  g_heapDeltaFeeder += (int32_t)h0 -
+                       (int32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+  g_feederRuns++;
   g_fetchInProgress = false;                // clear in-progress flag, then die
   vTaskDelete(NULL);
 }

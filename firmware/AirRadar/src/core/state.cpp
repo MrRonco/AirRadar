@@ -143,6 +143,13 @@ static bool tlsHeapOk() {
 
 uint32_t g_tlsShedCount = 0;           // exported in /metrics: RAM-shed forensics
 uint32_t g_tlsConnCount = 0;           // successful acquisitions == TLS sessions
+// Per-subsystem internal-heap accounting. Each net task samples free internal
+// heap on entry and exit and accumulates the signed difference, so /metrics can
+// attribute a slow drain to a specific subsystem instead of leaving it to
+// guesswork. Signed on purpose: only accumulating losses would let noise
+// masquerade as a leak.
+int32_t  g_heapDeltaFeeder = 0;  uint32_t g_feederRuns = 0;
+int32_t  g_heapDeltaIss    = 0;  uint32_t g_issRuns    = 0;
 
 bool tlsTryAcquire(bool essential) {
   if (!essential && !tlsHeapOk()) {     // shed eye-candy before the feed starves

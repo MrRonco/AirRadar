@@ -684,6 +684,16 @@ static void handleMetrics() {
   s += F("# TYPE airradar_tls_conn counter\n");
   snprintf(l, sizeof(l), "airradar_tls_conn %lu\n",
            (unsigned long)g_tlsConnCount); s += l;
+  s += F("# TYPE airradar_heap_delta_feeder counter\n");
+  snprintf(l, sizeof(l), "airradar_heap_delta_feeder %ld\n",
+           (long)g_heapDeltaFeeder); s += l;
+  snprintf(l, sizeof(l), "airradar_feeder_runs %lu\n",
+           (unsigned long)g_feederRuns); s += l;
+  s += F("# TYPE airradar_heap_delta_iss counter\n");
+  snprintf(l, sizeof(l), "airradar_heap_delta_iss %ld\n",
+           (long)g_heapDeltaIss); s += l;
+  snprintf(l, sizeof(l), "airradar_iss_runs %lu\n",
+           (unsigned long)g_issRuns); s += l;
   s += F("# TYPE airradar_uptime_seconds gauge\n");
   snprintf(l, sizeof(l), "airradar_uptime_seconds %lu\n",
            (unsigned long)(millis() / 1000UL)); s += l;

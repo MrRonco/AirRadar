@@ -11,6 +11,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <ctype.h>
+#include <esp_heap_caps.h>
 #include "enrich.h"
 #include "../core/tracks.h"
 #include "logos.h"                             // logosIcaoFromFlight: airline test
@@ -147,6 +148,7 @@ void enrichKickWeather() {
 //  ISS — wheretheiss.at (AR_ISS_API), cadence AR_POLL_ISS_MS
 // ============================================================
 static void issTask(void*) {
+  uint32_t issH0 = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
   // Plain HTTP by design (see AR_ISS_API note in config.h): the 15s TLS poll
   // to wheretheiss.at leaked ~1.5KB/connection in the esp-tls layer.
   // open-notify returns iss_position lat/lon as STRINGS.

@@ -111,6 +111,10 @@ extern uint32_t g_tlsShedCount;
 // Successful TLS acquisitions. heap_free delta / this delta = bytes leaked per
 // secure session — the number that tells you whether a leak is TLS-driven.
 extern uint32_t g_tlsConnCount;
+// Cumulative internal-heap change across each subsystem's network tasks, with
+// a run count, so /metrics gives bytes-per-fetch directly.
+extern int32_t  g_heapDeltaFeeder; extern uint32_t g_feederRuns;
+extern int32_t  g_heapDeltaIss;    extern uint32_t g_issRuns;
 
 // ---------- misc helpers (implemented in state.cpp) ----------
 float haversineKm(double la1, double lo1, double la2, double lo2);
