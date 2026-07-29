@@ -33,10 +33,22 @@ static const int   HOLDER_SZ    = 34;           // = glow / selection-ring size
 static const int   HOLDER_HALF  = HOLDER_SZ / 2;
 static const int   JET_SZ       = 26;           // img_jet, pivot at centre
 static const int   MIL_BOX_SZ   = 30;
+static const int   LBL_W        = 104;          // generous: "FL350 · 122 km" + slack
+static const int   LBL_H        = 28;           // two F_MONO11 lines
 static const lv_opa_t SEL_RING_OPA = 210;
 static const lv_opa_t MIL_BOX_OPA  = 170;
 static const int   LBL_OFF_X    = HOLDER_SZ + 4; // label right of the jet
 static const int   LBL_OFF_Y    = 10;
+// The holder must BOUND every child. lv_obj_move_to() invalidates only the
+// holder's own rect (lv_obj_move_children_by shifts children without
+// invalidating them), so a label hanging outside it left a stale ghost at the
+// old position on every glide. That ghost used to be scrubbed by an unrelated
+// 4 Hz full-scope repaint; once that was fixed the ghost would have shown.
+// Bounding the children also lets us drop LV_OBJ_FLAG_OVERFLOW_VISIBLE, which
+// forced LVGL to draw all 13 holders even for invalid areas they don't touch.
+static const int   HOLDER_W     = LBL_OFF_X + LBL_W;
+static const int   HOLDER_H     = (LBL_OFF_Y + LBL_H > HOLDER_SZ)
+                                    ? (LBL_OFF_Y + LBL_H) : HOLDER_SZ;
 static const int   MOVE_EPS_PX  = 3;            // ignore sub-blip jitter
 static const uint32_t BLINK_HALF_MS = 500;      // emergency blink half period
 static const lv_opa_t COAST_OPA = 150;
@@ -152,18 +164,21 @@ static lv_obj_t* makeMicroLabel(lv_obj_t* parent, const char* txt,
 static void blipCreateObjects(Blip& b) {
   b.holder = lv_obj_create(s_clip);
   lv_obj_remove_style_all(b.holder);
-  lv_obj_set_size(b.holder, HOLDER_SZ, HOLDER_SZ);
+  lv_obj_set_size(b.holder, HOLDER_W, HOLDER_H);
   lv_obj_add_flag(b.holder, LV_OBJ_FLAG_IGNORE_LAYOUT);
-  lv_obj_add_flag(b.holder, LV_OBJ_FLAG_OVERFLOW_VISIBLE); // label pokes out
   lv_obj_add_flag(b.holder, LV_OBJ_FLAG_HIDDEN);
   makeInert(b.holder);
 
+  // Every child is placed from the holder's top-left so the 34x34 glyph
+  // cluster keeps occupying 0..HOLDER_SZ regardless of the holder's real size
+  // — blipPlace() still centres the blip by offsetting HOLDER_HALF.
   b.glow = lv_img_create(b.holder);
   lv_img_set_src(b.glow, &img_glow);
   lv_obj_set_pos(b.glow, 0, 0);
   lv_obj_set_style_img_recolor_opa(b.glow, LV_OPA_COVER, 0);
 
   b.selRing = makeRing(b.holder, HOLDER_SZ, C_IVORY, SEL_RING_OPA);
+  lv_obj_align(b.selRing, LV_ALIGN_TOP_LEFT, 0, 0);   // makeRing centres by default
   lv_obj_add_flag(b.selRing, LV_OBJ_FLAG_HIDDEN);
 
   b.milBox = lv_obj_create(b.holder);
@@ -174,7 +189,8 @@ static void blipCreateObjects(Blip& b) {
   lv_obj_set_style_border_color(b.milBox, C_IVORY, 0);
   lv_obj_set_style_border_opa(b.milBox, MIL_BOX_OPA, 0);
   makeInert(b.milBox);
-  lv_obj_center(b.milBox);
+  lv_obj_align(b.milBox, LV_ALIGN_TOP_LEFT,
+               (HOLDER_SZ - MIL_BOX_SZ) / 2, (HOLDER_SZ - MIL_BOX_SZ) / 2);
   lv_obj_add_flag(b.milBox, LV_OBJ_FLAG_HIDDEN);
 
   b.jet = lv_img_create(b.holder);
@@ -185,6 +201,8 @@ static void blipCreateObjects(Blip& b) {
 
   b.lbl = makeMicroLabel(b.holder, "", C_IVORY2);
   lv_obj_set_pos(b.lbl, LBL_OFF_X, LBL_OFF_Y);
+  lv_obj_set_size(b.lbl, LBL_W, LBL_H);        // fixed box: no SIZE_CONTENT growth
+  lv_label_set_long_mode(b.lbl, LV_LABEL_LONG_CLIP);
 
   // ISS stays the topmost scope layer even after late holder creation.
   if (s_issImg) lv_obj_move_foreground(s_issImg);

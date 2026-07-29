@@ -117,14 +117,45 @@ static bool s_backlight = true;
 // rendering off that bus; only the final pushImage writes PSRAM. Falls back
 // to PSRAM if the heap can't give 96 KB (then expect the wiggle, and consider
 // dropping freq_write to 12 MHz as documented in CLAUDE.md).
-#define BUF_LINES 60
+// 30 lines (800x30 = 48 KB), NOT 60. The 96 KB version was the single largest
+// discretionary claim on internal SRAM and it starved everything else: free
+// internal heap settled around 17 KB, permanently below AR_TLS_HEAP_FLOOR, so
+// routes/weather/logo fetches were shed forever and the device eventually
+// rebooted. Halving it returns 48 KB — and a 48 KB CONTIGUOUS region, which
+// also un-breaks the 12 KB network task stacks (heap_largest was 10 KB).
+// Safe for rendering: LVGL sizes each flush chunk as buffer_px / AREA width,
+// not screen width, so small invalidations still flush in one pass; only
+// full-screen repaints cost an extra chunk or two.
+#define BUF_LINES 30
 static lv_disp_draw_buf_t s_drawBuf;
 static lv_color_t* s_buf1 = nullptr;
+
+// Swap the 16-bit halves of every pixel, 2 pixels per 32-bit word.
+static inline void swapPixels565(uint16_t* p, uint32_t n) {
+  if (((uintptr_t)p & 3u) == 0) {              // buffer base is always aligned
+    uint32_t* q = (uint32_t*)p;
+    for (uint32_t i = 0, pairs = n >> 1; i < pairs; i++) {
+      uint32_t v = q[i];
+      q[i] = ((v & 0x00FF00FFu) << 8) | ((v >> 8) & 0x00FF00FFu);
+    }
+    if (n & 1u) p[n - 1] = (uint16_t)((p[n - 1] << 8) | (p[n - 1] >> 8));
+    return;
+  }
+  for (uint32_t i = 0; i < n; i++) p[i] = (uint16_t)((p[i] << 8) | (p[i] >> 8));
+}
 
 static void flush_cb(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* px) {
   int32_t w = area->x2 - area->x1 + 1;
   int32_t h = area->y2 - area->y1 + 1;
-  // FIRST-FLASH CHECK: if colors are wrong, toggle setSwapBytes in init below.
+  // The panel framebuffer holds byte-swapped 565. We used to get that by
+  // leaving setSwapBytes(true), but that makes LovyanGFX pick the rgb565_t
+  // pixelcopy specialisation, which sets no_convert=false and therefore skips
+  // Panel_FrameBufferBase::writeImage's per-row memcpy fast path — every
+  // flushed pixel became an individual read-convert-write into PSRAM, on the
+  // same bus the panel DMA is scanning at ~25 MB/s.
+  // Swapping here instead keeps that work in INTERNAL SRAM and lets pushImage
+  // bulk-memcpy whole rows into PSRAM. Colours are identical either way.
+  swapPixels565((uint16_t*)px, (uint32_t)w * (uint32_t)h);
   lcd.pushImage(area->x1, area->y1, w, h, (uint16_t*)px);
   lv_disp_flush_ready(drv);
 }
@@ -145,11 +176,13 @@ static void touch_cb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
 bool halDisplayInit() {
   ch422g_init();
   lcd.init();
-  // HARDWARE-VERIFIED on the real panel: the RGB path wants byte-swapped 565.
-  // With false, #0c1119 rendered as olive (128,96,64) — classic swap symptom.
-  // LVGL stays LV_COLOR_16_SWAP=0; the swap happens once here at flush time,
-  // so the map buffer and image assets remain plain RGB565.
-  lcd.setSwapBytes(true);
+  // HARDWARE-VERIFIED on the real panel: the RGB path wants byte-swapped 565
+  // (with plain RGB565, #0c1119 rendered as olive (128,96,64)).
+  // We produce that swap ourselves in flush_cb / halReadRect and leave
+  // LovyanGFX's own flag OFF, because turning it on costs the row-memcpy fast
+  // path — see the comment in flush_cb. LVGL stays LV_COLOR_16_SWAP=0, so the
+  // map buffer and baked image assets remain plain RGB565.
+  lcd.setSwapBytes(false);
   lcd.fillScreen(TFT_BLACK);
 
   lv_init();
@@ -207,4 +240,8 @@ bool halTouchRead(int32_t* x, int32_t* y) {
 
 void halReadRect(int x, int y, int w, int h, uint16_t* buf) {
   lcd.readRect(x, y, w, h, buf);
+  // readRect honours the same _swapBytes flag as pushImage. With it off we get
+  // the framebuffer's raw swapped 565, so undo it here — callers (/screen.bmp)
+  // expect plain RGB565 with red in bits 11..15.
+  swapPixels565(buf, (uint32_t)w * (uint32_t)h);
 }
