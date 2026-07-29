@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AirRadar v7.1 beta — full-fidelity panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#05080d; --surf:#182231; --surf-hi:#26344a;
+    --ivory:#eef1f4; --ivory2:#aab4c0; --dim:#8e9baa; --mute:#75828f;
+    --cy:#54dcee; --alt-low:#ffc061; --alt-mid:#6fc7d8; --alt-high:#9b8ce0;
+    --alert:#ff8a94; --gold:#ffd77a; --ring:#2b4d5d; --ring-dim:#193040;
+    --sans:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0a0c10;color:#c8d2dd;font:15px/1.55 var(--sans);padding:36px 30px 90px}
+  .wrap{max-width:1720px;margin:0 auto}
+  h1{font:600 26px/1.2 var(--sans);color:#eef1f4;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:#75828f;margin:0 0 22px;max-width:86ch}
+  h2{font:600 17px/1.3 var(--sans);color:#eef1f4;margin:40px 0 4px}
+  h2 span{color:var(--cy);font-family:var(--mono);font-size:13px;margin-right:8px}
+  .note{color:#8e9baa;margin:0 0 16px;max-width:92ch;font-size:14px}
+  .note b{color:#eef1f4;font-weight:600}
+  .pair{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .col h3{font:500 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;
+          color:#75828f;margin:0 0 10px}
+  .col h3 i{color:var(--cy);font-style:normal}
+  .cap{font:12px/1.55 var(--mono);color:#5b6672;margin-top:9px;max-width:800px}
+
+  .scr{width:800px;height:480px;position:relative;overflow:hidden;background:var(--ink);
+       border-radius:6px;border:1px solid #1d2530}
+  .scr .bg{position:absolute;inset:0;width:800px;height:480px}
+  .p{position:absolute}
+  .card{background:var(--surf);border:1px solid rgba(180,205,230,.16);border-radius:17px;
+        padding:15px;overflow:hidden}
+  .inset{background:#fff;border-radius:8px;overflow:hidden}
+  .k{font:500 13px/17px var(--mono);letter-spacing:.8px;color:var(--dim)}
+  .v{font:500 21px/26px var(--sans);color:var(--ivory);font-variant-numeric:tabular-nums}
+  .hair{height:1px;background:rgba(180,205,230,.16)}
+  .hero{font:300 54px/56px var(--sans);color:var(--ivory);font-variant-numeric:tabular-nums;
+        letter-spacing:-.02em}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--cy);display:inline-block;
+       vertical-align:middle;margin-right:6px}
+  .mono13{font:500 13px/18px var(--mono);color:var(--dim)}
+
+  /* scope overlay */
+  .rr{position:absolute;border:1px solid var(--ring);border-radius:50%;
+      left:400px;top:240px;transform:translate(-50%,-50%)}
+  .cross{position:absolute;background:var(--ring-dim)}
+  .chip{position:absolute;font:500 13px/1 var(--mono);color:var(--dim);
+        background:rgba(5,8,13,.72);padding:2px 5px;border-radius:4px}
+  .tgt{position:absolute;transform:translate(-50%,-50%);text-align:center;white-space:nowrap}
+  .jet{font-size:19px;line-height:1;display:block;filter:drop-shadow(0 0 3px rgba(0,0,0,.9))}
+  .tl{font:500 13px/1 var(--mono);color:var(--ivory2);margin-top:2px;display:block;
+      text-shadow:0 0 4px #05080d,0 0 4px #05080d}
+  .selr{position:absolute;left:50%;top:50%;width:32px;height:32px;margin:-16px 0 0 -16px;
+        border:1px solid var(--ivory);border-radius:50%;opacity:.85}
+
+  table{border-collapse:collapse;width:100%;max-width:1180px;margin:12px 0 0;font-size:14px}
+  th,td{text-align:left;padding:7px 14px 7px 0;border-bottom:1px solid #1a212b;vertical-align:top}
+  th{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:#5b6672}
+  td code{font:13px var(--mono);color:var(--cy)}
+  .yes{color:#6fc7d8}.no{color:#ff8a94}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>AirRadar v7.1 — beta panel</h1>
+<p class="sub">Full fidelity this time: real CARTO tiles fetched for 51.4700 / −0.4543 at your
+250 km range, the real Air Canada logo the device caches, and real Inter + JetBrains Mono.
+Includes your three changes — <b>Home removed</b>, <b>weather moved into the card</b> so nothing
+floats over the map, and the <b>clock relocated</b>. Two map treatments to compare.</p>
+
+<!-- ===== A ===== -->
+<h2><span>A</span>Instrument — map inside the coverage disc</h2>
+<p class="note">The circle means something: it is the edge of what your receiver can see. Chrome
+sits on ink, so cards stay fully opaque and the renderer keeps its
+<code>LV_COVER_RES_COVER</code> fast path.</p>
+
+<div class="pair"><div class="col">
+<div class="scr">
+  <img class="bg" src="map-disc.png" alt="">
+  <div class="rr" style="width:424px;height:424px"></div>
+  <div class="rr" style="width:283px;height:283px;opacity:.6"></div>
+  <div class="rr" style="width:141px;height:141px;opacity:.45"></div>
+  <div class="cross" style="left:188px;top:240px;width:424px;height:1px;opacity:.55"></div>
+  <div class="cross" style="left:400px;top:28px;width:1px;height:424px;opacity:.55"></div>
+  <div class="p" style="left:400px;top:42px;transform:translateX(-50%);
+       font:500 13px/1 var(--mono);color:var(--dim)">N</div>
+  <div class="chip" style="left:452px;top:186px">83</div>
+  <div class="chip" style="left:508px;top:130px">167</div>
+  <div class="chip" style="left:556px;top:82px">250</div>
+
+  <div class="tgt" style="left:352px;top:150px"><span class="jet" style="color:var(--alt-high);
+       display:inline-block;transform:rotate(115deg) scale(.88)">✈</span><span class="tl">ACA512</span></div>
+  <div class="tgt" style="left:470px;top:214px"><span class="jet" style="color:var(--alt-mid);
+       display:inline-block;transform:rotate(60deg)">✈</span></div>
+  <div class="tgt" style="left:300px;top:300px"><span class="jet" style="color:var(--alt-low);
+       display:inline-block;transform:rotate(-40deg) scale(1.16)">✈</span></div>
+  <div class="tgt" style="left:432px;top:322px"><span class="selr"></span>
+       <span class="jet" style="color:var(--alt-mid);display:inline-block;transform:rotate(150deg)">✈</span>
+       <span class="tl" style="color:var(--ivory)">WJA554</span></div>
+  <div class="tgt" style="left:262px;top:196px"><span class="jet" style="color:var(--alt-low);
+       display:inline-block;transform:rotate(20deg) scale(1.16)">✈</span></div>
+
+  <!-- OVERVIEW (12,28) 168x376 -->
+  <div class="p card" style="left:12px;top:28px;width:168px;height:376px">
+    <div style="display:flex;align-items:center;gap:9px">
+      <span style="font-size:23px;line-height:1">☀</span>
+      <span style="font:500 26px/28px var(--sans);color:var(--ivory)">15°</span>
+      <span class="mono13" style="margin-left:auto;text-align:right">N 16<br>kt</span>
+    </div>
+    <div class="mono13" style="margin-top:9px;letter-spacing:.8px">WED · JUL 29</div>
+    <div class="hair" style="margin:13px 0"></div>
+    <div class="hero">5</div>
+    <div class="k" style="margin-top:1px">IN RANGE</div>
+    <div class="mono13" style="color:var(--mute);letter-spacing:0">2 COASTING</div>
+    <div class="hair" style="margin:13px 0"></div>
+    <div class="k">NEAREST</div>
+    <div style="font:500 23px/28px var(--sans);color:var(--ivory)">WJA554</div>
+    <div style="font:400 17px/22px var(--sans);color:var(--ivory2)">21.3 km NE</div>
+    <div class="hair" style="margin:13px 0"></div>
+    <div class="mono13" style="letter-spacing:0;display:flex;align-items:center">
+      <span class="dot"></span>LOCAL · 1s<span style="margin-left:auto">50/s</span></div>
+  </div>
+
+  <!-- SELECTED (620,28) 168x376 -->
+  <div class="p card" style="left:620px;top:28px;width:168px;height:376px">
+    <div style="display:flex;gap:9px;align-items:center;height:38px">
+      <div class="inset" style="width:38px;height:38px;flex:0 0 38px">
+        <img src="logo-aca.png" style="width:38px;height:38px;display:block" alt=""></div>
+      <div style="min-width:0;flex:1">
+        <div style="font:500 20px/22px var(--sans);color:var(--ivory)">ACA512</div>
+        <div class="mono13" style="letter-spacing:0;font-size:12px;overflow:hidden;
+             text-overflow:ellipsis;white-space:nowrap">Air Canada</div></div>
+    </div>
+    <div style="margin-top:11px;font:500 23px/27px var(--sans);color:var(--cy);
+         display:flex;align-items:center;gap:6px">SEA <span style="color:var(--dim);font-size:15px">▶</span> YUL</div>
+    <div class="mono13" style="letter-spacing:0;color:var(--ivory2);margin-top:9px">BCS3 · C-GJWO</div>
+    <div class="hair" style="margin:11px 0"></div>
+    <div style="display:flex;gap:8px"><div style="width:64px"><div class="k">ALT ft</div>
+      <div class="v">FL350</div></div><div style="width:64px"><div class="k">SPD kt</div>
+      <div class="v">462</div></div></div>
+    <div style="display:flex;gap:8px;margin-top:9px"><div style="width:64px"><div class="k">HDG</div>
+      <div class="v">086°</div></div><div style="width:64px"><div class="k">V/S fpm</div>
+      <div class="v" style="color:var(--cy)">+320</div></div></div>
+    <div style="display:flex;gap:8px;margin-top:9px"><div style="width:64px"><div class="k">DIST km</div>
+      <div class="v">23.3</div></div><div style="width:64px"><div class="k">SQK</div>
+      <div class="v">3644</div></div></div>
+    <div class="hair" style="margin:11px 0"></div>
+    <div class="mono13" style="letter-spacing:0;display:flex;align-items:center">
+      <span class="dot"></span>LIVE · 0s</div>
+  </div>
+
+  <!-- bottom band y416 h52 -->
+  <div class="p card" style="left:12px;top:416px;width:168px;height:52px;border-radius:26px;
+       padding:0;display:flex;align-items:center">
+    <div style="width:42px;text-align:center;color:var(--ivory2);font-size:17px">‹</div>
+    <div style="flex:1;text-align:center;font:500 20px/1 var(--sans)" class="v">250
+      <span class="k" style="font-size:12px">KM</span></div>
+    <div style="width:42px;text-align:center;color:var(--ivory2);font-size:17px">›</div>
+  </div>
+  <div class="p card" style="left:556px;top:416px;width:168px;height:52px;padding:0;
+       display:flex;align-items:center;justify-content:center">
+    <div style="font:300 34px/1 var(--sans);color:var(--ivory);font-variant-numeric:tabular-nums">8:31</div>
+  </div>
+  <div class="p card" style="left:736px;top:416px;width:52px;height:52px;padding:0;
+       display:flex;align-items:center;justify-content:center">
+    <span style="font-size:21px;color:var(--ivory2)">⚙</span></div>
+</div>
+<p class="cap">Weather now lives in the card. Top centre is clear, so the compass N cannot be
+occluded. Clock and gear share the bottom band with the range stepper.</p>
+</div></div>
+
+<!-- ===== B ===== -->
+<h2><span>B</span>Map-first — full-bleed background, disc as a coverage lens</h2>
+<p class="note">Same layout, but the map runs edge to edge and is dimmed to 30% outside the
+coverage circle. <b>The dimming is the whole trick:</b> it keeps the range affordance the circle
+carries, keeps text legible, and — because the cards sit over the dark region — lets them stay
+opaque, so this costs no translucency penalty.</p>
+
+<div class="pair"><div class="col">
+<div class="scr">
+  <img class="bg" src="map-full-dim.png" alt="">
+  <div class="rr" style="width:424px;height:424px"></div>
+  <div class="rr" style="width:283px;height:283px;opacity:.6"></div>
+  <div class="rr" style="width:141px;height:141px;opacity:.45"></div>
+  <div class="cross" style="left:188px;top:240px;width:424px;height:1px;opacity:.55"></div>
+  <div class="cross" style="left:400px;top:28px;width:1px;height:424px;opacity:.55"></div>
+  <div class="p" style="left:400px;top:42px;transform:translateX(-50%);
+       font:500 13px/1 var(--mono);color:var(--dim)">N</div>
+  <div class="chip" style="left:452px;top:186px">83</div>
+  <div class="chip" style="left:508px;top:130px">167</div>
+  <div class="chip" style="left:556px;top:82px">250</div>
+
+  <div class="tgt" style="left:352px;top:150px"><span class="jet" style="color:var(--alt-high);
+       display:inline-block;transform:rotate(115deg) scale(.88)">✈</span><span class="tl">ACA512</span></div>
+  <div class="tgt" style="left:470px;top:214px"><span class="jet" style="color:var(--alt-mid);
+       display:inline-block;transform:rotate(60deg)">✈</span></div>
+  <div class="tgt" style="left:300px;top:300px"><span class="jet" style="color:var(--alt-low);
+       display:inline-block;transform:rotate(-40deg) scale(1.16)">✈</span></div>
+  <div class="tgt" style="left:432px;top:322px"><span class="selr"></span>
+       <span class="jet" style="color:var(--alt-mid);display:inline-block;transform:rotate(150deg)">✈</span>
+       <span class="tl" style="color:var(--ivory)">WJA554</span></div>
+  <div class="tgt" style="left:262px;top:196px"><span class="jet" style="color:var(--alt-low);
+       display:inline-block;transform:rotate(20deg) scale(1.16)">✈</span></div>
+
+  <div class="p card" style="left:12px;top:28px;width:168px;height:376px">
+    <div style="display:flex;align-items:center;gap:9px">
+      <span style="font-size:23px;line-height:1">☀</span>
+      <span style="font:500 26px/28px var(--sans);color:var(--ivory)">15°</span>
+      <span class="mono13" style="margin-left:auto;text-align:right">N 16<br>kt</span></div>
+    <div class="mono13" style="margin-top:9px;letter-spacing:.8px">WED · JUL 29</div>
+    <div class="hair" style="margin:13px 0"></div>
+    <div class="hero">5</div>
+    <div class="k" style="margin-top:1px">IN RANGE</div>
+    <div class="mono13" style="color:var(--mute);letter-spacing:0">2 COASTING</div>
+    <div class="hair" style="margin:13px 0"></div>
+    <div class="k">NEAREST</div>
+    <div style="font:500 23px/28px var(--sans);color:var(--ivory)">WJA554</div>
+    <div style="font:400 17px/22px var(--sans);color:var(--ivory2)">21.3 km NE</div>
+    <div class="hair" style="margin:13px 0"></div>
+    <div class="mono13" style="letter-spacing:0;display:flex;align-items:center">
+      <span class="dot"></span>LOCAL · 1s<span style="margin-left:auto">50/s</span></div>
+  </div>
+
+  <div class="p card" style="left:620px;top:28px;width:168px;height:376px">
+    <div style="display:flex;gap:9px;align-items:center;height:38px">
+      <div class="inset" style="width:38px;height:38px;flex:0 0 38px">
+        <img src="logo-aca.png" style="width:38px;height:38px;display:block" alt=""></div>
+      <div style="min-width:0;flex:1">
+        <div style="font:500 20px/22px var(--sans);color:var(--ivory)">ACA512</div>
+        <div class="mono13" style="letter-spacing:0;font-size:12px">Air Canada</div></div></div>
+    <div style="margin-top:11px;font:500 23px/27px var(--sans);color:var(--cy);
+         display:flex;align-items:center;gap:6px">SEA <span style="color:var(--dim);font-size:15px">▶</span> YUL</div>
+    <div class="mono13" style="letter-spacing:0;color:var(--ivory2);margin-top:9px">BCS3 · C-GJWO</div>
+    <div class="hair" style="margin:11px 0"></div>
+    <div style="display:flex;gap:8px"><div style="width:64px"><div class="k">ALT ft</div>
+      <div class="v">FL350</div></div><div style="width:64px"><div class="k">SPD kt</div>
+      <div class="v">462</div></div></div>
+    <div style="display:flex;gap:8px;margin-top:9px"><div style="width:64px"><div class="k">HDG</div>
+      <div class="v">086°</div></div><div style="width:64px"><div class="k">V/S fpm</div>
+      <div class="v" style="color:var(--cy)">+320</div></div></div>
+    <div style="display:flex;gap:8px;margin-top:9px"><div style="width:64px"><div class="k">DIST km</div>
+      <div class="v">23.3</div></div><div style="width:64px"><div class="k">SQK</div>
+      <div class="v">3644</div></div></div>
+    <div class="hair" style="margin:11px 0"></div>
+    <div class="mono13" style="letter-spacing:0;display:flex;align-items:center">
+      <span class="dot"></span>LIVE · 0s</div>
+  </div>
+
+  <div class="p card" style="left:12px;top:416px;width:168px;height:52px;border-radius:26px;
+       padding:0;display:flex;align-items:center">
+    <div style="width:42px;text-align:center;color:var(--ivory2);font-size:17px">‹</div>
+    <div style="flex:1;text-align:center;font:500 20px/1 var(--sans)" class="v">250
+      <span class="k" style="font-size:12px">KM</span></div>
+    <div style="width:42px;text-align:center;color:var(--ivory2);font-size:17px">›</div></div>
+  <div class="p card" style="left:556px;top:416px;width:168px;height:52px;padding:0;
+       display:flex;align-items:center;justify-content:center">
+    <div style="font:300 34px/1 var(--sans);color:var(--ivory);font-variant-numeric:tabular-nums">8:31</div></div>
+  <div class="p card" style="left:736px;top:416px;width:52px;height:52px;padding:0;
+       display:flex;align-items:center;justify-content:center">
+    <span style="font-size:21px;color:var(--ivory2)">⚙</span></div>
+</div>
+<p class="cap">Map runs to all four edges; 30% outside the circle with a soft falloff.</p>
+</div>
+
+<div class="col">
+  <h3><i>B′</i> — undimmed, for reference</h3>
+  <div class="scr" style="width:520px;height:312px">
+    <img class="bg" src="map-full-bright.png" style="width:520px;height:312px" alt="">
+    <div style="position:absolute;left:50%;top:50%;width:276px;height:276px;
+         transform:translate(-50%,-50%);border:1px solid var(--ring);border-radius:50%"></div>
+  </div>
+  <p class="cap">Uniform brightness. The circle stops meaning anything, the corners compete with
+  the targets, and any card over it needs translucency — which costs the
+  <code>LV_COVER_RES_COVER</code> fast path.</p>
+</div>
+</div>
+
+<!-- ===== decision ===== -->
+<h2><span>C</span>Full-bleed map — what it actually costs</h2>
+<table>
+  <tr><th style="width:230px">Factor</th><th style="width:150px">Disc-only (A)</th>
+      <th style="width:170px">Full-bleed (B)</th><th>Notes</th></tr>
+  <tr><td>Map buffer, PSRAM</td><td>424² = 360 KB</td><td>800×480 = <b>750 KB</b></td>
+      <td class="yes">Affordable — ~5 MB PSRAM free. Double-buffered it is 1.5 MB, still fine.</td></tr>
+  <tr><td>Tiles per refresh</td><td>9 (3×3)</td><td><b>20 (5×4)</b></td>
+      <td class="no">Each is a TLS fetch. Bursty, not steady — only on range or location change —
+      but it lands on the exact subsystem that is currently draining the heap.</td></tr>
+  <tr><td>Card translucency</td><td>Not needed</td><td>Not needed <i>if dimmed</i></td>
+      <td class="yes">This is the deciding detail. Cards sit over the 30% region, so they stay
+      <code>LV_OPA_COVER</code> and keep the <code>LV_COVER_RES_COVER</code> fast path. Undimmed
+      (B′) they would need translucency and every 1 Hz label would recomposite the screen root.</td></tr>
+  <tr><td>Range affordance</td><td>Explicit</td><td>Preserved by the dim</td>
+      <td>The circle stays the edge of receiver coverage — which is <i>true</i>, not decorative.
+      That is the argument for dimming rather than a uniform wash.</td></tr>
+  <tr><td>Text legibility</td><td>Cards on flat ink</td><td>Cards on dimmed map</td>
+      <td class="yes">Measured floor rises from Y 0.002 to ~0.02; card fill is Y 0.015 flat, so
+      contrast holds. Scope labels keep their 4 px text shadow.</td></tr>
+  <tr><td>Redraw cost per frame</td><td>Unchanged</td><td>Unchanged</td>
+      <td class="yes">The background is a static image either way; only the blip rects invalidate.</td></tr>
+</table>
+
+<p class="note" style="margin-top:20px"><b>My recommendation: B, with the dim.</b> It buys most of
+the visual ambition at essentially no render cost, because the dimming is what lets the cards stay
+opaque. The one real price is 20 tile fetches instead of 9 on a range change — worth paying, but
+worth paying <i>after</i> the heap drain is fixed, not before. B′ (uniform brightness) I would
+reject: it looks the most impressive in a screenshot and is the worst instrument of the three.</p>
+
+</div>
+</body>
+</html>
