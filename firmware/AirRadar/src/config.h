@@ -89,8 +89,12 @@
 #define AR_CLOUD_API   "https://api.airplanes.live/v2/point/"        // lat/lon/radiusNM
 #define AR_ROUTE_API   "https://api.adsbdb.com/v0/callsign/"         // + CALLSIGN
 #define AR_WX_API      "https://api.open-meteo.com/v1/forecast"      // ?lat&lon&current=...
-// Plain HTTP on purpose: the 15s ISS poll over TLS leaked ~1.5KB/connection
-// in the esp-tls layer (field-measured); open-notify needs no TLS at all.
+// Plain HTTP on purpose: open-notify needs no TLS at all, and one less secure
+// fetch is one less ~35 KB mbedTLS handshake against a tight internal heap.
+// NOTE: the older "esp-tls leaks ~1.5 KB per connection" rationale recorded
+// here did NOT survive re-measurement on 2026-07-29 — a 90 s window in which
+// the TLS connection counter never moved still lost 6.8 KB of internal heap.
+// Treat that figure as unproven; the live drain tracks feeder poll count.
 #define AR_ISS_API     "http://api.open-notify.org/iss-now.json"
 #define AR_TLS_HEAP_FLOOR (45 * 1024)   // below this, optional TLS is shed
 // Free SIZE alone is the wrong test: mbedTLS wants a ~16.4 KB CONTIGUOUS
