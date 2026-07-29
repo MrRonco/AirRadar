@@ -11,8 +11,6 @@
 #include "../core/tracks.h"
 #include "../net/logos.h"
 
-LV_IMG_DECLARE(img_arrowhead);          // 8x10 chevron; not exported via theme.h
-
 // ============================================================
 //  Layout constants (content coords — st_card pad_all is 17)
 // ============================================================
@@ -39,16 +37,11 @@ static const int RAMP_DY      = -16;           // bar offset above its label
 
 // Selected card
 static const int SEL_TILE_Y   = 20;
-static const int SEL_TILE_S   = 46;
-static const int SEL_TEXT_X   = 56;            // callsign/op x when logo tile shown
+static const int SEL_TILE_S   = 40;
+static const int SEL_TEXT_X   = 48;            // callsign/op x when logo tile shown
 static const int SEL_OP_Y     = 52;
 static const int SEL_ROUTE_Y  = 74;
 static const int SEL_ROUTE_H  = 34;
-static const int SEL_LINE_X   = 54;            // route connector geometry
-static const int SEL_LINE_W   = 28;
-static const int SEL_LINE_Y   = 15;
-static const int SEL_ARROW_X  = 82;
-static const int SEL_ARROW_Y  = 10;
 static const int SEL_FRAME_Y  = 112;
 static const int SEL_IDENT_Y  = 132;
 static const int SEL_HAIR_Y   = 150;
@@ -56,8 +49,9 @@ static const int SEL_GRID_Y1  = 158;
 static const int SEL_GRID_Y2  = 204;
 static const int SEL_VAL_DY   = 14;            // key -> value offset in a grid cell
 static const int SEL_COL2_X   = 72;            // two 64 px columns, 8 px gutter
-static const int SEL_DIST_Y   = 250;
-static const int SEL_SQK_Y    = 274;
+static const int SEL_GRID_Y3  = 250;           // DIST / SQK, same grid as above
+static const int SEL_HAIR2_Y  = 296;           // separates the status line
+static const int SEL_LIVE_Y   = 306;
 static const int SEL_DOT_D    = 7;             // LIVE dot diameter
 
 // Semantics
@@ -303,7 +297,9 @@ static void buildSelectedTop(lv_obj_t* cont) {
   lv_obj_align(s_selLogoImg, LV_ALIGN_CENTER, 0, 0);
   lv_obj_add_flag(s_selLogoImg, LV_OBJ_FLAG_HIDDEN);
 
-  s_selCallsign = mkLbl(cont, F_L28, C_IVORY);
+  // F_L28 needed ~102 px for a 6-glyph callsign in an 88 px slot, so "ACA306"
+  // lost its last character. F_M20 fits 7 glyphs with room to spare.
+  s_selCallsign = mkLbl(cont, F_M20, C_IVORY);
   lv_label_set_long_mode(s_selCallsign, LV_LABEL_LONG_CLIP);
   lv_obj_set_pos(s_selCallsign, SEL_TEXT_X, SEL_TILE_Y - 2);
   lv_obj_set_width(s_selCallsign, CONTENT_W - SEL_TEXT_X);
@@ -319,18 +315,12 @@ static void buildSelectedTop(lv_obj_t* cont) {
   lv_obj_set_pos(s_selOrigin, 0, 0);
   s_selDest = mkLbl(s_selRoute, F_L28, C_IVORY);
   lv_obj_align(s_selDest, LV_ALIGN_TOP_RIGHT, 0, 0);
-  lv_obj_t* line = mkBox(s_selRoute);                 // LVGL8 can't fade a grad's
-  lv_obj_set_size(line, SEL_LINE_W, 2);               //  opa — solid per spec
-  lv_obj_set_pos(line, SEL_LINE_X, SEL_LINE_Y);
-  lv_obj_set_style_radius(line, 1, 0);
-  lv_obj_set_style_bg_color(line, C_CY_SOFT, 0);
-  lv_obj_set_style_bg_opa(line, 140, 0);
-  lv_obj_t* arrow = lv_img_create(s_selRoute);
-  lv_img_set_src(arrow, &img_arrowhead);
-  lv_obj_set_pos(arrow, SEL_ARROW_X, SEL_ARROW_Y);
-  lv_obj_set_style_img_recolor(arrow, C_CY_SOFT, 0);
-  lv_obj_set_style_img_recolor_opa(arrow, LV_OPA_COVER, 0);
-  lv_obj_set_style_img_opa(arrow, 140, 0);
+  // A single static chevron, centred — the drawn line plus arrowhead read as a
+  // long stretched arrow on the panel. LV_SYMBOL_RIGHT ships in the Montserrat
+  // symbol face, so it needs no asset and cannot fall out of a font subset.
+  lv_obj_t* arrow = mkLbl(s_selRoute, F_SYM16, C_CY_SOFT);
+  lv_label_set_text(arrow, LV_SYMBOL_RIGHT);
+  lv_obj_align(arrow, LV_ALIGN_TOP_MID, 0, 6);
 
   s_selFrame = mkLbl(cont, F_UI12, C_IVORY2);
   lv_label_set_long_mode(s_selFrame, LV_LABEL_LONG_DOT);
@@ -351,21 +341,21 @@ static void buildSelectedBottom(lv_obj_t* cont) {
   s_selHdg   = mkGridCell(cont, 0,          SEL_GRID_Y2, "HDG");
   s_selClimb = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y2, "V/S fpm");
 
-  mkMicro(cont, "DIST km", 0, SEL_DIST_Y);
-  s_selDist = mkLbl(cont, F_UI15, C_IVORY);
-  lv_obj_align(s_selDist, LV_ALIGN_TOP_RIGHT, 0, SEL_DIST_Y - 2);
-  mkMicro(cont, "SQK", 0, SEL_SQK_Y);
-  s_selSqk = mkLbl(cont, F_MONO13, C_IVORY2);
-  lv_obj_align(s_selSqk, LV_ALIGN_TOP_RIGHT, 0, SEL_SQK_Y - 1);
+  // Same two-column grid as ALT/SPD and HDG/V-S, then a rule before the status
+  // line — previously these were full-width label/value rows in a different
+  // style and the status line ran straight on with nothing separating it.
+  s_selDist = mkGridCell(cont, 0,          SEL_GRID_Y3, "DIST km");
+  s_selSqk  = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y3, "SQK");
+  mkHair(cont, SEL_HAIR2_Y, CONTENT_W);
 
   s_selDot = mkBox(cont);
   lv_obj_set_size(s_selDot, SEL_DOT_D, SEL_DOT_D);
   lv_obj_set_style_radius(s_selDot, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(s_selDot, C_CY, 0);
   lv_obj_set_style_bg_opa(s_selDot, LV_OPA_COVER, 0);
-  lv_obj_align(s_selDot, LV_ALIGN_BOTTOM_LEFT, 1, -4);
-  s_selLive = mkLbl(cont, F_MONO11, C_CY);
-  lv_obj_align(s_selLive, LV_ALIGN_BOTTOM_LEFT, 14, -1);
+  lv_obj_set_pos(s_selDot, 1, SEL_LIVE_Y + 6);
+  s_selLive = mkLbl(cont, F_MONO13, C_CY);
+  lv_obj_set_pos(s_selLive, 14, SEL_LIVE_Y);
 }
 
 static void buildSelected(lv_obj_t* parent) {
@@ -541,7 +531,7 @@ static void updateSelectedIdentity(const Track* t) {
   // Adaptive size: >=6 chars overflow the tile row at 28px ("HUSK28" showed
   // as "HUSK2"), so long callsigns drop to the 20px face and stay whole.
   static const lv_font_t* csFont = nullptr;
-  const lv_font_t* want = (strlen(cs) >= 6) ? F_M20 : F_L28;
+  const lv_font_t* want = (strlen(cs) >= 8) ? F_UI15 : F_M20;
   if (want != csFont) {
     csFont = want;
     lv_obj_set_style_text_font(s_selCallsign, want, 0);
