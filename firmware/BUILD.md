@@ -96,9 +96,19 @@ python3 -m esptool --chip esp32s3 merge_bin -o flasher/airradar-merged.bin \
   0x10000 "$BUILD/AirRadar.ino.bin"
 ```
 
-(`esptool` ships inside the esp32 core; if `python3 -m esptool` isn't found:
-`pip3 install esptool`.) Commit `flasher/airradar-merged.bin`, enable GitHub
-Pages on the `flasher/` folder, and the **Connect & Install** button is live.
+(`esptool` ships inside the esp32 core at
+`~/Library/Arduino15/packages/esp32/tools/esptool_py/*/esptool`; note that 5.x
+spells the subcommand `merge-bin` and the flags `--flash-mode/--flash-freq/
+--flash-size`.) Also copy the app-only image for OTA:
+
+```bash
+cp "$BUILD/AirRadar.ino.bin" flasher/airradar-ota.bin
+```
+
+Then bump `flasher/manifest.json` and the footer in `flasher/index.html` to match
+`AR_VERSION`, commit both bins, and enable GitHub Pages from the repository
+**root** — Pages cannot publish an arbitrary `flasher/` folder, so the installer
+lives at `/flasher/` underneath the site root.
 
 ## D. Updates after the first flash — no cable needed
 
