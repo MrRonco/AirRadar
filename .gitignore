@@ -9,3 +9,7 @@ node_modules/
 # ...but the released flasher images ARE the deliverable — track them.
 !flasher/airradar-merged.bin
 !flasher/airradar-ota.bin
+
+# Tooling scratch
+.playwright-mcp/
+.DS_Store

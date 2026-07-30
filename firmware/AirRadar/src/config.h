@@ -7,8 +7,10 @@
 // ============================================================
 //  Identity
 // ============================================================
-#define AR_VERSION       "7.0.0"
-#define AR_USER_AGENT    "ESP32-AirRadar/7.0"
+#define AR_VERSION       "7.1.0"
+// Contact URL included on purpose: several keyless APIs (Planespotters for
+// one) reject a bare product token with 403.
+#define AR_USER_AGENT    "ESP32-AirRadar/7.1 (+https://" AR_REPO_URL ")"
 #define AR_REPO_URL      "github.com/MrRonco/AirRadar"
 #define AR_AUTHOR_LINE   "A hobby ADS-B radar by Franco Raso"
 #define AR_MDNS_NAME     "airradar"

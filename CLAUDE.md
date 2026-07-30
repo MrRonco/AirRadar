@@ -4,7 +4,7 @@ Real-time ADS-B air-traffic radar display on a Waveshare 7" ESP32-S3 touchscreen
 Glassmorphism UI, touch provisioning, on-device network config, fed primarily by a
 local ADS-B receiver with airplanes.live as automatic cloud fallback.
 
-Current version: **v7.0** — an LVGL 8.3 application under `firmware/AirRadar/`
+Current version: **v7.1** — an LVGL 8.3 application under `firmware/AirRadar/`
 (see `docs/V7_PORT.md` for architecture and `firmware/BUILD.md` for the exact
 build). The root `AirRadar.ino` is the legacy v6 single-sketch app, kept as the
 reference for proven data/bring-up logic. Everything below about hardware,
@@ -114,13 +114,31 @@ arduino-cli monitor -p /dev/cu.wchusbserial* -c baudrate=115200
    invalidates only the holder's own rect — `lv_obj_move_children_by()` shifts
    children without invalidating them — so a label hanging outside leaves a
    ghost at its old position.
-13. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
+13. **(v7) LVGL flex overflows; it does not shrink.** A child wider than its
+   parent is not compressed, it spills — and a `SIZE_CONTENT` parent can
+   *under-measure* and clip a child that was itself sized correctly. When a value
+   looks truncated, measure the label with `lv_obj_update_layout()` before
+   blaming the font: twice now the label was fine and the parent was the bug.
+   Fixed-width keys (`SET_KEY_W`) plus `LV_LABEL_LONG_DOT` beat hoping.
+14. **(v7.1) A blank secret field must never overwrite the stored secret.**
+   `handleWifi` wrote `server.arg("pass")` unconditionally, and the field renders
+   blank *by design* so the password is not served back — so saving any unrelated
+   Wi-Fi setting silently erased the key. Guard every write with `if (pw.length())`.
+15. **(v7.1) The CSRF guard must compare origins exactly.** A substring/`indexOf`
+   check on the Host header passes `http://airradar.local.evil.com`. Build the
+   two acceptable origins (`http://` + Host, `https://` + Host) and compare whole.
+16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
    decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
    over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,
    ±noise, top highlight, bottom shade. Chrome changes require editing `buildChrome()`
    and any dependent `restore()` rectangles together.
 
 ## Architecture
+
+The sprite/`restore()` model below is **v6** (root `AirRadar.ino`). v7 replaces it
+with LVGL objects + change-caching, but the *reason* for both is identical and is
+the one thing to carry forward: the panel DMA owns the PSRAM bus, so the renderer
+must repaint only what actually changed. See `docs/V7_PORT.md` for the v7 tree.
 
 - **Rendering is event-driven** — no continuous refresh loop. The RGB panel's DMA
   already consumes most PSRAM bandwidth; never add per-frame animation without
@@ -143,6 +161,12 @@ arduino-cli monitor -p /dev/cu.wchusbserial* -c baudrate=115200
 - Screens: `SCR_MAIN`, `SCR_WIFI_SCAN`, `SCR_WIFI_PASS` (3-layer QWERTY),
   `SCR_COORDS` (numpad), `SCR_MENU` (gear), `SCR_NET` (DHCP/static editor).
   Touch is edge-triggered in `loop()` and dispatched per screen.
+- **Legend overlay (v7.1, `ui/ui_help.cpp`)** — the `?` left of the gear. It is a
+  legend, not a manual: it explains only what the display *encodes* (glyph colour
+  and size, dimming, rings, dot states), never what it already labels. Built once
+  at boot and hidden; a hidden LVGL subtree is skipped entirely during redraw, so
+  it costs nothing until shown. The scrim is clickable both to dismiss and to stop
+  taps falling through and changing the selection underneath.
 
 ## Data sources
 
@@ -177,10 +201,20 @@ The author runs the feeder on a segmented network; adapt these to yours.
 - **Weather** — Open-Meteo `current=` query, TLS, ~15 min.
 - **ISS** — open-notify `iss-now.json` over **plain HTTP on purpose**: repeated TLS
   connections leak ~1.5 KB each in esp-tls, and a 15 s poll made that visible.
-- **Base map** — CARTO `dark_all` slippy tiles, TLS, a 3×3 stitch → blue-tint →
-  vignette → 392² RGB565, re-fetched on range/location change.
+- **Base map (v7.1: full-bleed)** — CARTO `dark_all` slippy tiles, TLS, a **5×3**
+  stitch → blue-tint → coverage-lens dim → **800×480** RGB565 behind the whole
+  screen, not just the disc. The transient 1.9 MB mosaic is freed right after the
+  resample. Persisted to FATFS `/mp/r<km>` keyed by `/mp/key` (lat/lon), so it
+  only depends on {lat, lon, range} and is re-fetched **only** when one changes.
+  Flash writes are chunked at 32 KB — a single large write stalls the LCD DMA.
 - **Airline logos** — theqkash/esp32flight-logos (90×90 ICAO PNG), TLS, three-tier
-  cache: RAM → FATFS `/lg/<ICAO>` (persistent) → network; visible-aircraft prefetch.
+  cache: RAM (24 slots) → FATFS `/lg/<ICAO>` (persistent) → network;
+  visible-aircraft prefetch, and the prefetch pass touches `lastUse` for every
+  visible airline so live entries can't become the LRU victim.
+- **Route cache (v7.1)** — routes are static per callsign, so the 192-entry table
+  mirrors to FATFS `/rt/tbl` (flushed every 60 s). Origin/destination survive both
+  a reboot and the TLS gate closing under heap pressure. Only a *definitive*
+  answer (HTTP 200 or 404) sets `routeTried`; a shed fetch must stay retryable.
 - **TLS discipline (non-negotiable):** one secure connection at a time
   (`tlsTryAcquire`), aircraft feed has priority (`essential=true`), optional fetches
   are shed below a 45 KB internal-heap floor. Concurrent TLS starves mbedTLS.
@@ -195,9 +229,14 @@ toggles), `fcls` (class filter bitmask), `faltlo falthi` (altitude filter),
 
 ## Web interface & API
 
-`http://<ip>/` (also `http://airradar.local/`): the v6 settings/Wi-Fi/Network/Forget
-forms plus an Integrations section (MQTT, TZ, panel password) and a Firmware **OTA**
-upload. Static/Wi-Fi changes reboot by design. v7 API (all behind HTTP Basic auth
+`http://<ip>/` (also `http://airradar.local/`). **v7.1 rebuilt this as a desktop
+console**, not a phone settings form: a fixed 1240 px grid with no viewport meta
+(it is only ever opened from a computer), an 8-tile live status strip off
+`/metrics` at 10 s, and a traffic table off `/api/state` at 15 s — both gated on
+`document.visibilityState` so a background tab stops polling the device. The
+panel mirror is manual-only (1.1 MB, and it blocks the panel ~2 s). Below that
+sit the Radar/Feed, Network/Wi-Fi and Integrations/Firmware **OTA** forms plus a
+danger zone. Static/Wi-Fi changes reboot by design. v7 API (all behind HTTP Basic auth
 `admin`/panel-password when set, with an Origin/Host CSRF guard):
 `GET /api/state` · `GET|POST /api/config` · `GET /screen.bmp` (live 800×480 BMP) ·
 `GET /metrics` (Prometheus incl. `heap_free/heap_min/heap_largest`) ·
@@ -231,10 +270,23 @@ upload. Static/Wi-Fi changes reboot by design. v7 API (all behind HTTP Basic aut
 
 ## Roadmap (owner-approved parked ideas)
 
-Done in v7: military `dbFlags` glyph · `stats.json` msg-rate · `desc` airframe name ·
-airline logos · routes · weather · ISS · night mode · Home Assistant. Still parked:
+See `docs/ROADMAP.md` for the current list. Done in v7: military `dbFlags` glyph ·
+`stats.json` msg-rate · `desc` airframe name · airline logos · routes · weather ·
+ISS · night mode · Home Assistant. Done in v7.1: label decluttering (spatial, not
+nearest-N — the nearest targets are by definition the most clustered) · full-bleed
+map · FATFS map/route caches · legend overlay · desktop web console. Still parked:
 
-- Label decluttering for dense target clusters (alternating offsets)
-- Aircraft photos (planespotters) on a tap-to-expand Selected view
 - Route ETA; session-stats screen; a served `/live` web page
 - Ship the logo pack pre-loaded to FATFS at flash time (vs fetch-on-demand)
+- **Aircraft photos (Planespotters) — blocked, not deferred.** Technically viable
+  (LovyanGFX has `drawJpg`), but their Photo API terms forbid downloading or
+  storing the image binary on your own infrastructure: it "must be loaded by the
+  end user's browser". A panel fetching the JPEG itself cannot comply, and the
+  required plain-anchor attribution link has nowhere to go on a 7" display.
+  Rendering it **browser-side in the web console is compliant** — CORS was
+  verified working from the device's own origin — so that is the only open path.
+- **The ~72 B/s internal-heap drain.** Not TLS-per-connection, not TIME_WAIT, not
+  feeder keep-alive — all three measured and falsified (see `docs/V7_PORT.md`
+  note 9 so they are not retried). It tracks feeder run count at ~150–210 B per
+  poll. Largely *neutralised* by the FATFS caches, not fixed. Next step is real
+  heap tracing, not a fourth hypothesis.

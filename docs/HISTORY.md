@@ -73,3 +73,41 @@ response we were already fetching and filtering out.
 Result on hardware: free internal heap 17 KB → 159 KB, largest block 10 KB → 65 KB,
 minimum-ever 124 B → 51 KB, weather and routes alive again. Routes also now walk the
 visible list instead of resolving for the selected aircraft only.
+
+### v7.1 — the design pass
+Acted on `UI_UX_REVIEW.md`, which scored the panel 3.9/10 against the owner's
+brief. Headline finding: the radar was not the hero of its own display — the
+SETTINGS button measured 7.26× denser and 14.7× brighter than the entire scope,
+and chrome outweighed the disc 1.26 : 1 by area. It is now 0.82 : 1.
+
+Geometry and type. Disc 196 → 212 px (+17% area); cards 184 → 168 px, tangent
+with an 8 px gutter so they no longer overlap the circle and can stay opaque;
+weather moved off its floating pill into the Overview card, which vacated the
+vertical axis and made the compass-ghost bug structurally impossible; clock,
+range stepper and a bare 26 px gear share one bottom band. Eight type faces
+became six, values went 20 → 22 px to clear the 16-arcmin ISO 9241-303 floor at
+650 mm, and tabular figures were frozen into Inter with `pyftfeatfreeze` so live
+numbers stop shimmying as digits change.
+
+Measured, not stylistic. Card shadows bought 1.009:1 of contrast for a 3,362 B
+uncached buffer plus two blur passes per card per repaint — deleted. `OPA_CARD
+216` forced `LV_COVER_RES_NOT_COVER`, recompositing the screen root under every
+1 Hz label, for a 1.057:1 difference — cards are opaque. Dropping `clip_corner`
+from the scope removed the same penalty again.
+
+Safety. `altColorRGB`'s unknown-altitude branch returned `0xff6472` — byte
+identical to `C_RED`, so an aircraft with no altitude was indistinguishable from
+a 7700 squawk. Unknown is now ivory; red belongs to emergency alone, and the
+ramp is luminance-ordered so it reads without a legend.
+
+Caching, on the owner's suggestion. The stitched map only depends on
+{lat, lon, range}, yet was re-fetched from CARTO every boot — 15 TLS handshakes
+on the one subsystem that fails under heap pressure. Maps, logos and routes now
+all persist to FATFS. The map is on screen 5 s after boot, before Wi-Fi
+associates.
+
+Web console. Rebuilt from a 452 px mobile settings form into a desktop console
+with a live status strip and traffic table. Two defects found during the review
+and fixed: `handleWifi` wrote an empty password over the stored one because the
+field renders blank by design, and the CSRF guard was a substring match that
+`http://airradar.local.evil.com` would pass.

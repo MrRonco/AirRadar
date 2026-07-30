@@ -85,17 +85,38 @@ Open-Meteo weather · wheretheiss ISS · CARTO dark tiles. All keyless.
    question was settled (instant REJECT vs 2 s timeout for a DROP).
 8. CARTO tint: ×1.6 luminance lift (×2.6, tuned on a z8 tile, is neon at the
    z9–z11 the scope really uses).
-9. **Repeated TLS connections leak ~1.5 KB each** somewhere in esp-tls/mbedTLS
-   (core 3.3.10) — measured via A/B: heap drifted −120 B/s with the 15 s
-   wheretheiss.at poll and recovered flat with it off. Consequences baked in:
-   ISS uses open-notify over **plain HTTP**; and `tlsTryAcquire(essential)`
-   has a 45 KB heap floor so a residual drift sheds logos/routes/weather
-   before it can ever starve the aircraft feed. Rare TLS (weather 15 min,
-   logos/routes once per selection) leaks negligibly; a device parked on the
-   **cloud fallback** (TLS every 8 s) will still drift — fix the local feeder
-   reachability rather than living on cloud long-term.
+9. **RETRACTED — the drain is not per-TLS-connection.** This note used to
+   claim ~1.5 KB leaked per secure connection. Re-measured on 2026-07-29 with
+   a dedicated counter (`airradar_tls_conn`): a 90 s window in which the
+   counter did **not move at all** still lost 6.8 KB. Per-subsystem
+   instrumentation then attributed the whole ~72 B/s to **feeder run count**
+   (~150–210 B per poll, 30 polls/min), with iss contributing exactly 0.
+   Two fixes were tried against that and both measured as no-ops, so do not
+   repeat them: `SO_LINGER`/abortive close (reverted — with HTTP/1.0 the
+   *server* closes first, so the device never held TIME_WAIT) and HTTP
+   keep-alive on the feeder (kept for hygiene — 30× fewer connections — but
+   the drain stayed at 72.8 B/s). **The drain is still unexplained.** It is
+   now largely neutralised rather than solved: the map and routes both cache
+   to FATFS and keep working with the TLS gate shut. Weather and new logo
+   fetches remain exposed. Next step is real heap tracing, not another
+   hypothesis.
+10. **Non-uniform font codepoint ranges.** Regenerating all faces with one
+   uniform range silently dropped U+2039/203A and turned the range stepper's
+   chevrons into tofu. Per-face ranges are listed in CLAUDE.md.
+11. **`lv_obj_set_ext_click_area`** is how a small glyph keeps a 48 px touch
+   target — used by both the gear and the "?" (26 px drawn, 48 px tappable).
 
 ## Deferred (tracked, not forgotten)
 
-Real airline logo pack in FATFS (monogram tile ships now) · aircraft photos ·
-ETA on routes · session stats view · trails on the scope · web `/live` page.
+ETA on routes · session stats view · trails on the scope · web `/live` page ·
+aircraft type silhouettes.
+
+**Aircraft photos are blocked on licensing, not code.** Planespotters' photo
+API is free and keyless and LovyanGFX *does* have a JPEG decoder (`drawJpg`),
+so the panel could technically show them — but their Terms of Use say image
+binaries "must not be downloaded, stored, or re-hosted on your infrastructure
+under any circumstance … they must be loaded by the end user's browser", and
+each photo must link back via a plain anchor. An embedded panel can satisfy
+neither. A browser-side implementation in the web console **is** compliant
+(CORS verified working from the device's own page); their terms invite a
+request for advanced use once a public-API implementation exists.
