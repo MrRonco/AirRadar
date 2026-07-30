@@ -75,8 +75,8 @@ minimum-ever 124 B → 51 KB, weather and routes alive again. Routes also now wa
 visible list instead of resolving for the selected aircraft only.
 
 ### v7.1 — the design pass
-Acted on `UI_UX_REVIEW.md`, which scored the panel 3.9/10 against the owner's
-brief. Headline finding: the radar was not the hero of its own display — the
+Acted on an internal design audit, which scored the panel 3.9/10 against the
+owner's brief. Headline finding: the radar was not the hero of its own display — the
 SETTINGS button measured 7.26× denser and 14.7× brighter than the entire scope,
 and chrome outweighed the disc 1.26 : 1 by area. It is now 0.82 : 1.
 

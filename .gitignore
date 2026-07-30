@@ -13,3 +13,9 @@ node_modules/
 # Tooling scratch
 .playwright-mcp/
 .DS_Store
+
+# Internal design artifacts — kept locally, deliberately not published.
+# The UI/UX audit is candid internal criticism and the mockups are working
+# process, neither of which belongs in a public repo.
+UI_UX_REVIEW.md
+docs/mockups/

@@ -1,68 +1,32 @@
-# CLAUDE.md — AirRadar
+# CLAUDE.md — engineering contract
 
-Real-time ADS-B air-traffic radar display on a Waveshare 7" ESP32-S3 touchscreen.
-Glassmorphism UI, touch provisioning, on-device network config, fed primarily by a
-local ADS-B receiver with airplanes.live as automatic cloud fallback.
+Working notes for modifying AirRadar. **This file is deliberately not an
+introduction to the project** — [`README.md`](README.md) covers what it is, the
+hardware, installation, data sources and the HTTP API, and duplicating any of
+that here would only create two versions to keep in sync.
 
-Current version: **v7.1** — an LVGL 8.3 application under `firmware/AirRadar/`
-(see `docs/V7_PORT.md` for architecture and `firmware/BUILD.md` for the exact
-build). The root `AirRadar.ino` is the legacy v6 single-sketch app, kept as the
-reference for proven data/bring-up logic. Everything below about hardware,
-toolchain pins, and the non-negotiable rules applies to BOTH; v7 additionally
-pins lvgl 8.3.11 + PubSubClient 2.8 and needs `firmware/lv_conf.h` copied
-beside the lvgl library folder. NOTE: on esp32 core 3.3.x the FQBN no longer
-has a `FlashFreq` option — `FlashMode=qio` already means QIO 80 MHz.
+What lives here is the part you cannot infer from the code: the rules that cost
+a real debugging session to learn, the threading contract, and the conventions
+that keep the renderer from fighting the panel DMA.
 
-## Hardware (ground truth)
-
-- **Waveshare ESP32-S3-Touch-LCD-7, Rev 1.2** — ESP32-S3-WROOM-1-N16R8
-  (16 MB QIO flash, **8 MB OPI PSRAM**)
-- 800×480 RGB565 parallel panel driven by LovyanGFX `Panel_RGB`/`Bus_RGB`
-- **GT911 touch** on I2C (SDA=GPIO8, SCL=GPIO9, INT=GPIO4, RST via expander).
-  I2C address 0x5D — pinned deterministically by our reset sequence (see rules below)
-- **CH422G I/O expander** at reg addrs 0x24 (mode) / 0x38 (output).
-  Output bits: b1=TP_RST, b2=DISP/backlight, b3=LCD_RST, b4=SD_CS. Normal value `0x1E`.
-  Backlight is **on/off only** — no PWM dimming on this board.
-- CH343P USB-UART. The onboard **UART slide switch** must be in the correct position to
-  flash — "No serial data received" during upload means flip it.
-- Full RGB data-pin map and panel timings live in `LGFX_Waveshare_7.h`. Treat that file
-  as the ground truth; it was debugged against real hardware.
-
-## Toolchain
-
-- Arduino IDE 2.3.10 or `arduino-cli`; **esp32 core 3.3.10**
-- Board: **ESP32S3 Dev Module** — deliberately NOT the "Waveshare ESP32-S3-Touch-LCD-7"
-  board entry (its partition menu caps the app at 2 MB; we need 3 MB)
-- macOS host note: CH343 driver via `brew install --cask wch-ch34x-usb-serial-driver`
-  (requires Rosetta on Apple Silicon). Port appears as `/dev/cu.wchusbserial*`.
-
-Required Tools settings:
-
-| Setting | Value |
+| Looking for | Go to |
 |---|---|
-| USB CDC On Boot | Enabled |
-| Flash Mode | QIO 80 MHz |
-| Flash Size | 16 MB (128 Mb) |
-| Partition Scheme | 16M Flash (3MB APP/9.9MB FATFS) |
-| PSRAM | **OPI PSRAM** |
-| Upload Speed | 921600 |
+| What the project is, install, API reference | [`README.md`](README.md) |
+| Exact build, FQBN, `lv_conf.h` placement | [`firmware/BUILD.md`](firmware/BUILD.md) |
+| Pin map, panel timings, GT911 reset sequence | [`docs/HARDWARE.md`](docs/HARDWARE.md) |
+| v7 module tree and the port's findings | [`docs/V7_PORT.md`](docs/V7_PORT.md) |
+| Version-by-version narrative | [`docs/HISTORY.md`](docs/HISTORY.md) |
+| What is shipped, parked and blocked | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 
-arduino-cli equivalents (verify option ids with `arduino-cli board details -b esp32:esp32:esp32s3` — they occasionally change between core releases):
+Current version **v7.2.0-beta.1**. The firmware is an LVGL 8.3 application under
+`firmware/AirRadar/`; the root `AirRadar.ino` is the **legacy v6** single-sketch
+app, kept only as the reference for proven data and bring-up logic. The rules
+below apply to both.
 
-```bash
-FQBN='esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashMode=qio,FlashFreq=80,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=opi,UploadSpeed=921600'
-arduino-cli compile --fqbn "$FQBN" .
-arduino-cli upload  --fqbn "$FQBN" -p /dev/cu.wchusbserial* .
-arduino-cli monitor -p /dev/cu.wchusbserial* -c baudrate=115200
-```
-
-## Libraries (pinned — do not casually upgrade)
-
-- **LovyanGFX 1.2.25** (`LGFX_USE_V1` API; RGB panel + Touch_GT911)
-- **ArduinoJson 6.21.6** — code uses `DynamicJsonDocument`/`StaticJsonDocument`,
-  which v7 deprecates. Stay on 6.x unless doing a deliberate migration.
-- Everything else ships with the esp32 core: WiFi, HTTPClient, WiFiClientSecure,
-  WebServer, ESPmDNS, Preferences.
+Three things about the toolchain that bite and are easy to miss: the esp32 core
+is pinned at **3.3.10**, `firmware/lv_conf.h` must be copied *beside* the lvgl
+library folder or the build fails with missing symbols, and on core 3.3.x the
+FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
 
 ## Non-negotiable rules (each one was a real debugging session)
 
@@ -151,163 +115,123 @@ arduino-cli monitor -p /dev/cu.wchusbserial* -c baudrate=115200
    ±noise, top highlight, bottom shade. Chrome changes require editing `buildChrome()`
    and any dependent `restore()` rectangles together.
 
-## Architecture
+## Threading contract
 
-The sprite/`restore()` model below is **v6** (root `AirRadar.ino`). v7 replaces it
-with LVGL objects + change-caching, but the *reason* for both is identical and is
-the one thing to carry forward: the panel DMA owns the PSRAM bus, so the renderer
-must repaint only what actually changed. See `docs/V7_PORT.md` for the v7 tree.
+The single rule that makes the rest safe, defined in `core/state.h`:
 
-- **Rendering is event-driven** — no continuous refresh loop. The RGB panel's DMA
-  already consumes most PSRAM bandwidth; never add per-frame animation without
-  budgeting for that.
-- Two PSRAM sprites: `bg` (800×480 static chrome) and `plot` (400×408 dynamic radar).
-  Radar tick: copy the bg slice under the plot (`bg.pushSprite(&plot,-PLOT_X,-PLOT_Y)`),
-  draw ring labels + targets, push to LCD.
-- Card updates: `restore(x,y,w,h)` clips-and-repaints chrome from `bg`, then transparent
-  text on top. Every drawer sets its own font *and* datum explicitly.
-- **Fetch runs as a task on core 0** (`startFetch` → `fetchTask`). Results land in a
-  `pending*` buffer guarded by `portMUX`; `applyPending()` merges into `tracks[]` on
-  the main loop. Never touch `tracks[]` from the fetch task.
-- Track lifecycle: fresh <20 s → filled glyph; 20–60 s → hollow "COAST" glyph with dead
-  reckoning; >60 s → dropped. Trails record every 10 s (5 dots), stored in *screen*
-  coordinates — they are cleared on range change (`clearTrails()`) because screen
-  coords don't survive rescaling.
-- Selection is by ICAO hex (`selHex`), survives refreshes, cleared when the track drops.
-  `rebuildOrder()` maintains a distance-sorted index used by the ◀ ▶ cycle buttons.
-  Selected target draws last so its label wins overlaps.
-- Screens: `SCR_MAIN`, `SCR_WIFI_SCAN`, `SCR_WIFI_PASS` (3-layer QWERTY),
-  `SCR_COORDS` (numpad), `SCR_MENU` (gear), `SCR_NET` (DHCP/static editor).
-  Touch is edge-triggered in `loop()` and dispatched per screen.
-- **Legend overlay (v7.1, `ui/ui_help.cpp`)** — the `?` left of the gear. It is a
-  legend, not a manual: it explains only what the display *encodes* (glyph colour
-  and size, dimming, rings, dot states), never what it already labels. Built once
-  at boot and hidden; a hidden LVGL subtree is skipped entirely during redraw, so
-  it costs nothing until shown. The scrim is clickable both to dismiss and to stop
-  taps falling through and changing the selection underneath.
+```
+core 1  loop()  ──▶ LVGL · touch · g_tracks · NVS · MQTT
+                     ▲
+                     │ pending buffers, guarded by g_dataMux
+                     │
+core 0  tasks   ──▶ feeder · routes · weather · ISS · map tiles · logos
+```
 
-## Data sources
+- **loop() owns all LVGL, all of `g_tracks`, and all NVS access.** No exceptions.
+- Network runs as **short-lived tasks on core 0**. A task never reads `g_set`
+  (String/double torn-read risk) — everything it needs is snapshotted into a job
+  struct in loop context before the spawn.
+- Tasks write only into `g_pending*` / `g_wx` / `g_iss` / `g_routeRes*` under
+  `g_dataMux`, and always set the *ready flag last*.
+- Each task has its own in-progress volatile flag so only one of its kind exists
+  at a time.
+- Tasks take a **12 KB internal stack**. Check `tlsGateOpen()` in loop context
+  *before* spawning — see rule 11.
+- A task ends by clearing its flag and calling `vTaskDelete(NULL)`, which
+  **never returns** — see rule 17, which is the most expensive lesson in this
+  file.
 
-- **Primary — local feeder:** `feedUrl` (NVS, default
-  `http://adsb.local:8080/data/aircraft.json` — set yours on first boot). readsb/tar1090
-  dialect: top-level key `aircraft`, includes `r`/`t`/`desc`/`seen_pos`/`r_dst`. Polled
-  every **2 s**, plain HTTP, 1.5 s connect + 4 s read timeout, auto-retry on the
-  alternate `/tar1090/data/` path.
-  Entries with `seen_pos > 15 s` are skipped so our coast logic owns stale positions.
-- **Fallback — airplanes.live** `/v2/point/lat/lon/radiusNM` (key `ac`), polled every
-  **8 s** — that interval is API courtesy; keep it. Radius derives from `rangeKm`
-  (capped 250 NM). Snaps back to local automatically on the next successful poll.
-- Both parse through `fetchParse()` with one shared ArduinoJson filter.
-- The Overview card shows the live source: LOCAL (cyan) / CLOUD (grey) / OFFLINE.
+## Architecture that matters when modifying
 
-## Network environment (example setup)
+- **Rendering is event-driven.** There is no refresh loop. The RGB panel's DMA
+  already consumes most PSRAM bandwidth, so never add per-frame animation
+  without budgeting against it, and change-cache every dynamic write.
+- **Track lifecycle:** fresh <20 s → solid glyph; 20–60 s → translucent, coasting
+  on dead reckoning; >60 s → dropped.
+- **Selection is by ICAO hex** (`g_selHex`), so it survives refreshes and clears
+  only when the track drops. `tracksRebuildOrder()` maintains the distance-sorted
+  index. The selected target draws last so its label wins overlaps.
+- **Legend overlay** (`ui/ui_help.cpp`) — the `?` beside the gear. A legend, not
+  a manual: it explains only what the display *encodes* (glyph colour and size,
+  dimming, rings, dot states), never what it already labels. Built once at boot
+  and hidden, so it costs nothing until shown. Its scrim is clickable both to
+  dismiss and to stop taps falling through to the scope underneath.
+- The v6 sprite/`restore()` model in the root sketch is superseded, but its
+  *reason* carries forward unchanged: the panel DMA owns the PSRAM bus, so the
+  renderer must repaint only what actually changed.
 
-The author runs the feeder on a segmented network; adapt these to yours.
+## Enrichment implementation
 
-- The ESP32 typically gets a DHCP reservation so its IP is stable (or use the
-  on-device static-IP screen).
-- Feeder: a Raspberry Pi running the adsb.im image — port 80 is the Flask config app
-  (a 404 there is *expected*), tar1090 is on **port 8080** (`/data/aircraft.json`).
-- If your feeder is on a different VLAN/subnet than the display, the firewall needs a
-  pass rule for **TCP → <feeder-ip>:8080**. If the display shows CLOUD instead of the
-  local source, suspect that rule (or a wrong feeder URL) first.
+README lists the sources; these are the details that matter in the code.
 
-## Enrichment sources (v7, all keyless)
-
-- **Routes** — adsbdb.com `/v0/callsign/<CS>`, TLS, looked up lazily per selected
-  aircraft, cached by hex. Callsign is sanitized to `[A-Za-z0-9]` before the URL.
-- **Weather** — Open-Meteo `current=` query, TLS, ~15 min.
-- **ISS** — open-notify `iss-now.json` over **plain HTTP on purpose**: one less
-  ~35 KB mbedTLS handshake, and at a 15 s cadence one less competitor for the
-  single-slot TLS gate. (The original "esp-tls leaks ~1.5 KB per connection"
-  rationale is **retracted** — see `docs/V7_PORT.md` note 9 — but plain HTTP is
-  still correct here on handshake cost alone.)
-- **Base map (v7.1: full-bleed)** — CARTO `dark_all` slippy tiles, TLS, a **5×3**
-  stitch → blue-tint → coverage-lens dim → **800×480** RGB565 behind the whole
-  screen, not just the disc. The transient 1.9 MB mosaic is freed right after the
-  resample. Persisted to FATFS `/mp/r<km>` keyed by `/mp/key` (lat/lon), so it
-  only depends on {lat, lon, range} and is re-fetched **only** when one changes.
-  Flash writes are chunked at 32 KB — a single large write stalls the LCD DMA.
-- **Airline logos** — theqkash/esp32flight-logos (90×90 ICAO PNG), TLS, three-tier
-  cache: RAM (24 slots) → FATFS `/lg/<ICAO>` (persistent) → network;
-  visible-aircraft prefetch, and the prefetch pass touches `lastUse` for every
-  visible airline so live entries can't become the LRU victim.
-- **Route cache (v7.1)** — routes are static per callsign, so the 192-entry table
-  mirrors to FATFS `/rt/tbl` (flushed every 60 s). Origin/destination survive both
-  a reboot and the TLS gate closing under heap pressure. Only a *definitive*
-  answer (HTTP 200 or 404) sets `routeTried`; a shed fetch must stay retryable.
-- **TLS discipline (non-negotiable):** one secure connection at a time
-  (`tlsTryAcquire`), aircraft feed has priority (`essential=true`), optional fetches
-  are shed below a 45 KB internal-heap floor. Concurrent TLS starves mbedTLS.
+- **Feeder** — readsb/tar1090 dialect, top-level `aircraft` key. Auto-retries on
+  the alternate `/tar1090/data/` ↔ `/data/` path. Entries with `seen_pos > 15 s`
+  are skipped so *our* coast logic owns stale positions rather than the feeder's.
+  Local and cloud share one `fetchParse()` and one ArduinoJson filter.
+- **Routes** — callsign is sanitized to `[A-Za-z0-9]` before it reaches the URL;
+  it comes straight off the ADS-B wire and would otherwise be injectable. Only a
+  *definitive* answer (HTTP 200 or 404) sets `routeTried` — a shed fetch must
+  stay retryable, or one hiccup blanks a route for the rest of the boot.
+- **ISS** — plain HTTP on purpose: one less ~35 KB mbedTLS handshake, and one
+  less competitor for the single-slot TLS gate at a 15 s cadence. (The original
+  "esp-tls leaks ~1.5 KB per connection" rationale is **retracted** — see
+  `docs/V7_PORT.md` note 9.)
+- **Base map** — 5×3 CARTO stitch → blue-tint → coverage-lens dim → 800×480
+  RGB565. The transient 1.9 MB mosaic is freed immediately after resampling.
+  Cached to FATFS `/mp/r<km>` keyed by `/mp/key`, so it depends only on
+  {lat, lon, range}. **Flash writes are chunked at 32 KB** — one large write
+  stalls the LCD DMA.
+- **Logos** — three tiers: RAM (24 slots) → FATFS `/lg/<ICAO>` → network. The
+  prefetch pass touches `lastUse` for every *visible* airline, otherwise live
+  entries become the LRU victim and a evicted `LOGO_MISS` causes repeat 404s
+  over TLS.
+- **Route cache** — 192 entries mirrored to FATFS `/rt/tbl`, flushed every 60 s.
+- **TLS discipline (non-negotiable):** one secure connection at a time via
+  `tlsTryAcquire()`; the aircraft feed has priority (`essential=true`); optional
+  fetches are shed below the internal-heap floor. Concurrent TLS starves mbedTLS.
 
 ## NVS schema (Preferences namespace `"radar"`)
 
-v5/v6 keys kept for in-place upgrade: `ssid pass lat lon lbl rng feed nstat nip ngw
-nmask ndns`. v7 adds: `tz` (POSIX TZ), `ppass` (panel/API password), `mqtten mqtturi`,
-`nighten nightfr nightto` (quiet-hours minutes), `wxen issen logoen mapen` (layer
-toggles), `fcls` (class filter bitmask), `faltlo falthi` (altitude filter),
-`watch` (watchlist prefixes), `fav{0..2}{lat,lon,nam}` (favourite locations).
+v5/v6 keys kept for in-place upgrade: `ssid pass lat lon lbl rng feed nstat nip
+ngw nmask ndns`. v7 adds `tz` (POSIX TZ), `ppass` (panel/API password),
+`mqtten mqtturi`, `nighten nightfr nightto` (quiet-hours minutes),
+`wxen issen logoen mapen` (layer toggles), `fcls` (class filter bitmask),
+`faltlo falthi` (altitude filter), `watch` (watchlist prefixes) and
+`fav{0..2}{lat,lon,nam}` (favourite locations).
 
-## Web interface & API
+## Conventions
 
-`http://<ip>/` (also `http://airradar.local/`). **v7.1 rebuilt this as a desktop
-console**, not a phone settings form: a fixed 1240 px grid with no viewport meta
-(it is only ever opened from a computer), an 8-tile live status strip off
-`/metrics` at 10 s, and a traffic table off `/api/state` at 15 s — both gated on
-`document.visibilityState` so a background tab stops polling the device. The
-panel mirror is manual-only (1.1 MB, and it blocks the panel ~2 s). Below that
-sit the Radar/Feed, Network/Wi-Fi and Integrations/Firmware **OTA** forms plus a
-danger zone. Static/Wi-Fi changes reboot by design. v7 API (all behind HTTP Basic auth
-`admin`/panel-password when set, with an Origin/Host CSRF guard):
-`GET /api/state` · `GET|POST /api/config` · `GET /screen.bmp` (live 800×480 BMP) ·
-`GET /metrics` (Prometheus incl. `heap_free/heap_min/heap_largest`) ·
-`GET /api/probe?url=` (device-side LAN fetch test — settles firewall-vs-firmware) ·
-`POST /update` (OTA). MQTT publishes Home-Assistant discovery sensors.
-
-## Conventions (v7)
-
-- Firmware is now a multi-file LVGL 8.3 app under `firmware/AirRadar/` — see
-  `docs/V7_PORT.md`. The root `AirRadar.ino` is the **legacy v6** reference.
-- **Threading contract (core/state.h):** loop() owns all LVGL + `g_tracks` + NVS;
-  network runs as short-lived core-0 tasks writing pending buffers under `g_dataMux`.
-- All geometry/timing/keys are named in `config.h` — no magic numbers in modules.
-- Palette + fonts in `ui/theme.h` tokens; `altColorRGB()` = amber/cyan/violet/red.
-  No greens — owner preference.
-- Every dynamic LVGL write must be change-cached (unchanged writes still invalidate
-  and fight the panel DMA — this was the "wiggle").
-- Regenerate images with `firmware/tools/genassets.py`; `firmware/lv_conf.h` must
-  sit beside the lvgl library.
-- **Fonts (v7.1): six faces, not eight.** `font_hero56` / `font_clock36`
-  (InterDisplay Light, **tnum frozen**), `font_id28` (Inter Medium),
-  `font_val22` (Inter Medium, **tnum frozen** — every instrument value),
-  `font_body18` (Inter Regular), `font_micro13` (JetBrains Mono Medium).
-  Regenerate with `lv_font_conv --bpp 4`; freeze tabular figures first with
-  `pyftfeatfreeze -f tnum` or digits will visibly jitter as they change.
-  Codepoint ranges are NOT uniform and dropping one breaks glyphs silently:
-  hero `0x30-0x39`, clock `0x30-0x3A`, id28 `0x20,0x2D,0x2E,0x30-0x39,0x41-0x5A,0xB0,0xB7`,
+- All geometry, timings and NVS keys are named in `config.h` — no magic numbers
+  in modules.
+- Palette and fonts are tokens in `ui/theme.h`. `altColorRGB()` is
+  amber/cyan/violet/red. **No greens** — owner preference.
+- Every dynamic LVGL write must be change-cached. Unchanged writes still
+  invalidate and fight the panel DMA; this was the "wiggle" (rule 8).
+- Regenerate images with `firmware/tools/genassets.py`.
+- **Fonts: six faces.** `font_hero56` / `font_clock36` (InterDisplay Light,
+  **tnum frozen**), `font_id28` (Inter Medium), `font_val22` (Inter Medium,
+  **tnum frozen** — every instrument value), `font_body18` (Inter Regular),
+  `font_micro13` (JetBrains Mono Medium). Regenerate with
+  `lv_font_conv --bpp 4`, and freeze tabular figures first with
+  `pyftfeatfreeze -f tnum` or digits visibly jitter as they change.
+  **Codepoint ranges are not uniform and dropping one breaks glyphs silently:**
+  hero `0x30-0x39`, clock `0x30-0x3A`,
+  id28 `0x20,0x2D,0x2E,0x30-0x39,0x41-0x5A,0xB0,0xB7`,
   micro13 `0x20-0x7E,0xB0,0xB7,0x2039,0x203A` (the last two are the range
   stepper's chevrons), val22/body18 `0x20-0x7E,0xB0,0xB7`.
-  The old F_* names survive in theme.cpp as aliases onto this scale.
+  The old `F_*` names survive in `theme.cpp` as aliases onto this scale.
+- Generated `font_*.c` files are **OFL-1.1, not GPL** — see
+  [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
-## Roadmap (owner-approved parked ideas)
+## Network environment (troubleshooting)
 
-See `docs/ROADMAP.md` for the current list. Done in v7: military `dbFlags` glyph ·
-`stats.json` msg-rate · `desc` airframe name · airline logos · routes · weather ·
-ISS · night mode · Home Assistant. Done in v7.1: label decluttering (spatial, not
-nearest-N — the nearest targets are by definition the most clustered) · full-bleed
-map · FATFS map/route caches · legend overlay · desktop web console. Still parked:
+The feeder typically runs on a separate host; adapt to your own setup.
 
-- Route ETA; session-stats screen; a served `/live` web page
-- Ship the logo pack pre-loaded to FATFS at flash time (vs fetch-on-demand)
-- **Aircraft photos (Planespotters) — blocked, not deferred.** Technically viable
-  (LovyanGFX has `drawJpg`), but their Photo API terms forbid downloading or
-  storing the image binary on your own infrastructure: it "must be loaded by the
-  end user's browser". A panel fetching the JPEG itself cannot comply, and the
-  required plain-anchor attribution link has nowhere to go on a 7" display.
-  Rendering it **browser-side in the web console is compliant** — CORS was
-  verified working from the device's own origin — so that is the only open path.
-- ~~The ~72 B/s internal-heap drain.~~ **SOLVED** — `vTaskDelete(NULL)` skipped
-  `~DynamicJsonDocument` in `issTask`, leaking 1088 B every 15 s = 72.5 B/s.
-  See rule 17 and `docs/V7_PORT.md` note 12. It never tracked feeder polls; the
-  feeder just had the only working counter, and a fixed 2 s cadence makes any
-  time-linear drain look per-poll.
+- Give the ESP32 a stable address — a DHCP reservation, or the on-device
+  static-IP screen.
+- On an adsb.im Raspberry Pi, port 80 is the Flask config app (a 404 there is
+  *expected*) and tar1090 is on **port 8080** at `/data/aircraft.json`.
+- If the feeder is on a different VLAN/subnet than the display, the firewall
+  needs a pass rule for **TCP → &lt;feeder-ip&gt;:8080**. If the panel shows CLOUD
+  instead of your local source, suspect that rule or a wrong feeder URL first —
+  `GET /api/probe?url=` runs the fetch from the device and settles it.

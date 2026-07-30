@@ -353,8 +353,7 @@ rather than a fourth guess.
 
 <br>
 
-v7.1 acted on [`UI_UX_REVIEW.md`](UI_UX_REVIEW.md), a full design audit that scored the
-panel **3.9/10**. The headline finding: the radar was not the hero of its own display.
+v7.1 acted on a full internal design audit that scored the panel **3.9/10**. The headline finding: the radar was not the hero of its own display.
 The SETTINGS button measured **7.26× denser and 14.7× brighter** than the entire scope,
 and chrome outweighed the disc 1.26 : 1 by area. It is now 0.82 : 1.
 
@@ -391,8 +390,8 @@ firmware/tools/          asset and font generation
 flasher/                 ESP Web Tools one-click installer (GitHub Pages)
 docs/                    hardware notes, port log, history, roadmap
 AirRadar.ino             legacy v6 single-sketch app, kept as reference
-CLAUDE.md                project context + every non-negotiable rule
-UI_UX_REVIEW.md          the full design audit behind v7.1
+LICENSES/                upstream licence texts for the bundled components
+CLAUDE.md                engineering contract: the rules, threading, conventions
 ```
 
 `AirRadar.ino` at the root is **v6** — the original single-file immediate-mode app. It
@@ -443,10 +442,11 @@ falsified and reverted. All three are written down in
 [`docs/V7_PORT.md`](docs/V7_PORT.md) precisely so the next person does not spend a
 session rediscovering them. The bug is still open.
 
-[`CLAUDE.md`](CLAUDE.md) at the root is the working context file for that collaboration.
-It is worth reading even if you never touch an LLM: it is the accumulated hardware truth
-of this board — every non-negotiable rule in it cost a real debugging session, and it is
-a more useful document than this README if you are porting to similar hardware.
+[`CLAUDE.md`](CLAUDE.md) is the working context file for that collaboration, and it is
+worth reading even if you never touch an LLM. It deliberately does not repeat this
+README — it is the accumulated hardware truth of this board. Every one of its eighteen
+non-negotiable rules cost a real debugging session, and if you are porting to similar
+hardware it is the more useful document of the two.
 
 Design direction, hardware decisions, priorities and the final call on every change
 were the author's.
