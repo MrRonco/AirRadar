@@ -71,7 +71,9 @@ phone app — it assumes a desktop and lays out on a fixed 1240 px grid.
 
 <div align="center">
 
-<img src="docs/img/web-console.png" width="880" alt="The AirRadar web console: a status strip of eight live tiles, a traffic table, and configuration forms for radar, network and integrations">
+<img src="docs/img/web-console.png" width="880" alt="The AirRadar web console: a status strip of eight live tiles, a traffic table, the panel mirror, and configuration forms for radar, network and integrations">
+
+<sub>Live, with the panel mirror loaded. Coordinates are blurred; the heap tiles show a device 30 minutes into a boot — see the <a href="#roadmap">known heap drain</a>.</sub>
 
 </div>
 
@@ -110,21 +112,69 @@ class appear in Home Assistant with no YAML.
 
 ## Hardware
 
-One board. Nothing to solder.
+One board. Nothing to solder, nothing to wire, no enclosure required to get started.
 
-| Part | Notes |
+### The Waveshare ESP32-S3-Touch-LCD-7
+
+> **[Buy the board →](https://www.waveshare.com/esp32-s3-touch-lcd-7.htm)**
+> <!-- REFERRAL: replace the URL above with your affiliate link -->
+
+Everything runs on a single **Waveshare ESP32-S3-Touch-LCD-7 (Rev 1.2)** — a 7-inch
+capacitive touchscreen with the microcontroller already on the back of the panel. It
+arrives as one assembled unit for around US$50–60. Plug in USB-C and it boots.
+
+| | |
 |---|---|
-| **Waveshare ESP32-S3-Touch-LCD-7** (Rev 1.2) | ESP32-S3-WROOM-1-N16R8 · 16 MB flash · **8 MB OPI PSRAM** · 800×480 RGB565 · GT911 capacitive touch |
-| USB-C cable | Power and flashing. ~500 mA. |
-| An ADS-B receiver on your LAN | *Optional.* Without one it runs on airplanes.live. A Raspberry Pi running [adsb.im](https://adsb.im) with an RTL-SDR is the usual setup. |
+| **MCU** | ESP32-S3-WROOM-1-**N16R8** — dual-core Xtensa LX7 @ 240 MHz, Wi-Fi + BLE |
+| **Flash** | 16 MB QIO — split 3 MB app / 9.9 MB FATFS for the on-device caches |
+| **PSRAM** | **8 MB OPI** — this is the part that makes the project possible |
+| **Display** | 7" IPS, 800×480, **RGB565 parallel** interface |
+| **Touch** | GT911 five-point capacitive, over I²C |
+| **Also on board** | CH422G I/O expander, CH343P USB-UART, microSD slot, RS485, CAN, battery header, spare I²C/UART headers |
+| **Power** | USB-C, roughly 500 mA in normal use |
+
+**Why this board specifically.** The two things that matter are the *parallel* display
+interface and the 8 MB of PSRAM, and they go together. An SPI display cannot move
+800×480×16 bits fast enough to redraw a live map; the RGB parallel bus can, because the
+panel's DMA scans a framebuffer held in PSRAM continuously. That framebuffer is 768 KB,
+which is why 8 MB of PSRAM rather than 2 MB is the deciding spec. The 16 MB flash then
+leaves nearly 10 MB of FATFS free for the map, logo and route caches — enough that the
+device draws a full base map about five seconds after power-on, before Wi-Fi has even
+associated.
+
+That same DMA is also the project's central engineering constraint: it consumes most of
+the available PSRAM bandwidth all the time, so every pixel the CPU writes is competing
+with the panel refresh. Nearly every performance rule in this codebase traces back to it.
+
+### Quirks worth knowing before you buy
+
+Honest notes, all learned the hard way:
+
+- **The backlight is on/off only.** There is no PWM dimming on this board, so night mode
+  turns the panel off rather than dimming it.
+- **There is a UART slide switch** on the board that gates flashing. In the wrong
+  position you get *"No serial data received"* and nothing else. It catches everyone once.
+- **The GT911 touch address latches at reset** from the INT pin. Left floating it comes
+  up at either 0x5D or 0x14, more or less at random per power cycle. The firmware pins it
+  deterministically, but a board sample with dead touch just needs the alternate address.
+- **On macOS you need the CH343 driver** — `brew install --cask wch-ch34x-usb-serial-driver`,
+  which wants Rosetta on Apple Silicon.
 
 > [!IMPORTANT]
 > **The PSRAM setting is not optional.** It must be **OPI PSRAM**. Set wrong, the
 > framebuffer fails to allocate and you get a black screen or a boot loop. It is the
 > first thing to check on any "the screen is dead" report.
 
-Full pin map, panel timings and the I²C expander details are in
-[`docs/HARDWARE.md`](docs/HARDWARE.md).
+### The rest of the bill of materials
+
+| Part | Notes |
+|---|---|
+| USB-C cable and a 5 V supply | Power and flashing. ~500 mA. |
+| An ADS-B receiver on your LAN | *Optional.* Without one it runs entirely on airplanes.live. A Raspberry Pi running [adsb.im](https://adsb.im) with an RTL-SDR dongle is the usual pairing. |
+| A stand or frame | *Optional.* The board has mounting holes; it sits fine on a desk stand. |
+
+Full pin map, panel timings, the GT911 reset sequence and the I²C expander details are
+in [`docs/HARDWARE.md`](docs/HARDWARE.md).
 
 ---
 
@@ -344,7 +394,17 @@ Still open — see [`docs/ROADMAP.md`](docs/ROADMAP.md):
 - Route ETA and a session-statistics screen
 - A served `/live` page in the web console
 - Shipping the logo pack pre-loaded to FATFS at flash time
-- The remaining internal-heap drain (neutralised, not solved)
+
+**Known open bug: a slow internal-heap drain.** Free internal SRAM falls at roughly
+70 B/s from boot and does not recover. A device measured at 27 minutes of uptime sat at
+17 KB free with a largest free block of 8.7 KB — below the ~16.4 KB that an mbedTLS
+handshake needs — so every optional TLS fetch is shed from then on. The flash caches
+hide most of the impact, since the map, logos and routes all come from FATFS rather than
+the network; what actually stops is weather refresh and first-time logo fetches. Aircraft
+tracking, the local feeder and the web console are unaffected. The drain scales with
+feeder poll count. Three plausible causes were tested and falsified — see
+[`docs/V7_PORT.md`](docs/V7_PORT.md) — and the honest next step is heap tracing rather
+than a fourth guess.
 
 **Aircraft photos are blocked, not deferred.** Planespotters' Photo API terms require
 that image binaries are loaded by the end user's browser and never stored on your own
@@ -353,6 +413,33 @@ itself cannot comply. Rendering them browser-side in the web console *would* be
 compliant, and that is the only path being considered.
 
 ---
+
+## Built with Claude
+
+This project was developed with **[Claude Code](https://claude.com/claude-code)**
+(Anthropic) doing most of the implementation, and there is no point pretending
+otherwise — so here is what that actually looked like.
+
+The work was done against real hardware in a tight loop: flash the board, pull the panel
+over `GET /screen.bmp`, read `GET /metrics`, compare against what was expected, fix,
+repeat. That feedback loop is the reason the diagnostic endpoints exist at all — they
+were built so the firmware could be debugged by something that cannot physically look at
+the screen, and they turned out to be genuinely useful on their own.
+
+It was not magic, and the repo is honest about that. Three separate hypotheses for the
+internal-heap drain were confidently wrong — per-connection TLS leakage, then TIME_WAIT
+socket exhaustion, then missing feeder keep-alive. Each was implemented, measured,
+falsified and reverted. All three are written down in
+[`docs/V7_PORT.md`](docs/V7_PORT.md) precisely so the next person does not spend a
+session rediscovering them. The bug is still open.
+
+[`CLAUDE.md`](CLAUDE.md) at the root is the working context file for that collaboration.
+It is worth reading even if you never touch an LLM: it is the accumulated hardware truth
+of this board — every non-negotiable rule in it cost a real debugging session, and it is
+a more useful document than this README if you are porting to similar hardware.
+
+Design direction, hardware decisions, priorities and the final call on every change
+were the author's.
 
 ## Credits
 
