@@ -120,3 +120,49 @@ each photo must link back via a plain anchor. An embedded panel can satisfy
 neither. A browser-side implementation in the web console **is** compliant
 (CORS verified working from the device's own page); their terms invite a
 request for advanced use once a public-API implementation exists.
+
+
+## Note 12 — the ~72 B/s internal-heap drain: SOLVED
+
+`vTaskDelete(NULL)` never returns, so C++ destructors for objects living in the
+task function's scope are never run. `issTask` declared
+`DynamicJsonDocument doc(kIssDocBytes)` at task scope and called
+`vTaskDelete(NULL)` in that same scope, leaking the document's 1024 B heap
+buffer — 1088 B with allocator overhead — on **every** poll. At the 15 s ISS
+cadence that is **72.5 B/s**, against a measured drain of 72.7 B/s. That was
+the entire thing.
+
+`wxTask` had the same defect, and `routeTask` had it on four separate exit
+paths. `fetchTask` never did: its document lives inside `fetchAircraft()`,
+which returns normally.
+
+**How it was found — measurement, not hypothesis.**
+`heap_caps_get_info()` showed only ~0.2 new allocated blocks per feeder poll
+against ~200 B lost, so the leak was one ~1.1 KB object every 10–15 s, not many
+small ones. Five-second sampling put the period at ~15 s, which is not the 2 s
+feeder cadence. `/api/heapwalk` (built on `heap_caps_walk`, which IS available
+in the prebuilt 3.3.10 libs, unlike heap tracing) then dumped the surviving
+blocks' **contents**, and they read verbatim
+`timestamp.iss_position.latitude.51.4031` — one per poll, each a different
+latitude. No inference required.
+
+**Why three sessions missed it.** `g_heapDeltaIss` and `g_issRuns` were
+declared, exported to `/metrics`, and never incremented. "ISS contributes
+exactly 0" was a hardcoded zero being read as a measurement, so the drain was
+charged to the feeder — the only subsystem with a working counter. And because
+the feeder runs at a fixed 2 s cadence, any time-linear drain divides into a
+convincing "145 B per feeder poll". 72.7 B/s × 2 s = 145 B is the same number
+twice, not evidence of causation.
+
+**Also falsified, so they are not retried:**
+- Inbound HTTP does not leak. 100 extra `/metrics` requests over an 80 s window
+  cost ~4 B each against an 83 B/s baseline (control 83.2 vs load 88.7 B/s).
+- The per-task lwIP thread-semaphore + pthread TSD block (~160 B/task, a
+  seductive match for the observed figure) is reclaimed —
+  `vPortTCBPreDeleteHook` invokes the TLS index-0 deletion callback. Confirmed
+  by disassembly of the shipped libs, and implied by the fact that the 12 KB
+  task stack comes back at all.
+- Standalone heap tracing is unavailable: the header declares it
+  unconditionally but the symbols are absent from the prebuilt libs, so it
+  compiles and fails at link. Do not spend time on it.
+

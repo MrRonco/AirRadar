@@ -412,22 +412,15 @@ Still open — see [`docs/ROADMAP.md`](docs/ROADMAP.md):
 - A served `/live` page in the web console
 - Shipping the logo pack pre-loaded to FATFS at flash time
 
-**Known open bug: a slow internal-heap drain.** Free internal SRAM falls at roughly
-70 B/s from boot and does not recover. A device measured at 27 minutes of uptime sat at
-17 KB free with a largest free block of 8.7 KB — below the ~16.4 KB that an mbedTLS
-handshake needs — so every optional TLS fetch is shed from then on. The flash caches
-hide most of the impact, since the map, logos and routes all come from FATFS rather than
-the network; what actually stops is weather refresh and first-time logo fetches. Aircraft
-tracking, the local feeder and the web console are unaffected. The drain scales with
-feeder poll count. Three plausible causes were tested and falsified — see
-[`docs/V7_PORT.md`](docs/V7_PORT.md) — and the honest next step is heap tracing rather
-than a fourth guess.
-
-**Aircraft photos are blocked, not deferred.** Planespotters' Photo API terms require
-that image binaries are loaded by the end user's browser and never stored on your own
-infrastructure, plus a plain-anchor attribution link. A panel that fetches the JPEG
-itself cannot comply. Rendering them browser-side in the web console *would* be
-compliant, and that is the only path being considered.
+**Solved: the internal-heap drain.** Free internal SRAM used to fall ~72 B/s
+from boot and never recover, eventually starving mbedTLS so weather and new
+logo fetches stopped. Root cause: `vTaskDelete(NULL)` never returns, so a
+`DynamicJsonDocument` declared in a task function never runs its destructor —
+`issTask` leaked 1,088 bytes on every 15-second poll, which is 72.5 B/s against
+a measured 72.7. Found by dumping surviving heap blocks with `heap_caps_walk`
+and reading their contents, which literally spelled out
+`iss_position.latitude`. `wxTask` and `routeTask` had the same defect. See
+[`docs/V7_PORT.md`](docs/V7_PORT.md) note 12.
 
 ---
 

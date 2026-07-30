@@ -306,8 +306,8 @@ map · FATFS map/route caches · legend overlay · desktop web console. Still pa
   required plain-anchor attribution link has nowhere to go on a 7" display.
   Rendering it **browser-side in the web console is compliant** — CORS was
   verified working from the device's own origin — so that is the only open path.
-- **The ~72 B/s internal-heap drain.** Not TLS-per-connection, not TIME_WAIT, not
-  feeder keep-alive — all three measured and falsified (see `docs/V7_PORT.md`
-  note 9 so they are not retried). It tracks feeder run count at ~150–210 B per
-  poll. Largely *neutralised* by the FATFS caches, not fixed. Next step is real
-  heap tracing, not a fourth hypothesis.
+- ~~The ~72 B/s internal-heap drain.~~ **SOLVED** — `vTaskDelete(NULL)` skipped
+  `~DynamicJsonDocument` in `issTask`, leaking 1088 B every 15 s = 72.5 B/s.
+  See rule 17 and `docs/V7_PORT.md` note 12. It never tracked feeder polls; the
+  feeder just had the only working counter, and a fixed 2 s cadence makes any
+  time-linear drain look per-poll.
