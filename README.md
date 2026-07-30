@@ -83,7 +83,7 @@ phone app — it assumes a desktop and lays out on a fixed 1240 px grid.
 
 <img src="docs/img/web-console.png" width="880" alt="The AirRadar web console: a status strip of eight live tiles, a traffic table, the panel mirror, and configuration forms for radar, network and integrations">
 
-<sub>Live, with the panel mirror loaded. Coordinates are blurred; the heap tiles show a device 30 minutes into a boot — see the <a href="#roadmap">known heap drain</a>.</sub>
+<sub>Live, with the panel mirror loaded. Coordinates blurred. The heap tiles are honest: pulling the 1.1 MB mirror is expensive, and this device is 24 minutes into a boot — see the <a href="#roadmap">known heap drain</a>.</sub>
 
 </div>
 
