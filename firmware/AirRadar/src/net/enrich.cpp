@@ -188,6 +188,9 @@ static void wxTask(void*) {
            "%s?latitude=%.4f&longitude=%.4f"
            "&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code",
            AR_WX_API, s_wxJob.lat, s_wxJob.lon);
+  // Scoped so the document's destructor runs before vTaskDelete(NULL), which
+  // never returns. See the note in issTask and CLAUDE.md rule 17.
+  {
   DynamicJsonDocument doc(kWxDocBytes);
   bool deferred = false;
   if (httpsGetJson(url, doc, nullptr, "wx", nullptr, &deferred)) {
@@ -214,6 +217,7 @@ static void wxTask(void*) {
   } else if (deferred) {
     s_wxRetrySoon = true;   // don't swallow the 15-minute slot over a lost race
   }
+  }                                            // <-- doc destructor runs HERE
   s_wxBusy = false;
   vTaskDelete(NULL);
 }
@@ -232,8 +236,17 @@ static void issTask(void*) {
   // TLS gate. The old "esp-tls leaks 1.5 KB per connection" rationale is
   // retracted -- see V7_PORT.md note 9 -- but the choice stands on its own.
   // open-notify returns iss_position lat/lon as STRINGS.
-  DynamicJsonDocument doc(kIssDocBytes);
+  //
+  // THE SCOPE BELOW IS LOAD-BEARING. vTaskDelete(NULL) never returns, so C++
+  // destructors for objects living in this function's scope are never run.
+  // DynamicJsonDocument owns a heap buffer; left at task scope it leaked
+  // kIssDocBytes on EVERY poll -- 1088 B of internal SRAM including allocator
+  // overhead, every 15 s, which is 72.5 B/s and was the entire "mystery" drain.
+  // Identified by heap_caps_walk(): the surviving blocks literally contained
+  // "iss_position.latitude.51.4031", one per poll. See CLAUDE.md rule 17.
   bool ok = false;
+  {
+  DynamicJsonDocument doc(kIssDocBytes);
   bool fetched = false;
   {
     WiFiClient net;
@@ -275,6 +288,15 @@ static void issTask(void*) {
     portEXIT_CRITICAL(&g_dataMux);
     Serial.printf("[enrich] iss: %d consecutive fails - invalidated\n", s_issFails);
   }
+  }                                            // <-- doc destructor runs HERE
+  // Now that the document is gone, this reading is meaningful. Previously
+  // g_heapDeltaIss/g_issRuns were declared, published to /metrics and NEVER
+  // incremented, so "ISS contributes exactly 0" was a hardcoded zero being
+  // read as a measurement -- which is why the drain was misattributed to the
+  // feeder for three sessions.
+  g_heapDeltaIss += (int32_t)issH0 -
+                    (int32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+  g_issRuns++;
   s_issBusy = false;
   vTaskDelete(NULL);
 }
@@ -282,7 +304,12 @@ static void issTask(void*) {
 // ============================================================
 //  Route — adsbdb (AR_ROUTE_API + callsign), single-slot result
 // ============================================================
-static void routeTask(void*) {
+// Body extracted from the task entry point on purpose. vTaskDelete(NULL) never
+// returns, so every `return` here is a path on which C++ destructors WOULD have
+// been skipped had the code lived in routeTask itself -- and routeTask has four
+// exits. Returning from a plain function runs ~DynamicJsonDocument on all of
+// them. See CLAUDE.md rule 17.
+static void routeTaskBody() {
   char org[5] = "", dst[5] = "", airline[sizeof(g_routeResAirline)] = "";
   bool final = false;                          // may we mark the callsign tried?
   // Callsign comes straight off the ADS-B wire — allow only [A-Za-z0-9] into
@@ -302,7 +329,6 @@ static void routeTask(void*) {
     g_routeResReady = true;
     portEXIT_CRITICAL(&g_dataMux);
     g_routeFetching = false;
-    vTaskDelete(NULL);
     return;
   }
   char url[kUrlMax];
@@ -328,7 +354,6 @@ static void routeTask(void*) {
     // re-requests once the cooldown passes.
     s_routeRetryAfterMs = millis() + 2500;
     g_routeFetching = false;
-    vTaskDelete(NULL);
     return;
   } else if (code == 404) {
     final = true;    // adsbdb genuinely has no route for this callsign; cache it
@@ -337,7 +362,6 @@ static void routeTask(void*) {
     // this as "tried" is what made routes vanish permanently after one hiccup.
     s_routeRetryAfterMs = millis() + 10000;
     g_routeFetching = false;
-    vTaskDelete(NULL);
     return;
   }
   portENTER_CRITICAL(&g_dataMux);
@@ -353,6 +377,12 @@ static void routeTask(void*) {
                 org[0] ? org : "?", dst[0] ? dst : "?",
                 airline[0] ? airline : "no airline");
   g_routeFetching = false;
+}
+
+// Task entry point: run the body so every exit path unwinds normally and the
+// JsonDocument destructor actually runs, THEN die.
+static void routeTask(void*) {
+  routeTaskBody();
   vTaskDelete(NULL);
 }
 

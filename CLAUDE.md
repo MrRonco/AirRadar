@@ -127,6 +127,24 @@ arduino-cli monitor -p /dev/cu.wchusbserial* -c baudrate=115200
 15. **(v7.1) The CSRF guard must compare origins exactly.** A substring/`indexOf`
    check on the Host header passes `http://airradar.local.evil.com`. Build the
    two acceptable origins (`http://` + Host, `https://` + Host) and compare whole.
+17. **(v7.1) `vTaskDelete(NULL)` skips every C++ destructor in that scope.**
+   It never returns, so a `DynamicJsonDocument` (or any RAII object) declared in
+   a task function leaks its heap buffer on every single run. This was the
+   entire "mysterious ~72 B/s drain": `issTask` leaked `kIssDocBytes` once per
+   15 s poll — 1088 B with allocator overhead, **72.5 B/s**, against a measured
+   72.7 B/s. `wxTask` and `routeTask` had it too (routeTask on four separate
+   exit paths). Found with `heap_caps_walk()`, whose surviving blocks literally
+   read `iss_position.latitude.51.4031`. Either scope the object in a nested
+   block, or put the body in a helper function and call `vTaskDelete` in the
+   wrapper. **`fetchTask` was never affected** — its document lives inside
+   `fetchAircraft()`, which returns normally.
+18. **Instrumentation that is never incremented reads as a measurement.**
+   `g_heapDeltaIss`/`g_issRuns` were declared, published to `/metrics` and never
+   written, so "ISS contributes exactly 0" was a hardcoded zero. The drain was
+   blamed on the feeder for three sessions because the feeder owned the only
+   working counter. Also note a fixed-cadence subsystem makes any time-linear
+   drain *look* per-poll: 72.7 B/s × 2 s = 145 B "per feeder poll" is the same
+   number, not evidence.
 16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
    decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
    over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,
