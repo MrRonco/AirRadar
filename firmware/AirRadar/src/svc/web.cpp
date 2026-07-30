@@ -18,6 +18,7 @@
 #include <Update.h>
 #include <ArduinoJson.h>
 #include "web.h"
+#include "heapwalk.h"
 #include "mqtt.h"
 #include "../config.h"
 #include "../core/state.h"
@@ -897,6 +898,24 @@ static void handleUpdateDone() {
 // ============================================================
 //  Lifecycle
 // ============================================================
+
+// Leak hunt: GET /api/heapwalk?a=1 takes the baseline, ?b=1 takes the second
+// snapshot, and no argument returns the diff with block contents.
+static void handleHeapWalk() {
+  if (!authed()) return;
+  if (server.hasArg("a")) {
+    bool ok = heapWalkSnapshotA();
+    server.send(200, "text/plain", ok ? "snapshot A taken\n" : "alloc failed\n");
+    return;
+  }
+  if (server.hasArg("b")) {
+    bool ok = heapWalkSnapshotB();
+    server.send(200, "text/plain", ok ? "snapshot B taken\n" : "alloc failed\n");
+    return;
+  }
+  server.send(200, "text/plain", heapWalkDiff());
+}
+
 static void handleNotFound() {
   if (!authed()) return;
   server.send(404, "text/plain", "Not found");
@@ -915,6 +934,7 @@ void webBegin() {
   server.on("/api/config", HTTP_POST, handleApiConfigPost);
   server.on("/screen.bmp", HTTP_GET, handleScreenBmp);
   server.on("/metrics", HTTP_GET, handleMetrics);
+  server.on("/api/heapwalk", HTTP_GET, handleHeapWalk);
   server.on("/api/probe", HTTP_GET, handleApiProbe);
   server.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   server.onNotFound(handleNotFound);
