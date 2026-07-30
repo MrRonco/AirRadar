@@ -7,11 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.1-6fc7d8?style=flat-square)](docs/HISTORY.md)
-[![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md)
-[![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io)
-[![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources)
-[![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](flasher/)
+[![firmware](https://img.shields.io/badge/firmware-v7.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](flasher/)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map with the coverage disc, altitude-coloured aircraft glyphs, an overview card on the left and the selected-aircraft card on the right">
 
