@@ -20,10 +20,10 @@ static const int CONTENT_W    = CARD_W - 32;   // st_card pad_all is 16
 static const int OV_HOME_Y    = 0;             // weather row
 static const int OV_DATE_Y    = 34;
 static const int OV_HAIR1_Y   = 62;
-static const int OV_COUNT_Y   = 72;            // hero numeral
-static const int OV_INRANGE_Y = 138;           // stacked UNDER the numeral
-static const int OV_COAST_Y   = 160;           // same face as IN RANGE
-static const int OV_EMERG_Y   = 186;
+static const int OV_COUNT_Y   = 90;            // hero numeral
+static const int OV_INRANGE_Y = 154;           // stacked UNDER the numeral
+static const int OV_COAST_Y   = 174;           // same face as IN RANGE
+static const int OV_EMERG_Y   = 194;
 static const int OV_EMERG_H   = 26;
 static const int OV_HAIR2_Y   = 220;
 static const int OV_NEAR_Y    = 230;           // "NEAREST" key
@@ -38,22 +38,22 @@ static const int RAMP_H       = 5;
 static const int RAMP_DY      = -16;           // bar offset above its label
 
 // Selected card
-static const int SEL_TILE_Y   = 20;
+static const int SEL_TILE_Y   = 2;
 static const int SEL_TILE_S   = 36;
 static const int SEL_TEXT_X   = 42;            // callsign/op x when logo tile shown
-static const int SEL_OP_Y     = 44;
-static const int SEL_ROUTE_Y  = 74;
-static const int SEL_ROUTE_H  = 34;
-static const int SEL_FRAME_Y  = 112;
-static const int SEL_IDENT_Y  = 132;
-static const int SEL_HAIR_Y   = 150;
-static const int SEL_GRID_Y1  = 158;
-static const int SEL_GRID_Y2  = 204;
+static const int SEL_OP_Y     = 26;
+static const int SEL_ROUTE_Y  = 66;
+static const int SEL_ROUTE_H  = 32;
+static const int SEL_FRAME_Y  = 108;
+static const int SEL_IDENT_Y  = 130;
+static const int SEL_HAIR_Y   = 154;
+static const int SEL_GRID_Y1  = 164;
+static const int SEL_GRID_Y2  = 212;
 static const int SEL_VAL_DY   = 14;            // key -> value offset in a grid cell
 static const int SEL_COL2_X   = 72;            // two 64 px columns, 8 px gutter
-static const int SEL_GRID_Y3  = 250;           // DIST / SQK, same grid as above
-static const int SEL_HAIR2_Y  = 296;           // separates the status line
-static const int SEL_LIVE_Y   = 306;
+static const int SEL_GRID_Y3  = 260;           // DIST / SQK, same grid as above
+static const int SEL_HAIR2_Y  = 308;           // separates the status line
+static const int SEL_LIVE_Y   = 320;
 static const int SEL_DOT_D    = 7;             // LIVE dot diameter
 
 // Semantics
@@ -63,7 +63,7 @@ static const uint32_t EMERG_BLINK_MS   = 500;
 
 // Recolor hex strings for the range pill (mirror C_DIM / C_CY in theme.h)
 static const char* RECOLOR_DIM = "8e9baa";
-static const char* RECOLOR_CY  = "54dcee";
+static const char* RECOLOR_VAL = "aab4c0";   // C_IVORY2, was cyan
 
 // ============================================================
 //  Widgets + caches
@@ -257,7 +257,7 @@ static void buildOverview(lv_obj_t* parent) {
   mkMicro(card, "NEAREST", 0, OV_NEAR_Y);
   s_ovNear = mkLbl(card, F_M20, C_IVORY);          // identifier, larger
   lv_obj_set_pos(s_ovNear, 0, OV_NEARNAME_Y);
-  s_ovNearD = mkLbl(card, F_UI15, C_CY);           // distance, lighter face
+  s_ovNearD = mkLbl(card, F_UI15, C_IVORY2);       // distance, lighter face
   lv_obj_set_pos(s_ovNearD, 0, OV_NEARD_Y);
   mkHair(card, OV_HAIR3_Y, CONTENT_W);             // separates the status line
   // One status line: a live dot, the source and its age on the left, message
@@ -316,16 +316,18 @@ static void buildSelectedTop(lv_obj_t* cont) {
   s_selRoute = mkBox(cont);
   lv_obj_set_pos(s_selRoute, 0, SEL_ROUTE_Y);
   lv_obj_set_size(s_selRoute, CONTENT_W, SEL_ROUTE_H);
-  s_selOrigin = mkLbl(s_selRoute, F_L28, C_IVORY);
+  s_selOrigin = mkLbl(s_selRoute, F_M20, C_IVORY);   // 28 px left no gap
   lv_obj_set_pos(s_selOrigin, 0, 0);
-  s_selDest = mkLbl(s_selRoute, F_L28, C_IVORY);
+  s_selDest = mkLbl(s_selRoute, F_M20, C_IVORY);
   lv_obj_align(s_selDest, LV_ALIGN_TOP_RIGHT, 0, 0);
-  // A single static chevron, centred — the drawn line plus arrowhead read as a
-  // long stretched arrow on the panel. LV_SYMBOL_RIGHT ships in the Montserrat
-  // symbol face, so it needs no asset and cannot fall out of a font subset.
-  lv_obj_t* arrow = mkLbl(s_selRoute, F_SYM16, C_CY_SOFT);
-  lv_label_set_text(arrow, LV_SYMBOL_RIGHT);
-  lv_obj_align(arrow, LV_ALIGN_TOP_MID, 0, 6);
+  // Filled play triangle, matching the mockup, in the same grey as the keys.
+  // At 28 px the two codes filled the 136 px row and the arrow collided with
+  // the origin's last glyph; at 22 px they take ~90 px and leave it room.
+  // LV_SYMBOL_PLAY ships in the Montserrat symbol face — no asset, and it
+  // cannot fall out of a font subset the way a custom glyph could.
+  lv_obj_t* arrow = mkLbl(s_selRoute, F_SYM16, C_DIM);
+  lv_label_set_text(arrow, LV_SYMBOL_PLAY);
+  lv_obj_align(arrow, LV_ALIGN_TOP_MID, 0, 5);
 
   s_selFrame = mkLbl(cont, F_UI12, C_IVORY2);
   lv_label_set_long_mode(s_selFrame, LV_LABEL_LONG_DOT);
@@ -369,7 +371,6 @@ static void buildSelected(lv_obj_t* parent) {
   lv_obj_set_pos(card, CARD_R_X, CARD_TOP_Y);
   lv_obj_set_size(card, CARD_W, CARD_TALL_H);
 
-  mkMicro(card, "SELECTED", 0, 0);
   s_selCont = mkBox(card);
   lv_obj_set_pos(s_selCont, 0, 0);
   lv_obj_set_size(s_selCont, LV_PCT(100), LV_PCT(100));
@@ -753,7 +754,7 @@ static void updateRangePill() {
   char b[48];
   snprintf(b, sizeof(b),
            "#%s \xE2\x80\xB9#  #%s %d KM#  #%s \xE2\x80\xBA#",
-           RECOLOR_DIM, RECOLOR_CY, g_set.rangeKm, RECOLOR_DIM);
+           RECOLOR_DIM, RECOLOR_VAL, g_set.rangeKm, RECOLOR_DIM);
   setTextCached(s_rngLbl, s_bufRange, sizeof(s_bufRange), b);
 }
 
