@@ -116,8 +116,14 @@ One board. Nothing to solder, nothing to wire, no enclosure required to get star
 
 ### The Waveshare ESP32-S3-Touch-LCD-7
 
-> **[Buy the board →](https://www.waveshare.com/esp32-s3-touch-lcd-7.htm)**
-> <!-- REFERRAL: replace the URL above with your affiliate link -->
+> **[Buy the board on Amazon →](https://link.amazon/B03ZNSVCZ)** (Amazon.ca)
+>
+> **As an Amazon Associate I earn from qualifying purchases.** That link is an affiliate
+> link: it costs you nothing extra and helps fund this project.
+>
+> <sub>Outside Canada, or if you would rather not use an affiliate link, the board is sold
+> directly by [Waveshare](https://www.waveshare.com/esp32-s3-touch-lcd-7.htm) and through
+> the usual distributors.</sub>
 
 Everything runs on a single **Waveshare ESP32-S3-Touch-LCD-7 (Rev 1.2)** — a 7-inch
 capacitive touchscreen with the microcontroller already on the back of the panel. It
