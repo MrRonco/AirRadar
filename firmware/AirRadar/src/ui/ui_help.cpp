@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // ui_help.cpp — the legend overlay behind the "?" button on SCR_MAIN.
 //
 // Deliberately a LEGEND, not a manual. Anything the display already labels

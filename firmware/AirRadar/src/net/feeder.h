@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // feeder.h — aircraft data acquisition (local feeder first, cloud fallback)
 // Spawns short-lived tasks on core 0; results land in g_pending* (state.h).
 #pragma once

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // mqtt.h — Home Assistant integration via MQTT discovery (PubSubClient).
 //
 // URI format in settings: mqtt://[user[:pass]@]host[:port]   (default port 1883)

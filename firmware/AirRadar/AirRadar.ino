@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // AirRadar v7 — LVGL port for Waveshare ESP32-S3-Touch-LCD-7 (800x480)
 //
 // Architecture: loop() (core 1) owns LVGL + all state mutation; network runs

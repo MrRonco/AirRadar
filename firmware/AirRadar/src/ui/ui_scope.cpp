@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // ============================================================
 //  ui_scope.cpp — AirRadar v7 radar scope (centre element of SCR_MAIN)
 //  Circular clipped map + range rings + crosshair + animated blip pool + ISS.

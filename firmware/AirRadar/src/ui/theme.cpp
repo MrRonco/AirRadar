@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // theme.cpp — fonts, shared styles, weather mapping, operator monogram.
 #include "theme.h"
 #include <string.h>

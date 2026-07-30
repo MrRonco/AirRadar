@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // ui_cards.cpp — SCR_MAIN cards: Overview, Selected, Time, Settings button,
 // weather pill, range pill. Realizes the browser-verified 800x480 mock.
 // Loop context only (state.h threading contract): reads g_tracks helpers,

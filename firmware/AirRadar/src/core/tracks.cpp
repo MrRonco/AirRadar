@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // tracks.cpp — track lifecycle: apply pending, dead-reckon, ordering, selection.
 // Loop-context only (see state.h threading contract): the sole lock taken here
 // is g_dataMux while draining the pending buffer, exactly like the proven v6

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // web.cpp — on-device web server: config UI, JSON API, screenshot, metrics, OTA.
 //
 // Ported from the proven v6 handlers (handleRoot/handleSave/handleWifi/

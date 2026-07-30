@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // web.h — on-device web server: config UI, JSON API, live screenshot, OTA.
 //
 // Endpoints (all behind HTTP Basic auth "admin"/<panelPass> when set):

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // tracks.h — track lifecycle: apply, dead-reckon, order, select
 // All functions here run in loop context only.
 #pragma once

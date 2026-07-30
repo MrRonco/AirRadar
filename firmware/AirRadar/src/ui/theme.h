@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // theme.h — AirRadar v7 design tokens: colors, fonts, shared styles, assets.
 // The pixel spec is the browser-verified 800x480 mock; treat these values as
 // the single source of truth for look & feel.

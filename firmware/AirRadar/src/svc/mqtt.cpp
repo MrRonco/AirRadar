@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // mqtt.cpp — Home Assistant integration via MQTT discovery (PubSubClient).
 //
 // Runs entirely in loop context (core 1): PubSubClient is pumped from

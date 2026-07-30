@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // enrich.h — keyless enrichment lookups: weather (Open-Meteo), ISS
 // (open-notify), route (adsbdb). Tasks on core 0; results into g_wx /
 // g_iss (small structs written under g_dataMux) and g_routeRes* slot.

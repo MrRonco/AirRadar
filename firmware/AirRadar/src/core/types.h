@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // types.h — AirRadar v7 core data types (framework-agnostic, no LVGL here)
 #pragma once
 #include <stdint.h>

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // state.cpp — shared state storage, settings persistence, core math.
 #include <math.h>
 #include "state.h"

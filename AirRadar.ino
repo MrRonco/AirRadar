@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // AirRadar v6
 // Waveshare ESP32-S3-Touch-LCD-7 (800x480 RGB, GT911 touch, CH422G expander)
 //

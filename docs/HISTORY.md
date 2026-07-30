@@ -1,6 +1,6 @@
 # Version history
 
-## v1 — port (from Mirko Pavleski's CrowPanel project)
+## v1 — first light (inspired by Mirko Pavleski's CrowPanel ADS-B project)
 Ported to the Waveshare panel: new RGB pin map, CH422G expander init, board settings
 (16 MB / OPI PSRAM), UART-switch flashing fix. Worked, but the whole screen wiggled.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // maptiles.h — CARTO dark_all base map: fetch slippy tiles for the current
 // view, stitch + blue-tint into a PSRAM RGB565 buffer sized MAP_SIZE².
 //

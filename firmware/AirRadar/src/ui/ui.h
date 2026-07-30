@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // ui.h — screen construction, navigation and refresh. Loop context only.
 //
 // Screen inventory (Screen enum in types.h):

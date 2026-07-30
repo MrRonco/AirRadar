@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // hal_display.h — Waveshare ESP32-S3-Touch-LCD-7 bring-up + LVGL glue.
 // Hardware ground truth carried from the proven v5/v6 code:
 //   * CH422G controlled reset pins the GT911 at I2C 0x5D every boot

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // ui_nav.cpp — screen roots, navigation, tick fan-out, range cycling, night calc.
 #include <time.h>
 #include "ui.h"

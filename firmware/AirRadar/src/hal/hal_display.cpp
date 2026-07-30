@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // hal_display.cpp — panel + touch bring-up and the LVGL display/input glue.
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>

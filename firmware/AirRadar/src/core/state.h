@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // state.h — AirRadar v7 shared application state + threading contract
 //
 // THREADING MODEL (do not violate):

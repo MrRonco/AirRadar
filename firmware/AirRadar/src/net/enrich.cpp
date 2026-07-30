@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // enrich.cpp — keyless enrichment lookups: weather (Open-Meteo), ISS
 // (open-notify), route (adsbdb).
 //

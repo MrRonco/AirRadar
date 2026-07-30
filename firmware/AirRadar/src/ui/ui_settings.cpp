@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // ui_settings.cpp — settings screen, Wi-Fi provisioning, coordinate editor,
 // generic text editor, toast + async flows (settingsPoll).
 #include <WiFi.h>

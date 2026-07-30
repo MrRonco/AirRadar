@@ -47,6 +47,27 @@ Keep `manifest.json`'s `version` and the footer in `index.html` in step with `AR
 in `firmware/AirRadar/src/config.h`, or the install page advertises a version it is not
 shipping.
 
+## Licences
+
+The images here are **object code** and carry notice obligations that the source tree
+alone does not.
+
+AirRadar is **GPL-3.0-or-later**. The Corresponding Source for these binaries is this
+repository at the commit that produced them, and the build recipe is
+[`../firmware/BUILD.md`](../firmware/BUILD.md) — that satisfies GPL §6.
+
+They also statically link:
+
+- **arduino-esp32** — LGPL-2.1-or-later. Source: <https://github.com/espressif/arduino-esp32>
+- **ESP-IDF / mbedTLS** — Apache-2.0
+- **LovyanGFX** — BSD-2-Clause (its clause 2 requires the notice travel with binary distributions)
+- **LVGL, ArduinoJson, PubSubClient** — MIT
+- **Inter, JetBrains Mono, Montserrat** glyph data — SIL OFL 1.1
+
+Full texts are in [`../LICENSES/`](../LICENSES/); the summary is
+[`../THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md). If you redistribute these
+`.bin` files anywhere other than this repository, carry those notices with them.
+
 ## Notes
 - Requires desktop Chrome/Edge (Web Serial). Firefox and Safari cannot flash.
 - The page is static — no secrets, no backend. Safe to host publicly.

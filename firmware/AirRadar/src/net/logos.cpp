@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // logos.cpp — airline logo fetch/cache. See logos.h for the contract.
 //
 // Three tiers: RAM slots (fast) -> FATFS /lg/<ICAO> (persistent, 4.2 KB per

@@ -7,7 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/)
+[![firmware](https://img.shields.io/badge/firmware-v7.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map with the coverage disc, altitude-coloured aircraft glyphs, an overview card on the left and the selected-aircraft card on the right">
 
@@ -450,9 +450,10 @@ were the author's.
 
 ## Credits
 
-Originally ported from Mirko Pavleski's CrowPanel ADS-B project, then rewritten across
-seven versions — see [`docs/HISTORY.md`](docs/HISTORY.md) for the whole arc, wrong turns
-included.
+Inspired by Mirko Pavleski's CrowPanel ADS-B radar, which was the starting point for v1
+back in 2024. Nothing of that codebase remains — v7 is a ground-up LVGL application for
+different hardware — but AirRadar is released under the GPL in keeping with that origin.
+See [`docs/HISTORY.md`](docs/HISTORY.md) for the whole arc, wrong turns included.
 
 Aircraft data from your own receiver and [airplanes.live](https://airplanes.live).
 Routes from [adsbdb](https://www.adsbdb.com). Weather from
@@ -467,10 +468,22 @@ of measuring.
 
 ## License
 
-[MIT](LICENSE) — do what you like with it, just keep the copyright notice.
+**[GPL-3.0-or-later](LICENSE)** — Copyright © 2026 Franco Raso.
 
-Third-party components keep their own licences. The bundled font data is derived from
-Inter and JetBrains Mono, both under the SIL Open Font License 1.1. Map imagery in this
-repository is © CARTO with data © OpenStreetMap contributors, used under their
-respective terms; if you redistribute rendered map tiles, that attribution travels with
-them.
+Use it, modify it, build on it, sell hardware with it. The one condition: if you
+distribute a modified version, you publish your source under the same licence and keep
+the attribution. Credit is not a courtesy here, it is the licence.
+
+Third-party components keep their own terms — see
+**[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)** and [`LICENSES/`](LICENSES/). Two
+worth knowing about:
+
+- The generated `font_*.c` glyph data stays under the **SIL Open Font License 1.1**, not
+  the GPL — OFL requires the font software be distributed entirely under the OFL.
+- The pre-built images in `flasher/` statically link LGPL-2.1 arduino-esp32 and
+  Apache-2.0 Espressif components. All are GPL-3-compatible; note that Apache-2.0 is
+  compatible with GPL **v3 only**, which is why this is v3-or-later and not v2.
+
+Map imagery committed here is © [CARTO](https://carto.com/attributions), data ©
+[OpenStreetMap](https://www.openstreetmap.org/copyright) contributors. That attribution
+travels with any redistribution.

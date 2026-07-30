@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: OFL-1.1
+ * Glyph data generated with lv_font_conv. Remains under the SIL Open Font
+ * License 1.1 -- see LICENSES/ and THIRD-PARTY-NOTICES.md -- NOT GPL.
+ */
 /*******************************************************************************
  * Size: 13 px
  * Bpp: 4

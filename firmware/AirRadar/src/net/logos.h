@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // logos.h — runtime airline logo fetch (theqkash/esp32flight-logos, 90x90 PNG
 // keyed by 3-letter ICAO callsign prefix), scaled to the 46px Selected tile.
 //

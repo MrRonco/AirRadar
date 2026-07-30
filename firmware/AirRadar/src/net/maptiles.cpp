@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // maptiles.cpp — CARTO dark_all slippy-tile base map for the scope.
 //
 // Flow: mapRequestRefresh() (loop ctx) arms a fetch. mapLoop() (loop ctx)

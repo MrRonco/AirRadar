@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // config.h — AirRadar v7 global configuration
 // All tunables, defaults, layout geometry and NVS keys live here.
 // Rule: no magic numbers in module code — put them here and name them.

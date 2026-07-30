@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Franco Raso
 // feeder.cpp — aircraft data acquisition (local feeder first, cloud fallback)
 //
 // Ported from the proven v6 fetch architecture (fetchAircraftData/fetchParse/
