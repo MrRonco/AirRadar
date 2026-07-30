@@ -1,5 +1,5 @@
 // enrich.h — keyless enrichment lookups: weather (Open-Meteo), ISS
-// (wheretheiss.at), route (adsbdb). Tasks on core 0; results into g_wx /
+// (open-notify), route (adsbdb). Tasks on core 0; results into g_wx /
 // g_iss (small structs written under g_dataMux) and g_routeRes* slot.
 #pragma once
 #include "../core/state.h"

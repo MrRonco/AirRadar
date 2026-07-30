@@ -199,8 +199,11 @@ The author runs the feeder on a segmented network; adapt these to yours.
 - **Routes** — adsbdb.com `/v0/callsign/<CS>`, TLS, looked up lazily per selected
   aircraft, cached by hex. Callsign is sanitized to `[A-Za-z0-9]` before the URL.
 - **Weather** — Open-Meteo `current=` query, TLS, ~15 min.
-- **ISS** — open-notify `iss-now.json` over **plain HTTP on purpose**: repeated TLS
-  connections leak ~1.5 KB each in esp-tls, and a 15 s poll made that visible.
+- **ISS** — open-notify `iss-now.json` over **plain HTTP on purpose**: one less
+  ~35 KB mbedTLS handshake, and at a 15 s cadence one less competitor for the
+  single-slot TLS gate. (The original "esp-tls leaks ~1.5 KB per connection"
+  rationale is **retracted** — see `docs/V7_PORT.md` note 9 — but plain HTTP is
+  still correct here on handshake cost alone.)
 - **Base map (v7.1: full-bleed)** — CARTO `dark_all` slippy tiles, TLS, a **5×3**
   stitch → blue-tint → coverage-lens dim → **800×480** RGB565 behind the whole
   screen, not just the disc. The transient 1.9 MB mosaic is freed right after the

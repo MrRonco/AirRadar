@@ -1,5 +1,5 @@
 // enrich.cpp — keyless enrichment lookups: weather (Open-Meteo), ISS
-// (wheretheiss.at), route (adsbdb).
+// (open-notify), route (adsbdb).
 //
 // Each lookup runs as its own short-lived task on core 0 with its own
 // in-progress volatile flag and a job snapshot captured in loop context.
@@ -21,7 +21,7 @@
 static const uint32_t kHttpTimeoutMs = 8000;   // internet convention (8..12 s)
 static const int      kIssFailLimit  = 3;      // consecutive fails -> invalidate
 static const size_t   kWxDocBytes    = 1536;   // Open-Meteo "current" payload
-static const size_t   kIssDocBytes   = 1024;   // wheretheiss.at payload
+static const size_t   kIssDocBytes   = 1024;   // open-notify payload
 static const size_t   kRouteDocBytes = 2048;   // adsbdb filtered payload (v6-proven)
 static const size_t   kUrlMax        = 240;
 static const uint32_t kTlsRetryMs    = 30000;  // re-arm delay when the TLS gate is shut
@@ -221,12 +221,14 @@ void enrichKickWeather() {
 }
 
 // ============================================================
-//  ISS — wheretheiss.at (AR_ISS_API), cadence AR_POLL_ISS_MS
+//  ISS — open-notify (AR_ISS_API), cadence AR_POLL_ISS_MS
 // ============================================================
 static void issTask(void*) {
   uint32_t issH0 = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-  // Plain HTTP by design (see AR_ISS_API note in config.h): the 15s TLS poll
-  // to wheretheiss.at leaked ~1.5KB/connection in the esp-tls layer.
+  // Plain HTTP by design (see AR_ISS_API in config.h): one less ~35 KB mbedTLS
+  // handshake, and at a 15 s cadence one less competitor for the single-slot
+  // TLS gate. The old "esp-tls leaks 1.5 KB per connection" rationale is
+  // retracted -- see V7_PORT.md note 9 -- but the choice stands on its own.
   // open-notify returns iss_position lat/lon as STRINGS.
   DynamicJsonDocument doc(kIssDocBytes);
   bool ok = false;
