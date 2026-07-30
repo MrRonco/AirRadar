@@ -28,6 +28,7 @@ void uiInit() {
 
   scopeBuild(s_roots[SCR_MAIN]);      // scope first: cards float above it
   cardsBuild(s_roots[SCR_MAIN]);
+  helpBuild(s_roots[SCR_MAIN]);   // hidden overlay, must be built last
   settingsBuild();
   wifiScreenBuild();
   coordsScreenBuild();

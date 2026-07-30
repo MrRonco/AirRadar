@@ -205,6 +205,7 @@ static void upCopy(char* dst, size_t cap, const char* src) {
 //  Event callbacks
 // ============================================================
 static void onSettingsClicked(lv_event_t* e) { (void)e; uiShow(SCR_SETTINGS); }
+static void onHelpClicked(lv_event_t* e)     { (void)e; helpToggle(); }
 static void onRangeClicked(lv_event_t* e)    { (void)e; uiCycleRange(+1); }
 
 // ============================================================
@@ -427,6 +428,23 @@ static void buildSettingsBtn(lv_obj_t* parent) {
   lv_obj_add_event_cb(btn, onSettingsClicked, LV_EVENT_CLICKED, NULL);
   lv_obj_t* ico = mkLbl(btn, F_SYM16, C_DIM);
   lv_label_set_text(ico, LV_SYMBOL_SETTINGS);
+  lv_obj_center(ico);
+  lv_obj_set_style_text_color(ico, C_CY, LV_STATE_PRESSED);
+}
+
+// "?" beside the gear, same treatment: small glyph, full-size touch target.
+static void buildHelpBtn(lv_obj_t* parent) {
+  lv_obj_t* btn = lv_btn_create(parent);
+  lv_obj_remove_style_all(btn);
+  lv_obj_set_pos(btn, HELP_X, HELP_Y);
+  lv_obj_set_size(btn, GEAR_S, GEAR_S);
+  lv_obj_set_style_pad_all(btn, 0, 0);
+  lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
+  lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_ext_click_area(btn, GEAR_TOUCH_PAD);
+  lv_obj_add_event_cb(btn, onHelpClicked, LV_EVENT_CLICKED, NULL);
+  lv_obj_t* ico = mkLbl(btn, F_M20, C_DIM);
+  lv_label_set_text(ico, "?");
   lv_obj_center(ico);
   lv_obj_set_style_text_color(ico, C_CY, LV_STATE_PRESSED);
 }
@@ -791,6 +809,7 @@ void cardsBuild(lv_obj_t* parent) {
   buildSelected(parent);
   buildTimeCard(parent);
   buildSettingsBtn(parent);
+  buildHelpBtn(parent);
   buildRangePill(parent);
   s_built = true;
   Serial.println("[cards] built");

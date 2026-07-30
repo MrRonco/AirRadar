@@ -1,0 +1,190 @@
+- generic [ref=f1e2]:
+  - generic [ref=f1e3]:
+    - heading "✈ AirRadar" [level=1] [ref=f1e4]
+    - generic [ref=f1e5]: 192.168.1.50
+    - generic [ref=f1e6]: LOCAL up 00:05 7.0.0
+  - generic [ref=f1e8]:
+    - generic [ref=f1e9]:
+      - generic [ref=f1e10]: in range
+      - generic [ref=f1e11]: "10"
+    - generic [ref=f1e12]:
+      - generic [ref=f1e13]: heard
+      - generic [ref=f1e14]: "8"
+    - generic [ref=f1e15]:
+      - generic [ref=f1e16]: msg rate
+      - generic [ref=f1e17]: 21/s
+    - generic [ref=f1e18]:
+      - generic [ref=f1e19]: source
+      - generic [ref=f1e20]: LOCAL
+    - generic [ref=f1e21]:
+      - generic [ref=f1e22]: rssi
+      - generic [ref=f1e23]: "-57"
+    - generic [ref=f1e24]:
+      - generic [ref=f1e25]: heap free
+      - generic [ref=f1e26]: 116K
+    - generic [ref=f1e27]:
+      - generic [ref=f1e28]: heap min
+      - generic [ref=f1e29]: 13K
+    - generic [ref=f1e30]:
+      - generic [ref=f1e31]: tls shed
+      - generic [ref=f1e32]: "0"
+  - generic [ref=f1e33]:
+    - generic [ref=f1e34]:
+      - paragraph [ref=f1e35]: Traffic
+      - table [ref=f1e36]:
+        - rowgroup [ref=f1e37]:
+          - row [ref=f1e38]:
+            - columnheader "callsign" [ref=f1e39]
+            - columnheader "type" [ref=f1e40]
+            - columnheader "operator" [ref=f1e41]
+            - columnheader "route" [ref=f1e42]
+            - columnheader "alt" [ref=f1e43]
+            - columnheader "dist" [ref=f1e44]
+        - rowgroup [ref=f1e45]:
+          - row [ref=f1e46]:
+            - cell "CFVWH" [ref=f1e47]
+            - cell [ref=f1e48]
+            - cell "Wilderness Helicopters" [ref=f1e49]
+            - cell "—" [ref=f1e50]
+            - cell "2525 ft" [ref=f1e51]
+            - cell "19.2 km" [ref=f1e52]
+          - row [ref=f1e53]:
+            - cell "CFWOU" [ref=f1e54]
+            - cell "C172" [ref=f1e55]
+            - cell "Guy Sivret" [ref=f1e56]
+            - cell "—" [ref=f1e57]
+            - cell "1825 ft" [ref=f1e58]
+            - cell "29.0 km" [ref=f1e59]
+          - row [ref=f1e60]:
+            - cell "ACA114" [ref=f1e61]
+            - cell "B77W" [ref=f1e62]
+            - cell "Air Canada" [ref=f1e63]
+            - cell "YVR→YYZ" [ref=f1e64]
+            - cell "FL370" [ref=f1e65]
+            - cell "127.6 km" [ref=f1e66]
+          - row [ref=f1e67]:
+            - cell "ACA549" [ref=f1e68]
+            - cell "B789" [ref=f1e69]
+            - cell "Air Canada" [ref=f1e70]
+            - cell "EWR→YVR" [ref=f1e71]
+            - cell "FL380" [ref=f1e72]
+            - cell "139.5 km" [ref=f1e73]
+          - row [ref=f1e74]:
+            - cell "UAL920" [ref=f1e75]
+            - cell "B763" [ref=f1e76]
+            - cell "UNITED AIRLINES INC" [ref=f1e77]
+            - cell "ORD→LHR" [ref=f1e78]
+            - cell "FL330" [ref=f1e79]
+            - cell "140.9 km" [ref=f1e80]
+          - row [ref=f1e81]:
+            - cell "LOT2098" [ref=f1e82]
+            - cell "B789" [ref=f1e83]
+            - cell "LOT Polish Airlines" [ref=f1e84]
+            - cell "ORD→KRK" [ref=f1e85]
+            - cell "FL350" [ref=f1e86]
+            - cell "148.7 km" [ref=f1e87]
+          - row [ref=f1e88]:
+            - cell "ACA375" [ref=f1e89]
+            - cell "BCS3" [ref=f1e90]
+            - cell "Air Canada" [ref=f1e91]
+            - cell "YUL→YWG" [ref=f1e92]
+            - cell "FL360" [ref=f1e93]
+            - cell "161.1 km" [ref=f1e94]
+          - row [ref=f1e95]:
+            - cell "ACA269" [ref=f1e96]
+            - cell "A320" [ref=f1e97]
+            - cell "Air Canada" [ref=f1e98]
+            - cell "YYZ→YWG" [ref=f1e99]
+            - cell "FL311" [ref=f1e100]
+            - cell "162.7 km" [ref=f1e101]
+          - row [ref=f1e102]:
+            - cell "GTI4342" [ref=f1e103]
+            - cell "B744" [ref=f1e104]
+            - cell "WILMINGTON TRUST COMPA" [ref=f1e105]
+            - cell "PAE→IAB" [ref=f1e106]
+            - cell "FL410" [ref=f1e107]
+            - cell "189.2 km" [ref=f1e108]
+          - row [ref=f1e109]:
+            - cell [ref=f1e110]
+            - cell "B38M" [ref=f1e111]
+            - cell [ref=f1e112]
+            - cell "—" [ref=f1e113]
+            - cell "FL340" [ref=f1e114]
+            - cell "204.6 km" [ref=f1e115]
+    - generic [ref=f1e116]:
+      - paragraph [ref=f1e117]: Panel mirror
+      - paragraph [ref=f1e118]: Not loaded. The panel is only mirrored on demand.
+      - button "Refresh" [ref=f1e119] [cursor=pointer]
+      - paragraph [ref=f1e120]: Manual only — 1.1 MB and it blocks the panel for ~2 s.
+  - generic [ref=f1e121]:
+    - generic [ref=f1e122]:
+      - paragraph [ref=f1e123]: Radar & feed
+      - generic [ref=f1e124]:
+        - generic [ref=f1e125]: Latitude
+        - textbox [ref=f1e126]: "51.470000"
+        - generic [ref=f1e127]: Longitude
+        - textbox [ref=f1e128]: "-0.454300"
+        - generic [ref=f1e129]: Feeder URL
+        - textbox [ref=f1e130]: http://adsb.local:8080/data/aircraft.json
+        - generic [ref=f1e131]: Target labels
+        - combobox [ref=f1e132]:
+          - option "On" [selected]
+          - option "Off"
+        - button "Save" [ref=f1e133] [cursor=pointer]
+    - generic [ref=f1e134]:
+      - paragraph [ref=f1e135]: Network
+      - generic [ref=f1e136]:
+        - generic [ref=f1e137]: Mode
+        - combobox [ref=f1e138]:
+          - option "DHCP"
+          - option "Static" [selected]
+        - generic [ref=f1e139]: IP address
+        - textbox [ref=f1e140]: 192.168.1.50
+        - generic [ref=f1e141]: Gateway
+        - textbox [ref=f1e142]: 192.168.1.1
+        - generic [ref=f1e143]: Subnet mask
+        - textbox [ref=f1e144]: 255.255.255.0
+        - generic [ref=f1e145]: DNS (blank = gateway)
+        - textbox [ref=f1e146]: 192.168.1.1
+        - button "Save network" [ref=f1e147] [cursor=pointer]
+      - generic [ref=f1e148]:
+        - generic [ref=f1e149]: Wi-Fi SSID
+        - textbox [ref=f1e150]: my-wifi
+        - generic [ref=f1e151]: Wi-Fi password (blank = keep current)
+        - textbox [ref=f1e152]
+        - button "Save & reboot" [ref=f1e153] [cursor=pointer]
+    - generic [ref=f1e154]:
+      - paragraph [ref=f1e155]: Integrations & firmware
+      - generic [ref=f1e156]:
+        - generic [ref=f1e157]:
+          - checkbox "MQTT enabled" [ref=f1e158]
+          - text: MQTT enabled
+        - generic [ref=f1e159]: MQTT URI (blank = keep, - = clear)
+        - textbox "mqtt://user:pass@host:1883" [ref=f1e160]
+        - generic [ref=f1e161]: Timezone (POSIX TZ)
+        - textbox [ref=f1e162]: EST5EDT,M3.2.0,M11.1.0
+        - generic [ref=f1e163]: Panel password (blank = keep, - = clear)
+        - textbox [ref=f1e164]
+        - button "Save" [ref=f1e165] [cursor=pointer]
+      - generic [ref=f1e166]:
+        - generic [ref=f1e167]: Firmware — running 7.0.0
+        - button "Choose File" [ref=f1e168]
+        - button "Upload & flash" [ref=f1e169] [cursor=pointer]
+  - generic [ref=f1e171]:
+    - paragraph [ref=f1e172]: ⚠ Danger zone
+    - generic [ref=f1e173]:
+      - text: Clears the stored network. The device reboots and can only be re-provisioned at the panel.
+      - button "Forget Wi-Fi" [ref=f1e174] [cursor=pointer]
+  - paragraph [ref=f1e175]:
+    - text: AirRadar 7.0.0 ·
+    - link "github.com/MrRonco/AirRadar" [ref=f1e176] [cursor=pointer]:
+      - /url: https://github.com/MrRonco/AirRadar
+    - text: · A hobby ADS-B radar by Franco Raso
+    - link "/api/state" [ref=f1e177] [cursor=pointer]:
+      - /url: /api/state
+    - text: ·
+    - link "/screen.bmp" [ref=f1e178] [cursor=pointer]:
+      - /url: /screen.bmp
+    - text: ·
+    - link "/metrics" [ref=f1e179] [cursor=pointer]:
+      - /url: /metrics

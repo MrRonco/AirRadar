@@ -92,6 +92,8 @@
 #define GEAR_X      (SCR_W - 12 - GEAR_S)
 #define GEAR_Y      2
 #define GEAR_TOUCH_PAD 11    // 26 + 2*11 = 48 px effective target
+#define HELP_X      (GEAR_X - GEAR_S - 10)
+#define HELP_Y      GEAR_Y
 
 // ============================================================
 //  Range steps (km)

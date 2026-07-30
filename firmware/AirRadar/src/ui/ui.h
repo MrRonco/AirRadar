@@ -45,6 +45,13 @@ void texteditOpen(const char* title, const char* initial, bool password,
 void settingsPoll(uint32_t nowMs);   // drives async flows (wifi connect spinner);
                                      //  called from uiTick every tick
 
+// ---- help overlay (ui_help.cpp) ----
+// A legend for what the display ENCODES (glyph colour/size, dimming, rings,
+// dot states) rather than what it already labels. Built hidden at boot.
+void helpBuild(lv_obj_t* parent);
+void helpToggle();
+bool helpVisible();
+
 // ---- night mode ----
 // Evaluate quiet hours against local time; returns true if display should be off.
 bool uiNightActive();
