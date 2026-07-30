@@ -464,3 +464,13 @@ Type is [Inter](https://rsms.me/inter/) and
 
 Built on real hardware by [Franco Raso](https://github.com/MrRonco), with a great deal
 of measuring.
+
+## License
+
+[MIT](LICENSE) — do what you like with it, just keep the copyright notice.
+
+Third-party components keep their own licences. The bundled font data is derived from
+Inter and JetBrains Mono, both under the SIL Open Font License 1.1. Map imagery in this
+repository is © CARTO with data © OpenStreetMap contributors, used under their
+respective terms; if you redistribute rendered map tiles, that attribution travels with
+them.
