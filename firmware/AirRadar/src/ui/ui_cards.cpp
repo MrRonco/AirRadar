@@ -39,9 +39,9 @@ static const int RAMP_DY      = -16;           // bar offset above its label
 
 // Selected card
 static const int SEL_TILE_Y   = 20;
-static const int SEL_TILE_S   = 40;
-static const int SEL_TEXT_X   = 48;            // callsign/op x when logo tile shown
-static const int SEL_OP_Y     = 52;
+static const int SEL_TILE_S   = 36;
+static const int SEL_TEXT_X   = 42;            // callsign/op x when logo tile shown
+static const int SEL_OP_Y     = 44;
 static const int SEL_ROUTE_Y  = 74;
 static const int SEL_ROUTE_H  = 34;
 static const int SEL_FRAME_Y  = 112;
@@ -267,9 +267,9 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_style_radius(s_ovDot, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(s_ovDot, C_CY, 0);
   lv_obj_set_style_bg_opa(s_ovDot, LV_OPA_COVER, 0);
-  lv_obj_set_pos(s_ovDot, 0, OV_SRC_Y + 6);
   s_ovSrc = mkLbl(card, F_MONO13, C_DIM);   // matches the rate on the right
   lv_obj_set_pos(s_ovSrc, OV_DOT_D + 6, OV_SRC_Y);
+  lv_obj_align_to(s_ovDot, s_ovSrc, LV_ALIGN_OUT_LEFT_MID, -6, 0);
   s_ovFeed = mkLbl(card, F_MONO13, C_DIM);
   lv_obj_align(s_ovFeed, LV_ALIGN_TOP_RIGHT, 0, OV_SRC_Y);
 
@@ -308,7 +308,7 @@ static void buildSelectedTop(lv_obj_t* cont) {
   lv_label_set_long_mode(s_selCallsign, LV_LABEL_LONG_CLIP);
   lv_obj_set_pos(s_selCallsign, SEL_TEXT_X, SEL_TILE_Y - 2);
   lv_obj_set_width(s_selCallsign, CONTENT_W - SEL_TEXT_X);
-  s_selOp = mkLbl(cont, F_UI12, C_CY);
+  s_selOp = mkLbl(cont, F_UI12, C_DIM);
   lv_label_set_long_mode(s_selOp, LV_LABEL_LONG_DOT);
   lv_obj_set_pos(s_selOp, SEL_TEXT_X, SEL_OP_Y);
   lv_obj_set_width(s_selOp, CONTENT_W - SEL_TEXT_X);
@@ -358,9 +358,9 @@ static void buildSelectedBottom(lv_obj_t* cont) {
   lv_obj_set_style_radius(s_selDot, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(s_selDot, C_CY, 0);
   lv_obj_set_style_bg_opa(s_selDot, LV_OPA_COVER, 0);
-  lv_obj_set_pos(s_selDot, 1, SEL_LIVE_Y + 6);
-  s_selLive = mkLbl(cont, F_MONO13, C_CY);
+  s_selLive = mkLbl(cont, F_MONO13, C_DIM);
   lv_obj_set_pos(s_selLive, 14, SEL_LIVE_Y);
+  lv_obj_align_to(s_selDot, s_selLive, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 }
 
 static void buildSelected(lv_obj_t* parent) {
@@ -498,10 +498,10 @@ static void updateOverview(uint32_t nowMs) {
     sc = C_AMBER;
   } else if (g_feedIsLocal) {
     snprintf(b, sizeof(b), "%s · %lds", g_localSrcName, (long)ageS);
-    sc = C_CY;
+    sc = C_DIM;      // quiet: the dot carries the state
   } else {
     snprintf(b, sizeof(b), "CLOUD · %lds", (long)ageS);
-    sc = C_IVORY2;
+    sc = C_DIM;
   }
   setTextCached(s_ovSrc, s_bufSrc, sizeof(s_bufSrc), b);
   if (s_colSrc.full != sc.full) {
@@ -535,7 +535,7 @@ static void updateSelectedIdentity(const Track* t) {
   // Adaptive size: >=6 chars overflow the tile row at 28px ("HUSK28" showed
   // as "HUSK2"), so long callsigns drop to the 20px face and stay whole.
   static const lv_font_t* csFont = nullptr;
-  const lv_font_t* want = (strlen(cs) >= 8) ? F_UI15 : F_M20;
+  const lv_font_t* want = (strlen(cs) >= 7) ? F_UI15 : F_M20;
   if (want != csFont) {
     csFont = want;
     lv_obj_set_style_text_font(s_selCallsign, want, 0);
@@ -648,11 +648,12 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
   snprintf(b, sizeof(b), "%s \xC2\xB7 %lus", coasting ? "COAST" : "LIVE",
            (unsigned long)age);
   setTextCached(s_selLive, s_bufLive, sizeof(s_bufLive), b);
-  lv_color_t lc = coasting ? C_AMBER : C_CY;
+  lv_color_t lc = coasting ? C_AMBER : C_DIM;   // text matches the keys
+  lv_color_t ld = coasting ? C_AMBER : C_CY;    // dot keeps the state
   setColorCached(s_selLive, &s_colLive, lc);
-  if (s_colLiveDot.full != lc.full) {
-    s_colLiveDot = lc;
-    lv_obj_set_style_bg_color(s_selDot, lc, 0);
+  if (s_colLiveDot.full != ld.full) {
+    s_colLiveDot = ld;
+    lv_obj_set_style_bg_color(s_selDot, ld, 0);
   }
 }
 
