@@ -19,3 +19,9 @@ node_modules/
 # process, neither of which belongs in a public repo.
 UI_UX_REVIEW.md
 docs/mockups/
+
+# Superseded planning docs for v6/v6.1. The narrative that matters is in
+# docs/HISTORY.md; these were working documents for a version that no longer
+# exists. Kept locally, not published.
+docs/V6_PLAN.md
+docs/V6_1_PLAN.md
