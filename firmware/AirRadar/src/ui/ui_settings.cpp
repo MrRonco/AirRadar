@@ -103,8 +103,8 @@ static lv_obj_t* mkGroup(lv_obj_t* col, const char* title) {
   lv_obj_remove_style_all(g);
   lv_obj_set_width(g, 364);
   lv_obj_set_height(g, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_color(g, C_CARD_HI, 0);
-  lv_obj_set_style_bg_opa(g, 110, 0);
+  lv_obj_set_style_bg_color(g, C_SURF, 0);
+  lv_obj_set_style_bg_opa(g, LV_OPA_COVER, 0);   // same fill as the main cards
   lv_obj_set_style_radius(g, 13, 0);
   lv_obj_set_style_border_color(g, C_BORDER, 0);
   lv_obj_set_style_border_opa(g, 20, 0);
@@ -121,6 +121,8 @@ static lv_obj_t* mkGroup(lv_obj_t* col, const char* title) {
   lv_obj_set_style_pad_bottom(t, 4, 0);
   return g;
 }
+
+static const int SET_KEY_W = 148;   // leaves ~186 px for the value cluster
 
 static lv_obj_t* mkRow(lv_obj_t* group, const char* key, bool divider) {
   if (divider) {
@@ -140,6 +142,12 @@ static lv_obj_t* mkRow(lv_obj_t* group, const char* key, bool divider) {
   lv_label_set_text(k, key);
   lv_obj_set_style_text_font(k, F_UI15, 0);
   lv_obj_set_style_text_color(k, C_IVORY, 0);
+  // Fixed width, ellipsised. The body face went 15 px -> 18 px, which widened
+  // every key by ~20% and pushed the densest rows (Night mode, Aircraft class)
+  // past the row width — LVGL flex does not shrink children, it overflows, so
+  // the value cluster ended up drawn on top of the key.
+  lv_obj_set_width(k, SET_KEY_W);
+  lv_label_set_long_mode(k, LV_LABEL_LONG_DOT);
   return r;
 }
 
@@ -741,14 +749,14 @@ void settingsBuild() {
   lv_obj_t* colR = lv_obj_create(root);
   for (lv_obj_t* c : {colL, colR}) {
     lv_obj_remove_style_all(c);
-    lv_obj_set_size(c, 364, 396);            // down to the screen edge
+    lv_obj_set_size(c, 364, 352);            // stops clear of the pinned footer
     lv_obj_set_flex_flow(c, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(c, 10, 0);
     // Content is taller than the screen — columns scroll vertically.
     lv_obj_add_flag(c, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(c, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(c, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_style_pad_bottom(c, 30, 0);   // room past the footer overlay
+    lv_obj_set_style_pad_bottom(c, 8, 0);
   }
   lv_obj_set_pos(colL, 24, 74);
   lv_obj_set_pos(colR, 412, 74);
@@ -794,7 +802,12 @@ void settingsBuild() {
   r = mkRow(g, "Night mode", true);
   lv_obj_t* nbox = lv_obj_create(r);
   lv_obj_remove_style_all(nbox);
-  lv_obj_set_size(nbox, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  // Fixed, NOT SIZE_CONTENT. The value label is 100 px and "23:00-06:00"
+  // measures 85.9 px in font_micro13, so the text itself fits — it was the
+  // SIZE_CONTENT parent under-measuring and clipping its own child, the same
+  // failure this file already documents for the "DHCP" -> "CP" bug.
+  // 100 label + 10 gap + 40 switch = 150.
+  lv_obj_set_size(nbox, 150, 24);
   lv_obj_set_flex_flow(nbox, LV_FLEX_FLOW_ROW);
   lv_obj_set_style_pad_column(nbox, 10, 0);
   lv_obj_set_flex_align(nbox, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -824,12 +837,12 @@ void settingsBuild() {
   lv_obj_remove_style_all(chipBox);
   lv_obj_set_size(chipBox, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(chipBox, LV_FLEX_FLOW_ROW);
-  lv_obj_set_style_pad_column(chipBox, 5, 0);
+  lv_obj_set_style_pad_column(chipBox, 4, 0);
   static const char* chipNames[4] = {"AIRLINER", "LIGHT", "HELI", "MIL"};
   for (int i = 0; i < 4; i++) {
     lv_obj_t* b = lv_btn_create(chipBox);
     lv_obj_set_size(b, LV_SIZE_CONTENT, 24);
-    lv_obj_set_style_pad_hor(b, 8, 0);
+    lv_obj_set_style_pad_hor(b, 6, 0);
     lv_obj_set_style_radius(b, 6, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_border_width(b, 0, 0);
@@ -884,12 +897,18 @@ void settingsBuild() {
       "airradar.local  ·  v" AR_VERSION "  ·  #3fb6c8 " AR_REPO_URL "#  ·  by Franco Raso");
   lv_obj_set_style_text_font(foot, F_MONO11, 0);
   lv_obj_set_style_text_color(foot, C_DIM, 0);
-  lv_obj_align(foot, LV_ALIGN_BOTTOM_MID, 0, -18);
+  lv_obj_align(foot, LV_ALIGN_BOTTOM_MID, 0, -24);
   s_footIp = lv_label_create(root);
   lv_label_set_text(s_footIp, "");
   lv_obj_set_style_text_font(s_footIp, F_MONO11, 0);
   lv_obj_set_style_text_color(s_footIp, C_FAINT, 0);
-  lv_obj_align(s_footIp, LV_ALIGN_BOTTOM_MID, 0, -4);
+  lv_obj_align(s_footIp, LV_ALIGN_BOTTOM_MID, 0, -7);
+  // Hairline above the pinned footer so the scrolling columns visibly end.
+  lv_obj_t* fh = lv_obj_create(root);
+  lv_obj_remove_style_all(fh);
+  lv_obj_add_style(fh, &st_hair, 0);
+  lv_obj_set_size(fh, SCR_W - 48, 1);
+  lv_obj_align(fh, LV_ALIGN_BOTTOM_MID, 0, -44);
 
   settingsRefresh();
 }

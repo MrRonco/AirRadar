@@ -10,7 +10,13 @@
 #include <lvgl.h>
 #include "../core/state.h"
 
-#define LOGO_PX 46                 // rendered tile size (SEL_TILE_S)
+// MUST equal SEL_TILE_S in ui_cards.cpp — a static_assert there enforces it.
+// The 90 px source is downscaled to this ONCE at fetch time, so matching the
+// tile costs nothing at draw time; scaling at draw time with lv_img_set_zoom
+// would put a transform on every card repaint instead.
+// Changing this also changes the cache record size, and fsLoad() rejects any
+// file whose size does not match, so stale blobs self-invalidate and refetch.
+#define LOGO_PX 36
 
 enum LogoState : uint8_t { LOGO_UNKNOWN = 0, LOGO_PENDING, LOGO_OK, LOGO_MISS };
 

@@ -148,12 +148,31 @@ d.polygon([P2 := None] if False else
           fill="white")
 emit(img, "img_wx_storm")
 
+# Wind: three flowing swooshes, each sweeping right and hooking back on
+# itself. Earlier attempts used straight lines with small arcs at the ends;
+# at 22 px those arcs read as rounded line caps, so the glyph looked like a
+# hamburger menu. Curvature along the whole stroke is what makes it read as
+# moving air. Drawn from quadratic beziers so the curve stays smooth after
+# the 4x supersample downscale.
 img, d = wx_canvas()
-d.line([S(3), S(8), S(14), S(8)], fill="white", width=LW)
-d.arc([S(13), S(4), S(18), S(9)], 270, 90, fill="white", width=LW)
-d.line([S(3), S(13), S(16), S(13)], fill="white", width=LW)
-d.arc([S(15), S(13), S(20), S(18)], 90, 270, fill="white", width=LW)
-d.line([S(3), S(18), S(11), S(18)], fill="white", width=LW)
+
+def _bez(p0, p1, p2, n=44):
+    return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
+             (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1])
+            for t in [i / n for i in range(n + 1)]]
+
+def _gust(pts):
+    d.line([(S(x), S(y)) for x, y in pts], fill="white", width=LW, joint="curve")
+    for x, y in (pts[0], pts[-1]):        # round the caps
+        r = LW // 2
+        d.ellipse([S(x) - r, S(y) - r, S(x) + r, S(y) + r], fill="white")
+
+_gust(_bez((2.5, 7.0), (11.0, 7.0), (14.8, 4.0)) +
+      _bez((14.8, 4.0), (18.0, 1.6), (14.2, 2.0))[1:])
+_gust(_bez((2.5, 11.6), (12.8, 11.6), (17.0, 8.6)) +
+      _bez((17.0, 8.6), (20.4, 6.2), (16.6, 6.4))[1:])
+_gust(_bez((2.5, 16.0), (9.0, 16.0), (11.8, 17.9)) +
+      _bez((11.8, 17.9), (14.6, 19.9), (11.4, 19.7))[1:])
 emit(img, "img_wx_wind")
 
 print("done ->", os.path.abspath(OUT))

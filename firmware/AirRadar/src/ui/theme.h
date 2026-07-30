@@ -8,7 +8,11 @@
 // ---------- palette ----------
 #define C_INK      lv_color_hex(0x05080d)   // page ink (deep background)
 #define C_INK_HI   lv_color_hex(0x0c1119)   // background gradient top
-#define C_SURF     lv_color_hex(0x182231)   // card body — FLAT and opaque
+// Card body — FLAT and opaque. This is the exact colour the settings groups
+// were already producing (C_SURF #182231 at opa 110 over C_INK), so both
+// screens now match; stating it directly also lets the settings groups go
+// opaque and regain the LV_COVER_RES_COVER fast path.
+#define C_SURF     lv_color_hex(0x0d131d)
 #define C_SURF_HI  lv_color_hex(0x26344a)   // inset tile (logo chip)
 // Kept so nothing that still references the old gradient fails to build.
 #define C_CARD_HI  C_SURF

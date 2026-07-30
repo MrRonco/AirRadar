@@ -19,7 +19,7 @@ static const int CONTENT_W    = CARD_W - 32;   // st_card pad_all is 16
 // Overview card
 static const int OV_HOME_Y    = 0;             // weather row
 static const int OV_DATE_Y    = 34;
-static const int OV_WIND_W    = 74;   // wind glyph + "NW 13"
+static const int OV_WIND_W    = 80;   // wind glyph + "NW 13" at 18 px
 static const int OV_HAIR1_Y   = 62;
 static const int OV_COUNT_Y   = 90;            // hero numeral
 static const int OV_INRANGE_Y = 154;           // stacked UNDER the numeral
@@ -41,6 +41,9 @@ static const int RAMP_DY      = -16;           // bar offset above its label
 // Selected card
 static const int SEL_TILE_Y   = 2;
 static const int SEL_TILE_S   = 36;
+// The cached logo bitmap is rendered at exactly this size; if they drift the
+// image overflows the tile and clip_corner shaves its edges.
+static_assert(SEL_TILE_S == LOGO_PX, "logo bitmap must match the tile size");
 static const int SEL_TEXT_X   = 42;            // callsign/op x when logo tile shown
 static const int SEL_OP_Y     = 26;
 static const int SEL_ROUTE_Y  = 66;
@@ -225,8 +228,8 @@ static void buildOverview(lv_obj_t* parent) {
   // Fixed width, not SIZE_CONTENT: a content-sized flex box under-measures
   // here and clips from the left (the old "DHCP" -> "CP" bug in settings).
   s_wxWindBox = mkBox(card);
-  lv_obj_set_size(s_wxWindBox, OV_WIND_W, 20);
-  lv_obj_set_pos(s_wxWindBox, CONTENT_W - OV_WIND_W, OV_HOME_Y + 4);
+  lv_obj_set_size(s_wxWindBox, OV_WIND_W, 22);   // the glyph is 22 px tall
+  lv_obj_set_pos(s_wxWindBox, CONTENT_W - OV_WIND_W, OV_HOME_Y + 2);
   lv_obj_set_flex_flow(s_wxWindBox, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(s_wxWindBox, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
                         LV_FLEX_ALIGN_CENTER);
@@ -235,7 +238,7 @@ static void buildOverview(lv_obj_t* parent) {
   lv_img_set_src(wico, &img_wx_wind);
   lv_obj_set_style_img_recolor(wico, C_IVORY2, 0);
   lv_obj_set_style_img_recolor_opa(wico, LV_OPA_COVER, 0);
-  s_wxWind = mkLbl(s_wxWindBox, F_MONO13, C_IVORY2);
+  s_wxWind = mkLbl(s_wxWindBox, F_UI15, C_IVORY2);
   lv_label_set_text(s_wxWind, "");
   s_tmDate = mkLbl(card, F_MONO13, C_DIM);
   lv_obj_set_style_text_letter_space(s_tmDate, 1, 0);
