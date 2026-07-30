@@ -454,7 +454,7 @@ were the author's.
 ## Credits
 
 Inspired by Mirko Pavleski's CrowPanel ADS-B radar, which was the starting point for v1
-back in 2024. Nothing of that codebase remains — v7 is a ground-up LVGL application for
+in July 2026. Nothing of that codebase remains — v7 is a ground-up LVGL application for
 different hardware — but AirRadar is released under the GPL in keeping with that origin.
 See [`docs/HISTORY.md`](docs/HISTORY.md) for the whole arc, wrong turns included.
 
