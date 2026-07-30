@@ -255,7 +255,7 @@ data path is your antenna to your panel.
 | [adsbdb](https://www.adsbdb.com) | Airline name, origin → destination | Lazy, cached to flash |
 | [Open-Meteo](https://open-meteo.com) | Local conditions and wind | ~15 min |
 | [CARTO](https://carto.com/basemaps) | Dark base map tiles | Once per {lat, lon, range} |
-| [esp32flight-logos](https://github.com/theqkash/esp32flight-logos) | Airline logos | On demand, cached to flash |
+| [esp32flight-logos](https://github.com/theqkash/esp32flight-logos) | Airline logos — *optional layer, no licence granted* | On demand, cached to flash |
 | open-notify | ISS overhead | 15 s |
 
 The 8 s fallback interval is **API courtesy** — airplanes.live is free and unmetered, so
@@ -409,7 +409,6 @@ Still open — see [`docs/ROADMAP.md`](docs/ROADMAP.md):
 
 - Route ETA and a session-statistics screen
 - A served `/live` page in the web console
-- Shipping the logo pack pre-loaded to FATFS at flash time
 
 **Solved: the internal-heap drain.** Free internal SRAM used to fall ~72 B/s
 from boot and never recover, eventually starving mbedTLS so weather and new
@@ -462,7 +461,12 @@ Aircraft data from your own receiver and [airplanes.live](https://airplanes.live
 Routes from [adsbdb](https://www.adsbdb.com). Weather from
 [Open-Meteo](https://open-meteo.com). Base map © [CARTO](https://carto.com/basemaps),
 map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
-Airline logos from [esp32flight-logos](https://github.com/theqkash/esp32flight-logos).
+Airline logos are an optional layer fetched at runtime from
+[esp32flight-logos](https://github.com/theqkash/esp32flight-logos) by
+[theqkash](https://github.com/theqkash), which aggregates from
+[Jxck-S/airline-logos](https://github.com/Jxck-S/airline-logos) and
+[sexym0nk3y/airline-logos](https://github.com/sexym0nk3y/airline-logos). The marks
+belong to the airlines; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 Type is [Inter](https://rsms.me/inter/) and
 [JetBrains Mono](https://www.jetbrains.com/lp/mono/).
 

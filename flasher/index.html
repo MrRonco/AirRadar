@@ -48,14 +48,16 @@
     <p class="sub">Requires desktop <b>Chrome</b> or <b>Edge</b>. Connect the board by USB-C first.</p>
 
     <div class="beta">
-      <b>v7.2.0-beta.1</b>
-      <p>This build fixes a memory leak that starved the device of RAM about
-      25&nbsp;minutes into every boot, which silently stopped weather, route and
-      airline-logo lookups. Free internal memory now holds steady instead of
-      falling ~72&nbsp;B/s. It is marked beta because the fix has hours of
-      testing behind it, not weeks &mdash; it is still the build you want.
-      Details in
-      <a href="https://github.com/MrRonco/AirRadar/issues/1">issue&nbsp;#1</a>.</p>
+      <b>v7.2.0-beta.2</b>
+      <p>Fixes a memory leak that starved the device of RAM about 25&nbsp;minutes
+      into every boot, which silently stopped weather, route and airline-logo
+      lookups &mdash; free memory now holds steady instead of falling ~72&nbsp;B/s
+      (<a href="https://github.com/MrRonco/AirRadar/issues/1">issue&nbsp;#1</a>).
+      Also improves the operator tile: aircraft with no airline logo &mdash; general
+      aviation, cargo, private &mdash; now show their ICAO code in the airline's
+      colour instead of two ambiguous initials. Marked beta because the memory fix
+      has hours of testing behind it rather than weeks; it is still the build you
+      want.</p>
     </div>
 
     <div class="btnwrap">
@@ -75,7 +77,7 @@
       </ol>
     </div>
 
-    <div class="foot">v7.2.0-beta.1 · <a href="https://github.com/MrRonco/AirRadar">github.com/MrRonco/AirRadar</a> · by Franco Raso</div>
+    <div class="foot">v7.2.0-beta.2 · <a href="https://github.com/MrRonco/AirRadar">github.com/MrRonco/AirRadar</a> · by Franco Raso</div>
   </div>
 </body>
 </html>

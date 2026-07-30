@@ -67,6 +67,10 @@ void settingsLoad() {
   g_set.nightToMin   = g_prefs.getInt(K_NIGHT_TO, 6 * 60);
   g_set.wxEn      = g_prefs.getBool(K_WX_EN, true);
   g_set.issEn     = g_prefs.getBool(K_ISS_EN, true);
+  // Airline logos stay ON by default. The ICAO-in-brand-colour tile is the
+  // FALLBACK, not the replacement: it renders whenever no logo is available,
+  // which is most of the time -- general aviation, cargo, private and any
+  // carrier missing from the pack. See ui/brandcolor.cpp.
   g_set.logoEn    = g_prefs.getBool(K_LOGO_EN, true);
   g_set.mapEn     = g_prefs.getBool(K_MAP_EN, true);
   g_set.filtCls   = (uint8_t)g_prefs.getInt(K_FILT_CLS, AR_FILT_CLS_ALL);

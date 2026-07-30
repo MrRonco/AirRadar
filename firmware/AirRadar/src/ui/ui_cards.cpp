@@ -10,6 +10,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "ui.h"
+#include "brandcolor.h"
 #include "../core/tracks.h"
 #include "../net/logos.h"
 
@@ -315,7 +316,8 @@ static void buildSelectedTop(lv_obj_t* cont) {
   lv_obj_set_style_border_opa(s_selTile, 46, 0);
   lv_obj_set_style_border_width(s_selTile, 1, 0);
   lv_obj_set_style_clip_corner(s_selTile, true, 0);   // logo respects radius 12
-  s_selIni = mkLbl(s_selTile, F_M20, lv_color_white());
+  s_selIni = mkLbl(s_selTile, F_UI15, lv_color_white());  // 3 chars must
+                                                       // fit 36 px
   lv_obj_align(s_selIni, LV_ALIGN_CENTER, 0, 0);
   s_selLogoImg = lv_img_create(s_selTile);            // real airline logo when cached
   lv_obj_align(s_selLogoImg, LV_ALIGN_CENTER, 0, 0);
@@ -555,16 +557,21 @@ static void updateOverview(uint32_t nowMs) {
 // ============================================================
 //  Update — Selected
 // ============================================================
-static void selApplyLogoLayout(bool logoEn) {
-  static int applied = -1;
-  if (applied == (int)logoEn) return;
-  applied = (int)logoEn;
-  int x = logoEn ? SEL_TEXT_X : 0;
-  setHiddenCached(s_selTile, !logoEn);
-  lv_obj_set_pos(s_selCallsign, x, SEL_TILE_Y - 2);
-  lv_obj_set_width(s_selCallsign, CONTENT_W - x);
-  lv_obj_set_pos(s_selOp, x, SEL_OP_Y);
-  lv_obj_set_width(s_selOp, CONTENT_W - x);
+// The operator tile is now the identity element in its own right -- the ICAO
+// code in the airline's brand colour -- so it is ALWAYS shown and the text is
+// always indented past it. g_set.logoEn no longer moves anything; it only
+// decides whether a bitmap logo is overlaid on top of the code. Previously
+// this hid the tile whenever logos were off, which with logos now defaulting
+// off would have left the card with no operator identity at all.
+static void selApplyLogoLayout() {
+  static bool applied = false;
+  if (applied) return;
+  applied = true;
+  lv_obj_clear_flag(s_selTile, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_pos(s_selCallsign, SEL_TEXT_X, SEL_TILE_Y - 2);
+  lv_obj_set_width(s_selCallsign, CONTENT_W - SEL_TEXT_X);
+  lv_obj_set_pos(s_selOp, SEL_TEXT_X, SEL_OP_Y);
+  lv_obj_set_width(s_selOp, CONTENT_W - SEL_TEXT_X);
 }
 
 static void updateSelectedIdentity(const Track* t) {
@@ -587,22 +594,35 @@ static void updateSelectedIdentity(const Track* t) {
   if (strncmp(s_bufOwnOp, opKey, sizeof(s_bufOwnOp)) != 0) {
     snprintf(s_bufOwnOp, sizeof(s_bufOwnOp), "%s", opKey);
     lv_label_set_text(s_selOp, t->ownOp);
-    char ini[3];
-    lv_color_t bg;
-    if (t->ownOp[0]) {
-      monogramFor(t->ownOp, ini, &bg);
-    } else {
-      // No operator in this feed: first two letters of the callsign on a
-      // neutral slate tile (never the red "--" tombstone).
+
+    // Operator identity: the 3-letter ICAO code drawn in the airline's brand
+    // colour. Two initials on a coloured chip were ambiguous (AC = Air Canada
+    // or Air China?) and duplicated the operator name sitting right beside
+    // them; the ICAO code is the identifier controllers actually use, and at
+    // this size three sharp letters beat a downscaled logo for every carrier
+    // rather than the ~6% with square symbol marks. See ui/brandcolor.cpp for
+    // why a colour rather than the logo itself.
+    char code[4] = {0, 0, 0, 0};
+    if (!logosIcaoFromFlight(t->flight, code)) {
+      // No callsign prefix to work with — fall back to the first three letters
+      // of the callsign, then to the operator name.
       int n = 0;
-      ini[0] = ini[1] = 0; ini[2] = 0;
-      for (const char* p = t->flight; *p && n < 2; p++)
-        if (isalpha((unsigned char)*p)) ini[n++] = toupper((unsigned char)*p);
-      if (!n) { ini[0] = 'A'; ini[1] = 'C'; }   // last resort: AirCraft
-      bg = lv_color_hex(0x33475c);
+      for (const char* p = t->flight; *p && n < 3; p++)
+        if (isalpha((unsigned char)*p)) code[n++] = (char)toupper((unsigned char)*p);
+      if (!n)
+        for (const char* p = t->ownOp; *p && n < 3; p++)
+          if (isalpha((unsigned char)*p)) code[n++] = (char)toupper((unsigned char)*p);
+      code[n] = '\0';
     }
-    lv_label_set_text(s_selIni, ini);
-    lv_obj_set_style_bg_color(s_selTile, bg, 0);
+    lv_label_set_text(s_selIni, code[0] ? code : "--");
+    lv_color_t brand = brandColorFor(code);
+    lv_obj_set_style_text_color(s_selIni, brand, 0);
+    // Tile stays the card surface with a brand-tinted hairline: colouring the
+    // TEXT and not the background means legibility never depends on the
+    // airline's colour, which a filled chip could not promise.
+    lv_obj_set_style_bg_color(s_selTile, C_SURF, 0);
+    lv_obj_set_style_border_color(s_selTile, brand, 0);
+    lv_obj_set_style_border_opa(s_selTile, 90, 0);
   }
 
   // The row stays visible with "--" placeholders rather than vanishing: a row
@@ -726,7 +746,7 @@ static void updateSelected(uint32_t nowMs) {
   setHiddenCached(s_selCont, t == nullptr);
   setHiddenCached(s_selEmpty, t != nullptr);
   if (!t) return;
-  selApplyLogoLayout(g_set.logoEn);
+  selApplyLogoLayout();
   updateSelectedIdentity(t);
   updateSelLogo(t);
   updateSelectedGrid(t);

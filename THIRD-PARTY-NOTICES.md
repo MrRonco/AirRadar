@@ -85,7 +85,29 @@ in this repository, but each has its own terms:
 | [adsbdb](https://www.adsbdb.com) | Airline names and routes |
 | [Open-Meteo](https://open-meteo.com) | Weather |
 | open-notify | ISS position |
-| [esp32flight-logos](https://github.com/theqkash/esp32flight-logos) | Airline logo bitmaps, fetched on demand |
+| [esp32flight-logos](https://github.com/theqkash/esp32flight-logos) | Airline logo bitmaps, fetched on demand (optional layer) |
+
+### Airline logos — provenance and status
+
+The optional logo layer fetches bitmaps at runtime from
+[esp32flight-logos](https://github.com/theqkash/esp32flight-logos), which aggregates
+from [Jxck-S/airline-logos](https://github.com/Jxck-S/airline-logos) and
+[sexym0nk3y/airline-logos](https://github.com/sexym0nk3y/airline-logos), themselves
+produced by a scraper. **None of those repositories declares a licence, and none of
+them holds rights in the artwork** — the marks belong to the airlines. No permission is
+granted by this project, and none was received from any link in that chain. The
+attribution here is honesty about where the files come from, not a claim of licence.
+
+Images are never redistributed by this repository: nothing is committed to the tree and
+nothing is bundled into the flasher images. They are fetched by the end user's device at
+runtime and cached only on that device.
+
+When no logo is available — general aviation, cargo, private operators, and any carrier
+absent from the pack — the operator tile falls back to the ICAO code drawn in the
+airline's brand colour (`src/ui/brandcolor.cpp`). A colour is a fact, not a
+copyrightable work, so that path reproduces nothing.
+
+If you own a mark shown here and want it removed, open an issue.
 
 Airline names, liveries and logos are the trademarks of their respective airlines.
 They are displayed for identification only; no endorsement or affiliation is
@@ -95,7 +117,7 @@ implied, and no trademark licence is granted by this project.
 
 ## Origin
 
-AirRadar v1 began in 2024 as a port of Mirko Pavleski's CrowPanel ADS-B radar
+AirRadar v1 began in July 2026 as a port of Mirko Pavleski's CrowPanel ADS-B radar
 project, published under GPL-3.0-or-later. The codebase has since been rewritten
 several times and v7 shares no code with it, but AirRadar is released under
 GPL-3.0-or-later in keeping with that origin.
