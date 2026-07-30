@@ -59,8 +59,18 @@ display **encodes** — what the colours, sizes, dimming, rings and dots mean �
 anything the panel already labels needs no explanation.
 
 **Everything is configurable on-device.** First boot scans for Wi-Fi and gives you a
-three-layer touch keyboard; coordinates go in on a numpad. After that there is a
-settings screen for range, layers, filters, night mode, favourites and static IP.
+three-layer touch keyboard; coordinates go in on a numpad. After that nothing needs a
+computer — the whole settings tree lives behind the gear.
+
+<div align="center">
+
+<img src="docs/img/panel-settings.png" width="700" alt="The on-device settings screen: Location, Display, Layers, Filters and Network groups in a two-column layout with a pinned footer">
+
+<sub>Settings on the panel. Location, favourites and range; display and layer toggles;
+class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL and Home Assistant.
+The footer stays pinned while the columns scroll. Personal values blurred.</sub>
+
+</div>
 
 ---
 
