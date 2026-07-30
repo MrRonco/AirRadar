@@ -7,7 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](flasher/)
+[![firmware](https://img.shields.io/badge/firmware-v7.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map with the coverage disc, altitude-coloured aircraft glyphs, an overview card on the left and the selected-aircraft card on the right">
 
@@ -127,7 +127,8 @@ One board. Nothing to solder, nothing to wire, no enclosure required to get star
 
 Everything runs on a single **Waveshare ESP32-S3-Touch-LCD-7 (Rev 1.2)** — a 7-inch
 capacitive touchscreen with the microcontroller already on the back of the panel. It
-arrives as one assembled unit for around US$50–60. Plug in USB-C and it boots.
+arrives as one assembled unit — roughly US$50–70 depending on the seller at the time of
+writing. Plug in USB-C and it boots.
 
 | | |
 |---|---|
@@ -188,7 +189,7 @@ in [`docs/HARDWARE.md`](docs/HARDWARE.md).
 
 ### One-click (recommended)
 
-Open the [web flasher](flasher/) in Chrome or Edge, plug in USB-C, hit **Install**. It
+Open the **[web flasher](https://mrronco.github.io/AirRadar/flasher/)** in Chrome or Edge, plug in USB-C, hit **Install**. It
 writes a merged image — bootloader, partition table and app — so there is nothing else
 to configure.
 
