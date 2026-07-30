@@ -85,8 +85,13 @@
 // never be occluded again.
 #define RNG_PILL_Y  CARD_BOT_Y
 #define CLOCK_X     620   // aligns under the Selected card
-#define GEAR_X      556   // inboard of the clock
-#define GEAR_S      52
+// Bare glyph in the very top-right corner, clear of the Selected card at
+// y=28. Drawn small so it does not crowd the card, but its touch area is
+// expanded to 48 px via lv_obj_set_ext_click_area.
+#define GEAR_S      26
+#define GEAR_X      (SCR_W - 12 - GEAR_S)
+#define GEAR_Y      2
+#define GEAR_TOUCH_PAD 11    // 26 + 2*11 = 48 px effective target
 
 // ============================================================
 //  Range steps (km)

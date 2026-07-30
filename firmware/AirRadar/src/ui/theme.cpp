@@ -28,6 +28,7 @@ const lv_font_t* F_UI12;
 const lv_font_t* F_MONO13;
 const lv_font_t* F_MONO11;
 const lv_font_t* F_SYM16;
+const lv_font_t* F_SYM12;
 
 lv_style_t st_card;
 lv_style_t st_pill;
@@ -56,7 +57,8 @@ void themeInit() {
   F_MONO13= &lv_font_montserrat_12;
   F_MONO11= &lv_font_montserrat_12;
 #endif
-  F_SYM16 = &lv_font_montserrat_16;      // LV_SYMBOL_* glyph carrier
+  F_SYM16 = &lv_font_montserrat_16;
+  F_SYM12 = &lv_font_montserrat_12;      // LV_SYMBOL_* glyph carrier
 
   // Glass card
   lv_style_init(&st_card);

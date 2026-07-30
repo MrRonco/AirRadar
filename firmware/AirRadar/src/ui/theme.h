@@ -54,6 +54,7 @@ extern const lv_font_t* F_UI12;    // small body
 extern const lv_font_t* F_MONO13;  // mono values           (IPs, feed rate)
 extern const lv_font_t* F_MONO11;  // micro labels (tracked) ("OVERVIEW")
 extern const lv_font_t* F_SYM16;   // symbol carrier (LV_SYMBOL_*)
+extern const lv_font_t* F_SYM12;   // small symbols (route arrow)
 
 // ---------- shared styles (initialised once in themeInit) ----------
 extern lv_style_t st_card;         // glass card: gradient, radius 17, hairline

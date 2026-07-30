@@ -19,6 +19,7 @@ static const int CONTENT_W    = CARD_W - 32;   // st_card pad_all is 16
 // Overview card
 static const int OV_HOME_Y    = 0;             // weather row
 static const int OV_DATE_Y    = 34;
+static const int OV_WIND_W    = 74;   // wind glyph + "NW 13"
 static const int OV_HAIR1_Y   = 62;
 static const int OV_COUNT_Y   = 90;            // hero numeral
 static const int OV_INRANGE_Y = 154;           // stacked UNDER the numeral
@@ -101,7 +102,7 @@ static lv_obj_t *s_tmTime, *s_tmDate;
 static char s_bufTime[8], s_bufDate[20];
 
 // Weather pill
-static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxWind;   // rows in the Overview card
+static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxWind, *s_wxWindBox;
 static const lv_img_dsc_t* s_wxIconSrc = nullptr;
 static char s_bufTemp[8], s_bufWind[32];
 
@@ -221,12 +222,24 @@ static void buildOverview(lv_obj_t* parent) {
   s_wxTemp = mkLbl(card, F_M20, C_IVORY);
   lv_label_set_text(s_wxTemp, "--");
   lv_obj_set_pos(s_wxTemp, 30, OV_HOME_Y);
-  s_wxWind = mkLbl(card, F_MONO13, C_IVORY2);
+  // Fixed width, not SIZE_CONTENT: a content-sized flex box under-measures
+  // here and clips from the left (the old "DHCP" -> "CP" bug in settings).
+  s_wxWindBox = mkBox(card);
+  lv_obj_set_size(s_wxWindBox, OV_WIND_W, 20);
+  lv_obj_set_pos(s_wxWindBox, CONTENT_W - OV_WIND_W, OV_HOME_Y + 4);
+  lv_obj_set_flex_flow(s_wxWindBox, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(s_wxWindBox, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_column(s_wxWindBox, 4, 0);
+  lv_obj_t* wico = lv_img_create(s_wxWindBox);
+  lv_img_set_src(wico, &img_wx_wind);
+  lv_obj_set_style_img_recolor(wico, C_IVORY2, 0);
+  lv_obj_set_style_img_recolor_opa(wico, LV_OPA_COVER, 0);
+  s_wxWind = mkLbl(s_wxWindBox, F_MONO13, C_IVORY2);
   lv_label_set_text(s_wxWind, "");
-  lv_obj_align(s_wxWind, LV_ALIGN_TOP_RIGHT, 0, OV_HOME_Y + 4);
   s_tmDate = mkLbl(card, F_MONO13, C_DIM);
   lv_obj_set_style_text_letter_space(s_tmDate, 1, 0);
-  lv_obj_set_pos(s_tmDate, 0, OV_DATE_Y);
+  lv_obj_align(s_tmDate, LV_ALIGN_TOP_MID, 0, OV_DATE_Y);
   mkHair(card, OV_HAIR1_Y, CONTENT_W);
 
   s_ovCount = mkLbl(card, F_NUM56, C_IVORY);
@@ -316,18 +329,16 @@ static void buildSelectedTop(lv_obj_t* cont) {
   s_selRoute = mkBox(cont);
   lv_obj_set_pos(s_selRoute, 0, SEL_ROUTE_Y);
   lv_obj_set_size(s_selRoute, CONTENT_W, SEL_ROUTE_H);
-  s_selOrigin = mkLbl(s_selRoute, F_M20, C_IVORY);   // 28 px left no gap
-  lv_obj_set_pos(s_selOrigin, 0, 0);
-  s_selDest = mkLbl(s_selRoute, F_M20, C_IVORY);
-  lv_obj_align(s_selDest, LV_ALIGN_TOP_RIGHT, 0, 0);
-  // Filled play triangle, matching the mockup, in the same grey as the keys.
-  // At 28 px the two codes filled the 136 px row and the arrow collided with
-  // the origin's last glyph; at 22 px they take ~90 px and leave it room.
-  // LV_SYMBOL_PLAY ships in the Montserrat symbol face — no asset, and it
-  // cannot fall out of a font subset the way a custom glyph could.
-  lv_obj_t* arrow = mkLbl(s_selRoute, F_SYM16, C_DIM);
+  // Centred flex row. Pinning origin hard-left and destination hard-right left
+  // the arrow floating with a much bigger gap on one side than the other.
+  lv_obj_set_flex_flow(s_selRoute, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(s_selRoute, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_column(s_selRoute, 7, 0);
+  s_selOrigin = mkLbl(s_selRoute, F_M20, C_IVORY);
+  lv_obj_t* arrow = mkLbl(s_selRoute, F_SYM12, C_DIM);   // smaller triangle
   lv_label_set_text(arrow, LV_SYMBOL_PLAY);
-  lv_obj_align(arrow, LV_ALIGN_TOP_MID, 0, 5);
+  s_selDest = mkLbl(s_selRoute, F_M20, C_IVORY);
 
   s_selFrame = mkLbl(cont, F_UI12, C_IVORY2);
   lv_label_set_long_mode(s_selFrame, LV_LABEL_LONG_DOT);
@@ -399,18 +410,19 @@ static void buildTimeCard(lv_obj_t* parent) {
 static void buildSettingsBtn(lv_obj_t* parent) {
   lv_obj_t* btn = lv_btn_create(parent);
   lv_obj_remove_style_all(btn);
-  lv_obj_add_style(btn, &st_card, 0);
-  // 52x52 icon, not a 184x66 lit plate. The old button measured 7.26x denser
-  // and 14.7x brighter than the entire radar disc — the brightest object on an
-  // air-traffic display was the way to the settings screen.
-  lv_obj_set_pos(btn, GEAR_X, CARD_BOT_Y);
+  // No plate at all now — just the glyph, top-right of the screen. The old
+  // 184x66 lit slab measured 7.26x denser and 14.7x brighter than the entire
+  // radar disc; even the 52 px boxed version still read as a panel.
+  lv_obj_set_pos(btn, GEAR_X, GEAR_Y);
   lv_obj_set_size(btn, GEAR_S, GEAR_S);
   lv_obj_set_style_pad_all(btn, 0, 0);
+  lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
   lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+  // Small glyph, full-size target: the drawn icon is 26 px but the hit area is
+  // 48 px, which is the ~9 mm floor for this panel.
+  lv_obj_set_ext_click_area(btn, GEAR_TOUCH_PAD);
   lv_obj_add_event_cb(btn, onSettingsClicked, LV_EVENT_CLICKED, NULL);
-  // Capacitive touch with no visual acknowledgement reads as a dead control.
-  lv_obj_set_style_bg_color(btn, C_SURF_HI, LV_STATE_PRESSED);
-  lv_obj_t* ico = mkLbl(btn, F_SYM16, C_IVORY2);
+  lv_obj_t* ico = mkLbl(btn, F_SYM16, C_DIM);
   lv_label_set_text(ico, LV_SYMBOL_SETTINGS);
   lv_obj_center(ico);
   lv_obj_set_style_text_color(ico, C_CY, LV_STATE_PRESSED);
@@ -418,7 +430,9 @@ static void buildSettingsBtn(lv_obj_t* parent) {
 
 static void buildRangePill(lv_obj_t* parent) {
   lv_obj_t* pill = mkBox(parent);
-  lv_obj_add_style(pill, &st_pill, 0);
+  lv_obj_add_style(pill, &st_card, 0);      // same fill/hairline as the panels
+  lv_obj_set_style_radius(pill, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_all(pill, 0, 0);
   lv_obj_set_size(pill, CARD_W, CARD_SHORT_H);
   lv_obj_set_pos(pill, CARD_L_X, RNG_PILL_Y);
   lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
@@ -734,7 +748,7 @@ static void updateWeatherPill() {
   bool show = g_set.wxEn && g_wx.valid;
   setHiddenCached(s_wxIcon, !show);
   setHiddenCached(s_wxTemp, !show);
-  setHiddenCached(s_wxWind, !show);
+  setHiddenCached(s_wxWindBox, !show);
   if (!show) return;
 
   const lv_img_dsc_t* ic = wxIconFor(g_wx.wmoCode);
