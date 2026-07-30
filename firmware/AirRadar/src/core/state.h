@@ -115,7 +115,9 @@ extern uint32_t g_tlsShedCount;
 extern uint32_t g_tlsConnCount;
 // Cumulative internal-heap change across each subsystem's network tasks, with
 // a run count, so /metrics gives bytes-per-fetch directly.
-extern int32_t  g_heapDeltaFeeder; extern uint32_t g_feederRuns;
+extern int32_t  g_heapDeltaFeeder;
+extern int32_t  g_heapNetFeeder;   // true net loss per complete poll cycle
+extern uint32_t g_heapNetSamples; extern uint32_t g_feederRuns;
 extern int32_t  g_heapDeltaIss;    extern uint32_t g_issRuns;
 
 // ---------- misc helpers (implemented in state.cpp) ----------

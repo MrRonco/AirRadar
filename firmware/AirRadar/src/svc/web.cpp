@@ -808,6 +808,24 @@ static void handleMetrics() {
   s += F("# TYPE airradar_heap_largest gauge\n");
   snprintf(l, sizeof(l), "airradar_heap_largest %u\n",
            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); s += l;
+  // Block-level accounting for the heap-drain hunt. heap_free tells us bytes
+  // are going missing; allocated_blocks tells us HOW MANY allocations are
+  // outstanding. Dividing the per-poll byte loss by the per-poll block growth
+  // gives the SIZE of the leaked allocation, which narrows the candidate list
+  // far faster than any amount of byte-level staring.
+  {
+    multi_heap_info_t hi;
+    heap_caps_get_info(&hi, MALLOC_CAP_INTERNAL);
+    s += F("# TYPE airradar_heap_alloc_blocks gauge\n");
+    snprintf(l, sizeof(l), "airradar_heap_alloc_blocks %u\n",
+             (unsigned)hi.allocated_blocks); s += l;
+    s += F("# TYPE airradar_heap_free_blocks gauge\n");
+    snprintf(l, sizeof(l), "airradar_heap_free_blocks %u\n",
+             (unsigned)hi.free_blocks); s += l;
+    s += F("# TYPE airradar_heap_alloc_bytes gauge\n");
+    snprintf(l, sizeof(l), "airradar_heap_alloc_bytes %u\n",
+             (unsigned)hi.total_allocated_bytes); s += l;
+  }
   // Rising tls_shed = optional fetches refused for want of internal RAM, i.e.
   // blank routes/weather are a memory problem, not a data problem.
   s += F("# TYPE airradar_tls_shed counter\n");
@@ -819,6 +837,14 @@ static void handleMetrics() {
   s += F("# TYPE airradar_heap_delta_feeder counter\n");
   snprintf(l, sizeof(l), "airradar_heap_delta_feeder %ld\n",
            (long)g_heapDeltaFeeder); s += l;
+  // Net loss across COMPLETE poll cycles, sampled in loop context, so unlike
+  // heap_delta_feeder it includes task teardown.
+  s += F("# TYPE airradar_heap_net_feeder counter\n");
+  snprintf(l, sizeof(l), "airradar_heap_net_feeder %ld\n",
+           (long)g_heapNetFeeder); s += l;
+  s += F("# TYPE airradar_heap_net_samples counter\n");
+  snprintf(l, sizeof(l), "airradar_heap_net_samples %lu\n",
+           (unsigned long)g_heapNetSamples); s += l;
   snprintf(l, sizeof(l), "airradar_feeder_runs %lu\n",
            (unsigned long)g_feederRuns); s += l;
   s += F("# TYPE airradar_heap_delta_iss counter\n");

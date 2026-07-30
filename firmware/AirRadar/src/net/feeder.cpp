@@ -367,6 +367,8 @@ static void fetchTask(void* param) {
 // ============================================================
 //  Public API (loop context)
 // ============================================================
+static uint32_t s_lastSpawnHeap = 0;   // loop-ctx net-per-poll sampler
+
 void feederLoop(uint32_t nowMs) {
   if (g_fetchInProgress || !g_wifiUp) return;
   uint32_t cadence = g_feedIsLocal ? AR_POLL_LOCAL_MS : AR_POLL_CLOUD_MS;
@@ -381,6 +383,23 @@ void feederLoop(uint32_t nowMs) {
   if (g_set.feedUrl.length() >= sizeof(s_job.feedUrl))
     Serial.println("[feeder] feed url too long - truncated");
   strlcpy(s_job.feedUrl, g_set.feedUrl.c_str(), sizeof(s_job.feedUrl));
+
+  // NET per-poll accounting, loop context. g_heapDeltaFeeder is sampled INSIDE
+  // the task and therefore cannot see anything lost during task teardown --
+  // the TCB and the 12 KB stack are reclaimed via the idle task's deferred
+  // free list, after that measurement has already been taken. Sampling here,
+  // immediately before each spawn, brackets a COMPLETE poll cycle including
+  // teardown, so the difference between consecutive spawns is the true net
+  // loss per poll. If this figure is materially larger than g_heapDeltaFeeder
+  // divided by run count, the leak is in the task lifecycle, not the fetch.
+  {
+    uint32_t hNow = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    if (s_lastSpawnHeap) {
+      g_heapNetFeeder += (int32_t)s_lastSpawnHeap - (int32_t)hNow;
+      g_heapNetSamples++;
+    }
+    s_lastSpawnHeap = hNow;
+  }
 
   g_fetchInProgress = true;
   BaseType_t ok = xTaskCreatePinnedToCore(fetchTask, "feeder", AR_NET_TASK_STACK,
