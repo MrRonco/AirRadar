@@ -36,6 +36,7 @@ struct LogoSlot {
   uint16_t*     pix;          // PSRAM RGB565, allocated on first use
   lv_img_dsc_t  dsc;
   uint32_t      lastUse;
+  bool          needsSave;    // fetched, not yet persisted (see kFsWriteGapMs)
 };
 static LogoSlot s_slots[kSlots];
 
@@ -96,6 +97,20 @@ static bool fsLoad(const char* key, uint16_t* pix) {
   if (!ok) FFat.remove(path);          // corrupt/short file: refetch later
   return ok;
 }
+
+// Flash writes starve the panel DMA. Flash and PSRAM share the MSPI bus, and
+// CONFIG_SPI_FLASH_AUTO_SUSPEND is NOT enabled in the prebuilt arduino-esp32
+// libraries (verified in the shipped sdkconfig), so a write cannot be suspended
+// to let cache traffic through. /api/stalls measured 222 ms of blocked bus for
+// one 2,592-byte logo, with zero pixels flushed -- the whole screen shakes and
+// no repaint metric can see it, which is why this survived six hypotheses.
+//
+// Nothing here can make a write cheap, so the only lever is how OFTEN. Saves are
+// marked on the slot and drained at most one per kFsWriteGapMs, turning a burst
+// of new airlines into occasional isolated blips instead of a run of shakes.
+// The rate decays naturally: an ICAO is written once, ever.
+static const uint32_t kFsWriteGapMs = 45000;
+static uint32_t s_lastFsWrite = 0;
 
 // Persist freshly fetched pixels. Loop context (keeps FATFS single-threaded).
 static void fsSave(const char* key, const uint16_t* pix) {
@@ -239,9 +254,25 @@ void logosLoop(uint32_t nowMs) {
     s_resReady = false;
     if (s_jobSlot >= 0) {
       s_slots[s_jobSlot].state = s_resState;
-      if (s_resState == LOGO_OK) fsSave(s_slots[s_jobSlot].key, s_slots[s_jobSlot].pix);
+      // Do NOT write here -- mark it, and let the gate below pick the moment.
+      if (s_resState == LOGO_OK) s_slots[s_jobSlot].needsSave = true;
     }
     s_jobSlot = -1;
+  }
+
+  // Drain at most one pending save per gap, oldest-used first so a slot cannot
+  // be evicted before it is ever persisted.
+  if (s_fsOk && (uint32_t)(nowMs - s_lastFsWrite) >= kFsWriteGapMs) {
+    int pick = -1;
+    for (int i = 0; i < kSlots; i++)
+      if (s_slots[i].needsSave && s_slots[i].key[0] && s_slots[i].pix &&
+          (pick < 0 || s_slots[i].lastUse < s_slots[pick].lastUse))
+        pick = i;
+    if (pick >= 0) {
+      fsSave(s_slots[pick].key, s_slots[pick].pix);
+      s_slots[pick].needsSave = false;
+      s_lastFsWrite = nowMs;
+    }
   }
 
   // Prefetch: every kPrefetchMs, queue one visible airline whose logo we
