@@ -113,7 +113,13 @@ void loop() {
   #define STAGE(id, call) do { uint32_t _t0 = millis(); call; \
                                stallNote((id), millis() - _t0, busy); } while (0)
 
-  STAGE(ST_LVGL, lv_timer_handler());         // LVGL render + input
+  // Reset the flush counter around LVGL only, so a recorded stall says how much
+  // of the screen it actually repainted.
+  extern volatile uint32_t g_flushPx;
+  g_flushPx = 0;
+  uint32_t _lv0 = millis();
+  lv_timer_handler();                         // LVGL render + input
+  stallNote(ST_LVGL, millis() - _lv0, busy, g_flushPx);
 
   g_wifiUp = (WiFi.status() == WL_CONNECTED);
 

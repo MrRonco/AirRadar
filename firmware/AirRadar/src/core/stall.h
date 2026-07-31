@@ -23,5 +23,5 @@ enum StallStage : uint8_t {
 #define BUSY_MAP    0x20
 
 void   stallBegin();                                        // allocate the ring (setup)
-void   stallNote(uint8_t stage, uint32_t ms, uint8_t busy); // no-op below AR_STALL_MS
+void   stallNote(uint8_t stage, uint32_t ms, uint8_t busy, uint32_t px = 0);
 String stallReport();                                       // human-readable dump
