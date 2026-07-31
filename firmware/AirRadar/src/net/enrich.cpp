@@ -48,6 +48,13 @@ static int          s_rtN         = 0;
 static bool         s_rtDirty     = false;
 static uint32_t     s_rtFlushAt   = 0;
 static bool         s_rtFsOk      = false;
+// Chunked-write state. 2 KB spans at most one 4 KB flash sector erase per pass,
+// so a full table goes out over ~5 loop passes instead of one 327 ms stall.
+static const size_t kRouteChunk = 2048;
+static File     s_rtWrFile;
+static size_t   s_rtWrOff   = 0;
+static int      s_rtWrN     = 0;
+static bool     s_rtWriting = false;
 
 static int routeFind(const char* cs) {
   for (int i = 0; i < s_rtN; i++)
@@ -73,15 +80,38 @@ void enrichRouteCacheBegin() {
 
 // Loop context. Batched: a flash write stalls the LCD DMA, so we do at most
 // one small write a minute rather than one per newly seen callsign.
+// CHUNKED ON PURPOSE, exactly as maptiles.cpp does it. Flash writes disable the
+// cache, and flash shares the MSPI bus with PSRAM, so a blocking write stalls
+// the LCD DMA for its whole duration. This function used to write the entire
+// table plus an open-truncate and a close in one pass: /api/stalls measured
+// 327 ms with zero pixels flushed -- invisible to every repaint metric, and the
+// intermittent display glitch that survived four other explanations. Dribbling
+// it out across loop passes, with the file held open, keeps each stall short.
 void enrichRouteCacheFlush(uint32_t nowMs) {
+  // A write already in progress: push the next chunk and return.
+  if (s_rtWriting) {
+    size_t total = (size_t)s_rtWrN * sizeof(RouteRec);
+    size_t n = total - s_rtWrOff;
+    if (n > kRouteChunk) n = kRouteChunk;
+    size_t w = s_rtWrFile.write((const uint8_t*)s_rt + s_rtWrOff, n);
+    s_rtWrOff += w;
+    if (w != n || s_rtWrOff >= total) {
+      s_rtWrFile.close();
+      s_rtWriting = false;
+      s_rtWrOff   = 0;
+    }
+    return;
+  }
   if (!s_rtDirty || !s_rtFsOk || !s_rt) return;
   if ((int32_t)(nowMs - s_rtFlushAt) < 0) return;
-  File f = FFat.open(kRouteFile, FILE_WRITE);
-  if (f) {
-    f.write((const uint8_t*)s_rt, s_rtN * sizeof(RouteRec));
-    f.close();
-  }
-  s_rtDirty = false;
+  s_rtWrFile = FFat.open(kRouteFile, FILE_WRITE);
+  if (!s_rtWrFile) { s_rtDirty = false; return; }
+  // Snapshot the count: routeStore may append while the write is in flight, and
+  // those entries simply land in the next flush rather than running off the end.
+  s_rtWrN     = s_rtN;
+  s_rtWrOff   = 0;
+  s_rtWriting = true;
+  s_rtDirty   = false;
 }
 
 static void routeStore(const char* cs, const char* org, const char* dst,
