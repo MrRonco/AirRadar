@@ -122,6 +122,42 @@ neither. A browser-side implementation in the web console **is** compliant
 request for advanced use once a public-API implementation exists.
 
 
+## Note 13 — the intermittent display glitch: SOLVED
+
+`blipBuild` ended with two `lv_obj_move_foreground()` calls, keeping the ISS
+marker on top after a late holder was created. That resolves to
+`lv_obj_move_to_index`, whose final statement is `lv_obj_invalidate(parent)`
+(lvgl 8.3 `lv_obj_tree.c:216`) — and the parent is `s_clip`, the 424x424 disc.
+
+Every newly seen aircraft therefore repainted the whole scope, and since a new
+aircraft also changes the Overview count and nearest, the left card repainted
+with it. 179,776 px of disc plus ~20,000 px of card = ~200,000 px, 52% of the
+screen, ~120 ms. Irregular and clustered because aircraft arrive that way.
+
+The ISS is hidden except for a few passes a day, so nearly every one of those
+repaints was reordering an invisible object.
+
+**Result.** Steady-state LVGL stalls, boot excluded, same traffic level:
+
+| | before | after |
+|---|---|---|
+| worst repaint | 203,118 px (53%) | 41,676 px (11%) |
+| worst duration | 129 ms | 60 ms |
+| mean repaint | 60,120 px | 26,447 px |
+| events >= 11% of screen | 2 | **0** |
+
+**How it was found.** Three hypotheses were wrong first: the observer's own
+`/metrics` polling (falsified — the glitch recurred with nothing polling), TLS
+handshake load (falsified — zero `enrich` stalls), and logo decode (falsified —
+zero `logos` stalls). `/api/stalls` settled it in two readings: per-stage loop
+timing eliminated every non-LVGL stage, then flushed-pixel counts with their
+bounding box gave `13,23-616,456` — the left card's edge through the scope's
+edge — and the arithmetic matched to within 2%.
+
+Also fixed alongside: `LV_INV_BUF_SIZE` raised 32 → 64. On overflow LVGL
+discards every pending area and invalidates the whole display
+(`lv_refr.c:256`), which is the 384,000 px / 224 ms signature.
+
 ## Note 12 — the ~72 B/s internal-heap drain: SOLVED
 
 `vTaskDelete(NULL)` never returns, so C++ destructors for objects living in the
