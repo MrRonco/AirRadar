@@ -109,6 +109,28 @@ FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
    working counter. Also note a fixed-cadence subsystem makes any time-linear
    drain *look* per-poll: 72.7 B/s × 2 s = 145 B "per feeder poll" is the same
    number, not evidence.
+19. **(v7.2) `lv_obj_move_foreground()` invalidates the WHOLE PARENT.**
+   It calls `lv_obj_move_to_index`, whose last line is
+   `lv_obj_invalidate(parent)` (lvgl 8.3 `lv_obj_tree.c:216`). `blipBuild` did
+   this twice per new aircraft to keep the ISS marker on top, and the parent is
+   `s_clip` — the 424x424 disc. Every newly seen aircraft therefore repainted
+   the whole scope plus, via the count/nearest change, the Overview card:
+   ~200,000 px, 52% of the screen, ~120 ms. That was the intermittent glitch
+   that survived three wrong hypotheses. Worse, the ISS is hidden except for a
+   few passes a day, so almost every one of those repaints reordered an
+   invisible object. Defer z-order changes out of per-item creation, and only
+   perform them when the object is actually visible.
+20. **(v7.2) `LV_INV_BUF_SIZE` overflow repaints the entire screen.** Exceed it
+   in one refresh period and LVGL discards every pending area and invalidates
+   the whole display (`lv_refr.c:256`). The default is 32; nine blips plus ~20
+   card labels on a 250 ms tick sits near that. Raised to 64 in `lv_conf.h`.
+   Symptom is a 384,000 px / ~230 ms flush with bbox `0,0-799,479`.
+21. **Instrument before hypothesising.** Three confident explanations for the
+   glitch were wrong — observer polling, TLS handshake load, logo decode — and
+   each cost a round trip. `/api/stalls` (per-stage loop timing plus flushed
+   pixels and their bounding box) identified it in two readings. The bbox
+   `13,23-616,456` named the two regions outright, and the arithmetic then
+   matched to within 2%. Same lesson as rule 18.
 16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
    decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
    over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,

@@ -150,11 +150,26 @@ static inline void swapPixels565(uint16_t* p, uint32_t n) {
 // near-full-screen repaint (~384k px) or hundreds of small ones; only counting
 // distinguishes them, and the distinction decides where to look next.
 volatile uint32_t g_flushPx = 0;
+// Bounding box and count of the flushes in one pass. The total alone cannot
+// distinguish "the whole scope disc repainted" from "twenty scattered blips",
+// and those have completely different causes. The geometry names the object.
+volatile uint32_t g_flushN  = 0;
+volatile int16_t  g_flushX1 = 0, g_flushY1 = 0, g_flushX2 = 0, g_flushY2 = 0;
 
 static void flush_cb(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* px) {
   int32_t w = area->x2 - area->x1 + 1;
   int32_t h = area->y2 - area->y1 + 1;
   g_flushPx += (uint32_t)w * (uint32_t)h;
+  if (g_flushN == 0) {
+    g_flushX1 = area->x1; g_flushY1 = area->y1;
+    g_flushX2 = area->x2; g_flushY2 = area->y2;
+  } else {
+    if (area->x1 < g_flushX1) g_flushX1 = area->x1;
+    if (area->y1 < g_flushY1) g_flushY1 = area->y1;
+    if (area->x2 > g_flushX2) g_flushX2 = area->x2;
+    if (area->y2 > g_flushY2) g_flushY2 = area->y2;
+  }
+  g_flushN++;
   // The panel framebuffer holds byte-swapped 565. We used to get that by
   // leaving setSwapBytes(true), but that makes LovyanGFX pick the rgb565_t
   // pixelcopy specialisation, which sets no_convert=false and therefore skips

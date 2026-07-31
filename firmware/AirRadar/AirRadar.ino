@@ -115,11 +115,13 @@ void loop() {
 
   // Reset the flush counter around LVGL only, so a recorded stall says how much
   // of the screen it actually repainted.
-  extern volatile uint32_t g_flushPx;
-  g_flushPx = 0;
+  extern volatile uint32_t g_flushPx, g_flushN;
+  extern volatile int16_t  g_flushX1, g_flushY1, g_flushX2, g_flushY2;
+  g_flushPx = 0; g_flushN = 0;
   uint32_t _lv0 = millis();
   lv_timer_handler();                         // LVGL render + input
-  stallNote(ST_LVGL, millis() - _lv0, busy, g_flushPx);
+  stallNote(ST_LVGL, millis() - _lv0, busy, g_flushPx, g_flushN,
+            g_flushX1, g_flushY1, g_flushX2, g_flushY2);
 
   g_wifiUp = (WiFi.status() == WL_CONNECTED);
 

@@ -109,6 +109,7 @@ static Blip s_blips[AR_MAX_TRACKS];
 
 static lv_obj_t* s_clip         = nullptr;   // circular clip container
 static lv_obj_t* s_mapImg       = nullptr;
+static bool      s_issRaisePending = false;  // z-order fix deferred out of blipBuild
 static lv_obj_t* s_rangeLblMid  = nullptr;
 static lv_obj_t* s_rangeLblFull = nullptr;
 static lv_obj_t* s_issImg       = nullptr;
@@ -225,9 +226,16 @@ static void blipCreateObjects(Blip& b) {
   lv_obj_set_size(b.lbl, LBL_W, LBL_H);        // fixed box: no SIZE_CONTENT growth
   lv_label_set_long_mode(b.lbl, LV_LABEL_LONG_CLIP);
 
-  // ISS stays the topmost scope layer even after late holder creation.
-  if (s_issImg) lv_obj_move_foreground(s_issImg);
-  if (s_issLbl) lv_obj_move_foreground(s_issLbl);
+  // ISS must stay the topmost scope layer even after a late holder is created,
+  // but DO NOT reorder here. lv_obj_move_foreground -> lv_obj_move_to_index
+  // ends with lv_obj_invalidate(PARENT), and the parent is s_clip -- the whole
+  // 424x424 disc. Doing it per blip meant every newly seen aircraft repainted
+  // the entire scope plus, via the count/nearest change, the Overview card:
+  // ~200,000 px, 52% of the screen, ~120 ms. That was the intermittent glitch.
+  // Defer it instead; scopeUpdateIss performs one raise, and only when the ISS
+  // is actually on screen, which is a few passes a day rather than every time
+  // a new aircraft appears.
+  s_issRaisePending = true;
 }
 
 // Find the slot already bound to hex, else bind the first free one.
@@ -521,6 +529,13 @@ static void scopeUpdateIss() {
   }
   setHidden(s_issImg, !show);
   setHidden(s_issLbl, !show);
+  // Restore z-order at most once per update, and only while visible -- raising
+  // a hidden object costs a full-disc invalidate and buys nothing.
+  if (show && s_issRaisePending) {
+    lv_obj_move_foreground(s_issImg);
+    lv_obj_move_foreground(s_issLbl);
+    s_issRaisePending = false;
+  }
 }
 
 void scopeUpdate(uint32_t nowMs) {

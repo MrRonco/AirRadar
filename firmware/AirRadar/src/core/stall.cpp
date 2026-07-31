@@ -26,6 +26,8 @@ struct StallRec {
   uint32_t uptimeS;
   uint32_t ms;
   uint32_t px;          // pixels flushed during the stall (lvgl only)
+  uint32_t n;           // number of flush calls
+  int16_t  x1, y1, x2, y2;   // bounding box of everything repainted
   uint8_t  stage;
   uint8_t  busy;        // what was in flight, for correlation
 };
@@ -45,7 +47,8 @@ void stallBegin() {
   s_ring = (StallRec*)heap_caps_calloc(kRing, sizeof(StallRec), MALLOC_CAP_SPIRAM);
 }
 
-void stallNote(uint8_t stage, uint32_t ms, uint8_t busy, uint32_t px) {
+void stallNote(uint8_t stage, uint32_t ms, uint8_t busy, uint32_t px,
+               uint32_t n, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
   if (stage >= ST_N || ms < AR_STALL_MS) return;
   s_count[stage]++;
   if (ms > s_maxMs[stage]) s_maxMs[stage] = ms;
@@ -56,6 +59,9 @@ void stallNote(uint8_t stage, uint32_t ms, uint8_t busy, uint32_t px) {
   s_ring[s_head].stage   = stage;
   s_ring[s_head].busy    = busy;
   s_ring[s_head].px      = px;
+  s_ring[s_head].n       = n;
+  s_ring[s_head].x1 = x1; s_ring[s_head].y1 = y1;
+  s_ring[s_head].x2 = x2; s_ring[s_head].y2 = y2;
   s_head = (s_head + 1) % kRing;
 }
 
@@ -91,10 +97,12 @@ String stallReport() {
     if (f & BUSY_LOGO)   b[k++] = 'L';
     if (f & BUSY_MAP)    b[k++] = 'M';
     b[k] = '\0';
-    snprintf(l, sizeof(l), "  t=%-7lus  %-8s %5lu ms  %8lu px (%2lu%% of screen)  %s\n",
+    snprintf(l, sizeof(l),
+             "  t=%-6lus %-7s %4lums %7lupx(%2lu%%) n=%-3lu bbox %d,%d-%d,%d %s\n",
              (unsigned long)s_ring[i].uptimeS, kStageName[s_ring[i].stage],
              (unsigned long)s_ring[i].ms, (unsigned long)s_ring[i].px,
-             (unsigned long)(s_ring[i].px / 3840), k ? b : "-");
+             (unsigned long)(s_ring[i].px / 3840), (unsigned long)s_ring[i].n,
+             s_ring[i].x1, s_ring[i].y1, s_ring[i].x2, s_ring[i].y2, k ? b : "-");
     r += l;
   }
   return r;

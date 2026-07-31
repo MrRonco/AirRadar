@@ -34,6 +34,13 @@
 
 /*==== HAL ====*/
 #define LV_DISP_DEF_REFR_PERIOD 30
+
+/* Invalidated-area slots per refresh. On overflow LVGL DISCARDS every
+ * pending area and repaints the entire 800x480 screen (lv_refr.c:256).
+ * Nine moving blips plus ~20 card labels on a 250 ms tick sits close to
+ * the default 32; a full repaint costs ~230 ms here. 64 slots cost
+ * 64 x 8 B = 512 B and move that cliff well out of reach. */
+#define LV_INV_BUF_SIZE 64
 #define LV_INDEV_DEF_READ_PERIOD 30
 #define LV_TICK_CUSTOM 1
 #define LV_TICK_CUSTOM_INCLUDE "Arduino.h"
