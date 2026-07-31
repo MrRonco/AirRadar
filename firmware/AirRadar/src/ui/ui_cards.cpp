@@ -57,7 +57,15 @@ static const int SEL_HAIR_Y   = 154;
 static const int SEL_GRID_Y1  = 164;
 static const int SEL_GRID_Y2  = 212;
 static const int SEL_VAL_DY   = 14;            // key -> value offset in a grid cell
-static const int SEL_COL2_X   = 72;            // two 64 px columns, 8 px gutter
+static const int SEL_COL2_X   = 75;
+// Solved, not guessed. font_val22 has tabular figures frozen in, so the MINUS
+// SIGN is 14.25 px -- exactly a digit -- and "-3072" is 5x14.25 = 71.2 px. The
+// two widest values in the grid are ALT "45000" and V/S "-3072", both 71.2 px.
+// With V/S in column 2 the constraints were unsatisfiable: row 1 needs col2 to
+// start at >=71.2 so ALT clears SPD, row 2 needed it at <=64.8 so V/S fits
+// before the content edge. Hence the clipped digit. Swapping HDG and V/S puts
+// both 71.2 px values in column 1, where they occupy DIFFERENT ROWS and never
+// compete. 75 balances the leftover: 3.8 px slack in col1, 4.0 px in col2.
 static const int SEL_GRID_Y3  = 260;           // DIST / SQK, same grid as above
 static const int SEL_HAIR2_Y  = 308;           // separates the status line
 static const int SEL_LIVE_Y   = 320;
@@ -364,10 +372,12 @@ static void buildSelectedBottom(lv_obj_t* cont) {
   mkHair(cont, SEL_HAIR_Y, CONTENT_W);
   s_selAlt   = mkGridCell(cont, 0,          SEL_GRID_Y1, "ALT ft");
   s_selSpd   = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y1, "SPD kt");
-  s_selHdg   = mkGridCell(cont, 0,          SEL_GRID_Y2, "HDG");
-  s_selClimb = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y2, "V/S fpm");
+  // V/S in column 1, HDG in column 2 -- see the note on SEL_COL2_X. V/S is the
+  // widest value in the card and column 1 is the only one that can hold it.
+  s_selClimb = mkGridCell(cont, 0,          SEL_GRID_Y2, "V/S fpm");
+  s_selHdg   = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y2, "HDG");
 
-  // Same two-column grid as ALT/SPD and HDG/V-S, then a rule before the status
+  // Same two-column grid as ALT/SPD and V-S/HDG, then a rule before the status
   // line — previously these were full-width label/value rows in a different
   // style and the status line ran straight on with nothing separating it.
   s_selDist = mkGridCell(cont, 0,          SEL_GRID_Y3, "DIST km");
