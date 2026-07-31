@@ -111,3 +111,44 @@ with a live status strip and traffic table. Two defects found during the review
 and fixed: `handleWifi` wrote an empty password over the stored one because the
 field renders blank by design, and the CSRF guard was a substring match that
 `http://airradar.local.evil.com` would pass.
+
+## v7.2 — the measurement release
+
+Two bugs that had each survived multiple wrong explanations, both closed by
+building an instrument instead of arguing.
+
+**The heap drain.** Free internal SRAM fell ~72 B/s from boot and never
+recovered; after ~25 minutes the largest free block dropped below what an
+mbedTLS handshake needs and every optional fetch was shed for the rest of the
+boot. Cause: `vTaskDelete(NULL)` never returns, so a `DynamicJsonDocument`
+declared in a task function never runs its destructor. `issTask` leaked 1,088 B
+on every 15 s poll — 72.5 B/s against 72.7 measured. `wxTask` had it too, and
+`routeTask` on four separate exit paths. Found by adding block-level heap
+accounting (only ~0.2 new allocations per feeder poll against ~200 B lost, so
+the leak was one ~1.1 KB object every 10–15 s, not many small ones), then
+dumping surviving blocks with `heap_caps_walk` — whose contents read
+`iss_position.latitude`, one per poll. Confirmed over a 21-hour soak at
+0.23 B/s with zero shed fetches.
+
+It hid for three sessions because `g_heapDeltaIss`/`g_issRuns` were declared,
+published to `/metrics` and never incremented, so "ISS contributes exactly 0"
+was a hardcoded zero read as a measurement.
+
+**The display glitch.** `blipBuild` called `lv_obj_move_foreground()` twice per
+new aircraft to keep the ISS marker on top. That resolves to
+`lv_obj_invalidate(parent)`, and the parent is the 424×424 disc — so every newly
+seen aircraft repainted the whole scope plus the Overview card, ~200,000 px and
+~120 ms. The ISS is hidden except for a few passes a day, so almost all of it
+reordered an invisible object. Worst repaint 53% → 11%, worst duration 129 ms →
+60 ms. `LV_INV_BUF_SIZE` also raised 32 → 64, since overflow makes LVGL discard
+every pending area and repaint the entire screen.
+
+Three hypotheses died along the way — observer polling, TLS handshake load,
+logo decode — each plausible, none measured. `/api/stalls` found it in two
+readings. The lesson is rule 21.
+
+Also in v7.2: the operator tile falls back to the ICAO code in the airline's
+brand colour when no logo exists (general aviation, cargo, private), 65
+verified carriers plus a deterministic hue for the rest; V/S no longer clips
+(tabular figures make the minus sign a full digit wide, so "-3072" needed
+71.2 px in a 64 px column); new diagnostics `/api/stalls` and `/api/heapwalk`.

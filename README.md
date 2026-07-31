@@ -7,7 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
+[![firmware](https://img.shields.io/badge/firmware-v7.2.0-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map with the coverage disc, altitude-coloured aircraft glyphs, an overview card on the left and the selected-aircraft card on the right">
 
@@ -410,15 +410,18 @@ Still open — see [`docs/ROADMAP.md`](docs/ROADMAP.md):
 - Route ETA and a session-statistics screen
 - A served `/live` page in the web console
 
-**Solved: the internal-heap drain.** Free internal SRAM used to fall ~72 B/s
-from boot and never recover, eventually starving mbedTLS so weather and new
-logo fetches stopped. Root cause: `vTaskDelete(NULL)` never returns, so a
+**Solved in v7.2: the internal-heap drain.** Free internal SRAM used to fall
+~72 B/s from boot and never recover, eventually starving mbedTLS so weather and
+new logo fetches stopped. Cause: `vTaskDelete(NULL)` never returns, so a
 `DynamicJsonDocument` declared in a task function never runs its destructor —
-`issTask` leaked 1,088 bytes on every 15-second poll, which is 72.5 B/s against
-a measured 72.7. Found by dumping surviving heap blocks with `heap_caps_walk`
-and reading their contents, which literally spelled out
-`iss_position.latitude`. `wxTask` and `routeTask` had the same defect. See
-[`docs/V7_PORT.md`](docs/V7_PORT.md) note 12.
+`issTask` leaked 1,088 bytes on every 15-second poll. Confirmed over a 21-hour
+soak at 0.23 B/s with zero shed fetches.
+
+**Solved in v7.2: the intermittent display glitch.** `lv_obj_move_foreground()`
+invalidates its entire parent, and it was being called twice per new aircraft to
+raise a marker that is hidden almost all the time — repainting the whole scope
+disc. Worst repaint 53% of the screen → 11%. Both write-ups are in
+[`docs/V7_PORT.md`](docs/V7_PORT.md) notes 12 and 13.
 
 ---
 
