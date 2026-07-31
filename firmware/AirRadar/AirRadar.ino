@@ -17,6 +17,7 @@
 #include "src/config.h"
 #include "src/core/state.h"
 #include "src/core/tracks.h"
+#include "src/core/stall.h"
 #include "src/net/feeder.h"
 #include "src/net/enrich.h"
 #include "src/net/maptiles.h"
@@ -69,6 +70,7 @@ void setup() {
   if (!psramFound())
     Serial.println("[boot] WARNING: no PSRAM - set Tools>PSRAM to OPI PSRAM");
 
+  stallBegin();                               // glitch instrumentation ring
   settingsLoad();
 
   if (!halDisplayInit()) {
@@ -102,16 +104,25 @@ void setup() {
 void loop() {
   uint32_t now = millis();
 
-  lv_timer_handler();                         // LVGL render + input
+  // Every stage below runs in loop context, so any one of them running long
+  // both delays the UI and competes with the panel DMA for the PSRAM bus.
+  // Timing them individually names the culprit instead of merely proving that
+  // something was slow. STAGE() is free when nothing exceeds AR_STALL_MS.
+  uint8_t busy = (g_fetchInProgress ? BUSY_FEEDER : 0) |
+                 (g_routeFetching   ? BUSY_ROUTE  : 0);
+  #define STAGE(id, call) do { uint32_t _t0 = millis(); call; \
+                               stallNote((id), millis() - _t0, busy); } while (0)
+
+  STAGE(ST_LVGL, lv_timer_handler());         // LVGL render + input
 
   g_wifiUp = (WiFi.status() == WL_CONNECTED);
 
-  webLoop();
-  feederLoop(now);
-  enrichLoop(now);
-  mapLoop(now);
-  mqttLoop(now);
-  logosLoop(now);
+  STAGE(ST_WEB,    webLoop());
+  STAGE(ST_FEEDER, feederLoop(now));
+  STAGE(ST_ENRICH, enrichLoop(now));
+  STAGE(ST_MAP,    mapLoop(now));
+  STAGE(ST_MQTT,   mqttLoop(now));
+  STAGE(ST_LOGOS,  logosLoop(now));
   enrichRouteCacheFlush(now);
 
   // Route result first, then (maybe) a new request — ordering avoids a
@@ -130,9 +141,11 @@ void loop() {
   // (now - lastApiMs) would underflow into "everything is coasting".
   if (tracksApplyPending()) {
     uint32_t n2 = millis();
+    uint32_t _t0 = millis();
     tracksRebuildOrder();
     scopeUpdate(n2);
     cardsUpdate(n2);
+    stallNote(ST_TRACKS, millis() - _t0, busy);
   }
 
   // Dead-reckon + periodic scope refresh between polls
@@ -147,8 +160,9 @@ void loop() {
   // Card cadence (clock, ages, emergency blink phases live inside uiTick)
   if (now - s_lastUiTick >= AR_UI_TICK_MS) {
     s_lastUiTick = now;
-    uiTick(now);
+    STAGE(ST_UITICK, uiTick(now));
   }
+  #undef STAGE
 
   // Night mode: backlight off during quiet hours, any touch wakes it
   if (now - s_lastNightChk >= 1000) {

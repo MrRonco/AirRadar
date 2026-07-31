@@ -19,6 +19,7 @@
 #include <ArduinoJson.h>
 #include "web.h"
 #include "heapwalk.h"
+#include "../core/stall.h"
 #include "mqtt.h"
 #include "../config.h"
 #include "../core/state.h"
@@ -916,6 +917,13 @@ static void handleHeapWalk() {
   server.send(200, "text/plain", heapWalkDiff());
 }
 
+
+// Glitch hunt: which loop stage runs long, and what was in flight at the time.
+static void handleStalls() {
+  if (!authed()) return;
+  server.send(200, "text/plain", stallReport());
+}
+
 static void handleNotFound() {
   if (!authed()) return;
   server.send(404, "text/plain", "Not found");
@@ -935,6 +943,7 @@ void webBegin() {
   server.on("/screen.bmp", HTTP_GET, handleScreenBmp);
   server.on("/metrics", HTTP_GET, handleMetrics);
   server.on("/api/heapwalk", HTTP_GET, handleHeapWalk);
+  server.on("/api/stalls", HTTP_GET, handleStalls);
   server.on("/api/probe", HTTP_GET, handleApiProbe);
   server.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   server.onNotFound(handleNotFound);
