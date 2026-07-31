@@ -39,7 +39,7 @@ static uint32_t  s_maxMs[ST_N]   = {0};
 static uint32_t  s_count[ST_N]   = {0};
 
 static const char* kStageName[ST_N] = {
-  "lvgl", "web", "feeder", "enrich", "map", "mqtt", "logos", "tracks", "uitick",
+  "lvgl", "web", "feeder", "enrich", "map", "mqtt", "logos", "tracks", "uitick", "rtcache", "deadreck",
 };
 
 void stallBegin() {

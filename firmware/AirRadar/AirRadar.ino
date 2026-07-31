@@ -123,7 +123,22 @@ void loop() {
   stallNote(ST_LVGL, millis() - _lv0, busy, g_flushPx, g_flushN,
             g_flushX1, g_flushY1, g_flushX2, g_flushY2);
 
-  g_wifiUp = (WiFi.status() == WL_CONNECTED);
+  // Rule 2 is not a one-time setting. setAutoReconnect(true) means the stack
+  // silently re-associates after any dropout, and the reconnect does NOT
+  // preserve setSleep(false) -- modem sleep comes back, its wake bursts contend
+  // with the panel's continuous PSRAM DMA, and the screen wiggles. That is
+  // invisible to loop-stall timing because the contention is the radio, not the
+  // CPU. Re-assert it on every transition into CONNECTED, and count them.
+  {
+    bool up = (WiFi.status() == WL_CONNECTED);
+    if (up && !g_wifiUp) {
+      WiFi.setSleep(false);
+      g_wifiReconnects++;
+      Serial.printf("[net] reconnected (#%lu) - setSleep(false) re-applied\n",
+                    (unsigned long)g_wifiReconnects);
+    }
+    g_wifiUp = up;
+  }
 
   STAGE(ST_WEB,    webLoop());
   STAGE(ST_FEEDER, feederLoop(now));
@@ -131,7 +146,7 @@ void loop() {
   STAGE(ST_MAP,    mapLoop(now));
   STAGE(ST_MQTT,   mqttLoop(now));
   STAGE(ST_LOGOS,  logosLoop(now));
-  enrichRouteCacheFlush(now);
+  STAGE(ST_RTCACHE, enrichRouteCacheFlush(now));   // FATFS write: stalls LCD DMA
 
   // Route result first, then (maybe) a new request — ordering avoids a
   // guaranteed duplicate adsbdb fetch right after each lookup completes.
@@ -160,9 +175,11 @@ void loop() {
   if (now - s_lastPosTick >= AR_POLL_LOCAL_MS) {
     float dt = (now - s_lastPosTick) / 1000.0f;
     s_lastPosTick = now;
+    uint32_t _dr0 = millis();
     tracksDeadReckon(dt);
     tracksRebuildOrder();
     scopeUpdate(now);
+    stallNote(ST_DEADRECKON, millis() - _dr0, busy);
   }
 
   // Card cadence (clock, ages, emergency blink phases live inside uiTick)

@@ -155,6 +155,7 @@ uint32_t g_tlsConnCount = 0;           // successful acquisitions == TLS session
 // guesswork. Signed on purpose: only accumulating losses would let noise
 // masquerade as a leak.
 int32_t  g_heapDeltaFeeder = 0;
+uint32_t g_wifiReconnects = 0;
 int32_t  g_heapNetFeeder = 0;
 uint32_t g_heapNetSamples = 0;  uint32_t g_feederRuns = 0;
 int32_t  g_heapDeltaIss    = 0;  uint32_t g_issRuns    = 0;

@@ -797,6 +797,16 @@ static void handleMetrics() {
   snprintf(l, sizeof(l), "airradar_msg_rate %.2f\n", (double)g_feedMsgRate); s += l;
   s += F("# TYPE airradar_feed_local gauge\n");
   snprintf(l, sizeof(l), "airradar_feed_local %d\n", g_feedIsLocal ? 1 : 0); s += l;
+  // Rule-2 telemetry. wifi_sleep must read 0; if it is ever 1 the modem-sleep
+  // wake bursts are contending with the panel DMA and the screen will wiggle.
+  // reconnects counts how often the link dropped and setSleep(false) had to be
+  // re-asserted -- a rising count with a visible glitch is the correlation.
+  s += F("# TYPE airradar_wifi_sleep gauge\n");
+  snprintf(l, sizeof(l), "airradar_wifi_sleep %d\n",
+           g_wifiUp ? (WiFi.getSleep() ? 1 : 0) : 0); s += l;
+  s += F("# TYPE airradar_wifi_reconnects counter\n");
+  snprintf(l, sizeof(l), "airradar_wifi_reconnects %lu\n",
+           (unsigned long)g_wifiReconnects); s += l;
   s += F("# TYPE airradar_wifi_rssi gauge\n");
   snprintf(l, sizeof(l), "airradar_wifi_rssi %d\n", g_wifiUp ? (int)WiFi.RSSI() : 0); s += l;
   s += F("# TYPE airradar_heap_free gauge\n");

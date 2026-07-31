@@ -11,7 +11,7 @@
 
 enum StallStage : uint8_t {
   ST_LVGL = 0, ST_WEB, ST_FEEDER, ST_ENRICH, ST_MAP, ST_MQTT, ST_LOGOS,
-  ST_TRACKS, ST_UITICK, ST_N
+  ST_TRACKS, ST_UITICK, ST_RTCACHE, ST_DEADRECKON, ST_N
 };
 
 // Bitmask of what was in flight when the stall happened, for correlation.
