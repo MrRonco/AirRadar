@@ -9,9 +9,11 @@ draws the sky above your house on a 7-inch panel.
 
 [![firmware](https://img.shields.io/badge/firmware-v7.2.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
-<img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map with the coverage disc, altitude-coloured aircraft glyphs, an overview card on the left and the selected-aircraft card on the right">
+<img src="docs/img/panel.png" width="820" alt="AirRadar main screen during a real emergency: a full-bleed dark base map with the coverage disc, seven aircraft, and Air Canada 337 squawking 7600 shown as a red glyph with a red alert strip in the Overview card and a red squawk value in the Selected card">
 
-<sub>Live capture straight off the device via <code>GET /screen.bmp</code> — the actual framebuffer, not a mockup.</sub>
+<sub>Live capture off the device via <code>GET /screen.bmp</code> — the actual framebuffer, not a mockup.
+Air Canada 337 is squawking <b>7600</b>, radio failure: red glyph, red squawk, and the alert strip in the
+Overview card. Every other target stays violet, because red means emergency and nothing else.</sub>
 
 </div>
 
@@ -32,7 +34,7 @@ the device. The only things you supply are Wi-Fi and coordinates.
 |---|---|
 | **Feeder-first** | Reads `aircraft.json` from any readsb/tar1090 feeder (adsb.im, PiAware, dump1090-fa) at 2 s. Falls back to airplanes.live automatically and snaps back on its own. |
 | **It never stops moving** | Targets are dead-reckoned from heading and ground speed between polls. Lose a report and the glyph goes translucent and *coasts* along its last vector before dropping at 60 s. |
-| **Reads at a glance** | Glyph colour encodes altitude band, glyph size encodes proximity, a white ring marks selection, a square marks military, gold marks your watchlist. |
+| **Reads at a glance** | Glyph colour encodes altitude band, glyph size encodes proximity, a white ring marks selection, a square marks military, gold marks your watchlist. **Red is reserved for emergency squawks** — 7500, 7600, 7700 — and nothing else uses it. |
 | **Real base map** | CARTO dark tiles stitched on-device into one 800×480 image behind the whole screen, dimmed outside your coverage radius so the disc still reads as the instrument. |
 | **Knows the flight** | Airline logo and name, origin → destination, airframe type, registration and year — resolved lazily and cached to flash so they survive a reboot. |
 | **Runs headless too** | JSON API, Prometheus metrics, live screenshot endpoint, MQTT with Home Assistant auto-discovery, and OTA firmware upload over the network. |
@@ -46,6 +48,16 @@ the device. The only things you supply are Wi-Fi and coordinates.
 <img src="docs/img/map-fullbleed.png" width="700" alt="The full-bleed base map with the coverage lens: sharp inside the receiver radius, progressively dimmed outside it">
 
 <sub><b>The coverage lens.</b> The map covers all 800×480, but everything outside your receiver's range is dimmed with a feathered falloff — so the scope still reads as a disc without drawing a hard edge across the geography.</sub>
+
+</div>
+
+<div align="center">
+
+<img src="docs/img/panel-normal.png" width="700" alt="The same display in its ordinary state: violet altitude-coloured targets, no alert strip">
+
+<sub><b>The same display, nothing wrong.</b> Compare with the hero above: no alert strip in the
+Overview card, and every glyph is altitude-coloured rather than red. The emergency treatment is
+deliberately the only thing on screen that uses red.</sub>
 
 </div>
 
