@@ -122,6 +122,66 @@ neither. A browser-side implementation in the web console **is** compliant
 request for advanced use once a public-API implementation exists.
 
 
+## Note 14 — the whole-screen shake: every FATFS write starves the panel DMA
+
+The symptom that mattered was one sentence from the owner: **"the entire screen
+shakes."** A repaint tears locally; a whole-screen shake is the RGB panel's DMA
+being starved of PSRAM bandwidth. That eliminated rendering outright, after six
+hypotheses had been spent inside it.
+
+`/api/stalls` then showed the signature immediately — **a long stall with zero
+pixels flushed**, which every repaint metric is structurally blind to:
+
+```
+t=2884  logos    222 ms   0 px (0%)
+t=223   rtcache  327 ms   0 px (0%)
+```
+
+Both are FATFS writes. Flash and PSRAM share the MSPI bus, so a flash operation
+blocks cache traffic and the panel starves for its duration.
+
+**It cannot be fixed properly on this platform.** `CONFIG_SPI_FLASH_AUTO_SUSPEND`
+— the ESP-IDF option that suspends a flash operation so cache access continues —
+is **not set** in the prebuilt arduino-esp32 3.3.10 libraries, and enabling it
+needs a core rebuild. Same wall as standalone heap tracing (note 12).
+
+**Cost is fixed overhead, not bytes.** ~150–220 ms per write regardless of size:
+sector erase plus FAT metadata. This has a counter-intuitive consequence that
+was learned the hard way — **chunking a small write makes it worse.** Copying
+the map's chunked pattern to the 9 KB route table turned one 327 ms stall into
+four of 146–158 ms. The map chunks correctly only because its write is 750 KB,
+where size genuinely dominates. That commit was reverted.
+
+**The only lever at small sizes is frequency:**
+
+| source | before | after |
+|---|---|---|
+| route cache | every 60 s | every 15 min |
+| logo cache | every new airline | one per 45 s, oldest-first |
+| map cache | per range change | already chunked |
+
+**Result, 7.6 hours on the fixed build:**
+
+| | before | after |
+|---|---|---|
+| `logos` stalls | 4 in ~5 min | **6 in 7.6 h** |
+| `rtcache` stalls | recurring | **0** |
+
+Roughly a 350x reduction — one every ~75 s to one every ~76 min. The rate keeps
+decaying because an ICAO is written once, ever.
+
+These are **mitigations, not cures**, and the source comments say so. A flash
+write will always shake this panel.
+
+### Hypotheses falsified on the way, so they are not retried
+
+Observer `/metrics` polling · TLS handshake load · logo fetch/decode (the *fetch*
+was innocent; the *write* was not) · `lv_obj_move_foreground` invalidating the
+whole disc (a real bug, fixed, 53% → 11% repaints — but not this symptom) ·
+modem sleep returning after a reconnect (`wifi_reconnects` stayed 0; the rule-2
+re-assertion was a real latent defect and was fixed anyway) · periodic map cache
+writes (they are per range change only).
+
 ## Note 13 — the intermittent display glitch: SOLVED
 
 `blipBuild` ended with two `lv_obj_move_foreground()` calls, keeping the ISS

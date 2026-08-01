@@ -131,6 +131,26 @@ FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
    pixels and their bounding box) identified it in two readings. The bbox
    `13,23-616,456` named the two regions outright, and the arithmetic then
    matched to within 2%. Same lesson as rule 18.
+22. **(v7.2) EVERY FATFS write starves the panel DMA — the whole screen shakes.**
+   Flash and PSRAM share the MSPI bus, and `CONFIG_SPI_FLASH_AUTO_SUSPEND` is
+   **not set** in the prebuilt arduino-esp32 3.3.10 libraries (verified in the
+   shipped sdkconfig), so a flash operation cannot be suspended to let cache
+   traffic through. Measured: **~150–220 ms of blocked bus per write, almost
+   independent of size** — it is sector erase plus FAT metadata, not bytes.
+   A 2,592-byte logo cost 222 ms; a 9 KB route table cost 327 ms.
+   Consequences: **chunking a small write makes it worse** (five 2 KB writes
+   cost more than one 9 KB write — this was tried and reverted; the map chunks
+   only because its write is 750 KB, where size genuinely dominates), and the
+   only lever at small sizes is **frequency**. Route cache is now 15 min, logo
+   saves one per 45 s. Both are mitigation, not cure.
+23. **Shake vs flicker is the triage.** A *whole-screen shake* is the RGB panel's
+   DMA starved of PSRAM bandwidth — look for MSPI contention: flash writes, or
+   rule 2's modem sleep. A *local flicker or tear* is an oversized LVGL repaint —
+   look at invalidation. Six hypotheses were spent chasing repaints before the
+   owner said "the entire screen shakes", which eliminated rendering outright in
+   one sentence. The measurable signature of the shake is a **long stall with
+   ZERO pixels flushed** (`/api/stalls`), which every repaint metric is
+   structurally blind to.
 16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
    decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
    over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,

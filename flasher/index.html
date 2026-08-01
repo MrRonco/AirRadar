@@ -48,15 +48,13 @@
     <p class="sub">Requires desktop <b>Chrome</b> or <b>Edge</b>. Connect the board by USB-C first.</p>
 
     <div class="beta">
-      <b>v7.2.0</b>
-      <p>Fixes a memory leak that starved the device of RAM about 25&nbsp;minutes
-      into every boot, silently stopping weather, route and airline-logo lookups
-      &mdash; free memory now holds steady across a 21-hour soak instead of
-      falling ~72&nbsp;B/s
-      (<a href="https://github.com/MrRonco/AirRadar/issues/1">issue&nbsp;#1</a>).
-      Also fixes an intermittent display glitch that repainted half the screen
-      whenever a new aircraft appeared, and adds the ICAO code in the airline's
-      colour for aircraft with no logo.</p>
+      <b>v7.2.1</b>
+      <p>Fixes the intermittent whole-screen shake. Every write to the on-device
+      flash cache starves the display's DMA &mdash; flash and PSRAM share a bus
+      &mdash; so airline-logo and route saves are now spread out rather than
+      written the moment they arrive. Measured over 7.6&nbsp;hours: from roughly
+      one shake a minute to one an hour. Also carries the v7.2.0 memory-leak fix,
+      which holds steady across a 21-hour soak.</p>
     </div>
 
     <div class="btnwrap">
@@ -76,7 +74,7 @@
       </ol>
     </div>
 
-    <div class="foot">v7.2.0 · <a href="https://github.com/MrRonco/AirRadar">github.com/MrRonco/AirRadar</a> · by Franco Raso</div>
+    <div class="foot">v7.2.1 · <a href="https://github.com/MrRonco/AirRadar">github.com/MrRonco/AirRadar</a> · by Franco Raso</div>
   </div>
 </body>
 </html>

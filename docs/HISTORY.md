@@ -152,3 +152,28 @@ brand colour when no logo exists (general aviation, cargo, private), 65
 verified carriers plus a deterministic hue for the rest; V/S no longer clips
 (tabular figures make the minus sign a full digit wide, so "-3072" needed
 71.2 px in a 64 px column); new diagnostics `/api/stalls` and `/api/heapwalk`.
+
+## v7.2.1 — the shake
+
+The remaining display glitch turned out not to be rendering at all. Every FATFS
+write starves the panel DMA: flash and PSRAM share the MSPI bus, and
+`CONFIG_SPI_FLASH_AUTO_SUSPEND` is disabled in the prebuilt arduino-esp32
+libraries, so a write cannot be suspended to let cache traffic through. A
+2,592-byte logo cost 222 ms of blocked bus; the 9 KB route table cost 327 ms.
+
+The tell was the owner's own description — "the entire screen shakes" — which
+distinguishes DMA starvation from a local repaint tear and eliminated six
+hypotheses in one sentence. The measurable signature is a long stall with **zero
+pixels flushed**, invisible to every repaint metric built up to that point.
+
+Cost is fixed overhead rather than bytes, which means chunking a small write
+makes it worse: copying the map's chunked pattern to the route table turned one
+327 ms stall into four of ~150 ms, and was reverted. Frequency is the only lever
+at these sizes. Route cache went to 15 minutes, logo saves to one per 45 s.
+Measured over 7.6 hours: logo stalls fell from 4 per 5 minutes to 6 in the whole
+run, route stalls to zero.
+
+Also in v7.2.1: `WiFi.setSleep(false)` is re-asserted after every reconnect
+(rule 2 was being applied once, at boot, while `setAutoReconnect(true)` silently
+re-associates), and the stall detector gained the `rtcache` and `deadreck`
+stages that had been blind spots.

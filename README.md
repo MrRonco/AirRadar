@@ -7,7 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.2.0-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
+[![firmware](https://img.shields.io/badge/firmware-v7.2.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map with the coverage disc, altitude-coloured aircraft glyphs, an overview card on the left and the selected-aircraft card on the right">
 
@@ -417,11 +417,19 @@ new logo fetches stopped. Cause: `vTaskDelete(NULL)` never returns, so a
 `issTask` leaked 1,088 bytes on every 15-second poll. Confirmed over a 21-hour
 soak at 0.23 B/s with zero shed fetches.
 
-**Solved in v7.2: the intermittent display glitch.** `lv_obj_move_foreground()`
-invalidates its entire parent, and it was being called twice per new aircraft to
-raise a marker that is hidden almost all the time — repainting the whole scope
-disc. Worst repaint 53% of the screen → 11%. Both write-ups are in
-[`docs/V7_PORT.md`](docs/V7_PORT.md) notes 12 and 13.
+**Solved in v7.2.1: the intermittent whole-screen shake.** Every FATFS write
+starves the panel DMA — flash and PSRAM share the MSPI bus, and
+`CONFIG_SPI_FLASH_AUTO_SUSPEND` is disabled in the prebuilt libraries, so a
+write cannot be suspended. A 2,592-byte logo cost 222 ms of blocked bus. Cost is
+fixed overhead rather than bytes, so chunking makes small writes *worse*;
+frequency is the only lever. Logo and route saves are now spread out — measured
+over 7.6 hours, from roughly one shake a minute to one an hour.
+
+**Solved in v7.2: an oversized repaint.** `lv_obj_move_foreground()` invalidates
+its entire parent, and it was called twice per new aircraft to raise a marker
+that is hidden almost always — repainting the whole scope disc. Worst repaint
+53% of the screen → 11%. Write-ups in [`docs/V7_PORT.md`](docs/V7_PORT.md) notes
+12–14.
 
 ---
 
