@@ -15,19 +15,45 @@
 // Loop context only, like every other ui_* file.
 #include <string.h>
 #include "ui.h"
+#include "brandcolor.h"
 
 // ---------- layout ----------
-static const int HLP_PAD_X   = 22;
+// 20 + 238 + 20 + 238 + 20 + 238 = 794 of 800, so the three columns are even
+// and the outer margins match the inner gutters.
+static const int HLP_PAD_X   = 20;
 static const int HLP_TITLE_Y = 14;
-static const int HLP_TOP     = 62;
-static const int HLP_COL_W   = 244;
-static const int HLP_COL_GAP = 8;
-static const int HLP_SAMPLE_W = 34;    // gutter reserved for the sample glyph
-static const int HLP_ROW_H   = 34;     // one-line entry
-static const int HLP_ROW_H2  = 48;     // two-line entry
-static const lv_opa_t HLP_SCRIM_OPA = 236;
+static const int HLP_HAIR_Y  = 48;
+static const int HLP_TOP     = 78;
+static const int HLP_COL_W   = 238;
+static const int HLP_COL_GAP = 20;
+// The gutter has to hold the widest SAMPLE and still leave a readable gap. The
+// widest is the text "FL350" — five monospace glyphs at 8 px = 40. At 34 it
+// overlapped its own description outright; at 44 the 4 px left over read as no
+// gap at all. 50 gives it 10.
+static const int HLP_SAMPLE_W = 50;
+// Entries are separated by a fixed GAP, not snapped to a fixed pitch. The old
+// two-bucket pitch (34 one-line / 48 otherwise) gave a three-line entry 9 px of
+// air and a two-line entry 22, which is what made the columns look ragged.
+// The intra-entry line spacing is deliberately smaller than the gap so the eye
+// can still tell where one entry ends.
+static const int HLP_LINE_SP = 2;
+static const int HLP_ROW_GAP = 18;
+// Fully opaque. At 236 the scope read straight through the legend — the clock,
+// the range pill and any bright callsign all sat behind the text. A legend is
+// read, not glanced at; there is nothing underneath worth keeping.
+static const lv_opa_t HLP_SCRIM_OPA = LV_OPA_COVER;
 
 static lv_obj_t* s_overlay = nullptr;
+
+static int txtW(const char* s, const lv_font_t* f) {
+  return (int)lv_txt_get_width(s, strlen(s), f, 0, LV_TEXT_FLAG_NONE);
+}
+
+// Centre a sample of height h on the first line of its description, so every
+// marker lines up with the text it belongs to whatever its size.
+static int sampleY(int y, int h) {
+  return y + (F_UI12->line_height - h) / 2;
+}
 
 // ============================================================
 //  Small builders
@@ -54,13 +80,14 @@ static int hRow(lv_obj_t* p, int x, int y, const char* text) {
   lv_obj_t* l = lv_label_create(p);
   lv_obj_set_style_text_font(l, F_MONO13, 0);
   lv_obj_set_style_text_color(l, C_IVORY2, 0);
+  lv_obj_set_style_text_line_space(l, HLP_LINE_SP, 0);
   lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(l, HLP_COL_W - HLP_SAMPLE_W);
   lv_label_set_text(l, text);
   lv_obj_set_pos(l, x + HLP_SAMPLE_W, y);
-  // Two-line entries need the taller pitch; measure rather than guess.
+  // How tall it actually wrapped to, not how tall it was assumed to be.
   lv_obj_update_layout(l);
-  return (lv_obj_get_height(l) > 20) ? HLP_ROW_H2 : HLP_ROW_H;
+  return lv_obj_get_height(l) + HLP_ROW_GAP;
 }
 
 // Recoloured aircraft glyph used as a live sample.
@@ -83,7 +110,7 @@ static void hDot(lv_obj_t* p, int x, int y, lv_color_t c) {
   lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(d, c, 0);
   lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
-  lv_obj_set_pos(d, x + 8, y + 5);
+  lv_obj_set_pos(d, x, sampleY(y, 9));
 }
 
 static void hRing(lv_obj_t* p, int x, int y, lv_color_t c, int d) {
@@ -94,7 +121,7 @@ static void hRing(lv_obj_t* p, int x, int y, lv_color_t c, int d) {
   lv_obj_set_style_border_width(r, 1, 0);
   lv_obj_set_style_border_color(r, c, 0);
   lv_obj_set_style_border_opa(r, 210, 0);
-  lv_obj_set_pos(r, x + (HLP_SAMPLE_W - d) / 2 - 4, y + (18 - d) / 2);
+  lv_obj_set_pos(r, x, sampleY(y, d));
 }
 
 static void hText(lv_obj_t* p, int x, int y, const char* txt,
@@ -123,9 +150,20 @@ void helpBuild(lv_obj_t* parent) {
   lv_obj_add_event_cb(s_overlay, onHelpClick, LV_EVENT_CLICKED, NULL);
   lv_obj_add_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
 
+  // The subtitle used to start at a hardcoded +108, which is narrower than
+  // "LEGEND" actually sets at 28 px — it was printing over the wordmark.
+  // Measure the title and sit on its baseline.
   hText(s_overlay, HLP_PAD_X, HLP_TITLE_Y, "LEGEND", C_IVORY, F_L28);
-  hText(s_overlay, HLP_PAD_X + 108, HLP_TITLE_Y + 12,
+  hText(s_overlay, HLP_PAD_X + txtW("LEGEND", F_L28) + 14,
+        HLP_TITLE_Y + (F_L28->line_height  - F_L28->base_line)
+                    - (F_UI12->line_height - F_UI12->base_line),
         "tap anywhere to close", C_MUTE, F_MONO13);
+  {  // hairline under the title — separates the masthead from the columns
+    lv_obj_t* h = hBox(s_overlay);
+    lv_obj_add_style(h, &st_hair, 0);
+    lv_obj_set_size(h, SCR_W - 2 * HLP_PAD_X, 1);
+    lv_obj_set_pos(h, HLP_PAD_X, HLP_HAIR_Y);
+  }
 
   const int c1 = HLP_PAD_X;
   const int c2 = c1 + HLP_COL_W + HLP_COL_GAP;
@@ -135,41 +173,41 @@ void helpBuild(lv_obj_t* parent) {
   // ---------- targets ----------
   hHeading(s_overlay, c1, HLP_TOP - 22, "TARGETS");
   y = HLP_TOP;
-  hJet(s_overlay, c1, y - 4, C_ALT_LOW, LV_OPA_COVER, 900, 300);
+  hJet(s_overlay, c1, sampleY(y, 26), C_ALT_LOW, LV_OPA_COVER, 900, 300);
   y += hRow(s_overlay, c1, y, "Below 10,000 ft");
-  hJet(s_overlay, c1, y - 4, C_ALT_MID, LV_OPA_COVER, 900, 256);
+  hJet(s_overlay, c1, sampleY(y, 26), C_ALT_MID, LV_OPA_COVER, 900, 256);
   y += hRow(s_overlay, c1, y, "10,000 to 30,000 ft");
-  hJet(s_overlay, c1, y - 4, C_ALT_HIGH, LV_OPA_COVER, 900, 220);
+  hJet(s_overlay, c1, sampleY(y, 26), C_ALT_HIGH, LV_OPA_COVER, 900, 220);
   y += hRow(s_overlay, c1, y, "Above 30,000 ft. Bigger glyph = lower and nearer");
-  hJet(s_overlay, c1, y - 4, C_IVORY2, LV_OPA_COVER, 900, 256);
+  hJet(s_overlay, c1, sampleY(y, 26), C_IVORY2, LV_OPA_COVER, 900, 256);
   y += hRow(s_overlay, c1, y, "Altitude not reported");
-  hJet(s_overlay, c1, y - 4, C_ALT_MID, 150, 900, 256);
-  y += hRow(s_overlay, c1, y, "Faded: coasting. Position is estimated, no recent report");
-  hJet(s_overlay, c1, y - 4, C_ALERT, LV_OPA_COVER, 900, 256);
+  hJet(s_overlay, c1, sampleY(y, 26), C_ALT_MID, 150, 900, 256);
+  y += hRow(s_overlay, c1, y, "Faded: coasting. Position estimated from the last report");
+  hJet(s_overlay, c1, sampleY(y, 26), C_ALERT, LV_OPA_COVER, 900, 256);
   y += hRow(s_overlay, c1, y, "Emergency squawk 7500 / 7600 / 7700");
 
   // ---------- scope ----------
   hHeading(s_overlay, c2, HLP_TOP - 22, "SCOPE");
   y = HLP_TOP;
-  hRing(s_overlay, c2, y, C_IVORY, 18);
+  hRing(s_overlay, c2, y, C_IVORY, 16);
   y += hRow(s_overlay, c2, y, "White ring marks the selected aircraft");
   {  // military box sample
     lv_obj_t* b = hBox(s_overlay);
-    lv_obj_set_size(b, 17, 17);
+    lv_obj_set_size(b, 15, 15);
     lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(b, 1, 0);
     lv_obj_set_style_border_color(b, C_IVORY, 0);
     lv_obj_set_style_border_opa(b, 180, 0);
-    lv_obj_set_pos(b, c2 + 4, y);
+    lv_obj_set_pos(b, c2, sampleY(y, 15));
   }
   y += hRow(s_overlay, c2, y, "Square box marks a military aircraft");
-  hText(s_overlay, c2 + 2, y, "ABC", C_GOLD, F_MONO13);
+  hText(s_overlay, c2, y, "ABC", C_GOLD, F_MONO13);
   y += hRow(s_overlay, c2, y, "Gold callsign is on your watchlist");
-  hRing(s_overlay, c2, y, C_RING, 18);
+  hRing(s_overlay, c2, y, C_RING, 16);
   y += hRow(s_overlay, c2, y, "Rings are one third, two thirds and full range");
-  y += hRow(s_overlay, c2, y, "The circle edge is your receiver's range limit. Map beyond it is dimmed");
+  y += hRow(s_overlay, c2, y, "Circle edge is your range limit. Map beyond it is dimmed");
   y += hRow(s_overlay, c2, y, "North is always up");
-  y += hRow(s_overlay, c2, y, "Tap a target to select it, swipe to cycle through them");
+  y += hRow(s_overlay, c2, y, "Tap a target to select it. Swipe to cycle");
 
   // ---------- panels ----------
   hHeading(s_overlay, c3, HLP_TOP - 22, "PANELS");
@@ -180,13 +218,19 @@ void helpBuild(lv_obj_t* parent) {
   y += hRow(s_overlay, c3, y, "Falling back to the cloud feed");
   hDot(s_overlay, c3, y, C_AMBER);
   y += hRow(s_overlay, c3, y, "Feed has gone stale");
-  y += hRow(s_overlay, c3, y, "COASTING counts aircraft still tracked but with no recent position");
+  // No sample: the word IS the sample, and "COASTING" is 64 px of monospace
+  // against a 44 px gutter.
+  y += hRow(s_overlay, c3, y, "COASTING: counted, still tracked, no recent position");
   hText(s_overlay, c3, y, "FL350", C_IVORY, F_MONO13);
-  y += hRow(s_overlay, c3, y, "Flight level: hundreds of feet, used above 10,000");
+  y += hRow(s_overlay, c3, y, "Flight level: hundreds of feet, above 10,000");
   hText(s_overlay, c3, y, "--", C_DIM, F_MONO13);
-  y += hRow(s_overlay, c3, y, "Route not resolved yet, or none published");
+  y += hRow(s_overlay, c3, y, "Route unresolved, or none published");
   hText(s_overlay, c3, y, "0s", C_DIM, F_MONO13);
-  y += hRow(s_overlay, c3, y, "Seconds since that aircraft last reported");
+  y += hRow(s_overlay, c3, y, "Seconds since the last report");
+  // Drawn through the same lookup the tile uses, so the sample cannot drift
+  // from what the panel actually renders.
+  hText(s_overlay, c3, y, "ACA", brandColorFor("ACA"), F_MONO13);
+  y += hRow(s_overlay, c3, y, "No logo on file: the operator's ICAO code in its own colour");
 }
 
 void helpToggle() {
