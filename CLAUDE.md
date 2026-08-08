@@ -237,7 +237,9 @@ README lists the sources; these are the details that matter in the code.
 v5/v6 keys kept for in-place upgrade: `ssid pass lat lon lbl rng feed nstat nip
 ngw nmask ndns`. v7 adds `tz` (POSIX TZ), `ppass` (panel/API password),
 `mqtten mqtturi`, `nighten nightfr nightto` (quiet-hours minutes),
-`wxen issen logoen mapen` (layer toggles), `fcls` (class filter bitmask),
+`wxen issen logoen mapen` (layer toggles), `tempf` (Fahrenheit — display only;
+`g_wx.tempC`, `/api/state`'s `temp_c` and MQTT stay Celsius),
+`fcls` (class filter bitmask),
 `faltlo falthi` (altitude filter), `watch` (watchlist prefixes) and
 `fav{0..2}{lat,lon,nam}` (favourite locations).
 

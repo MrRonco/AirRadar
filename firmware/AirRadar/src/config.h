@@ -145,6 +145,8 @@
 #define K_NIGHT_FROM "nightfr"  // minutes since midnight (e.g. 1380 = 23:00)
 #define K_NIGHT_TO  "nightto"   // minutes since midnight (e.g. 360 = 06:00)
 #define K_WX_EN     "wxen"      // weather strip on/off
+#define K_TEMP_F    "tempf"     // true = show Fahrenheit (display only; the
+                                //  API, MQTT and the cache stay Celsius)
 #define K_ISS_EN    "issen"     // ISS layer on/off
 #define K_LOGO_EN   "logoen"    // operator monogram/logo tile on/off
 #define K_MAP_EN    "mapen"     // map base layer on/off

@@ -66,6 +66,7 @@ void settingsLoad() {
   g_set.nightFromMin = g_prefs.getInt(K_NIGHT_FROM, 23 * 60);
   g_set.nightToMin   = g_prefs.getInt(K_NIGHT_TO, 6 * 60);
   g_set.wxEn      = g_prefs.getBool(K_WX_EN, true);
+  g_set.tempF     = g_prefs.getBool(K_TEMP_F, false);
   g_set.issEn     = g_prefs.getBool(K_ISS_EN, true);
   // Airline logos stay ON by default. The ICAO-in-brand-colour tile is the
   // FALLBACK, not the replacement: it renders whenever no logo is available,
@@ -107,6 +108,7 @@ void settingsSaveDisplay() {
   g_prefs.putInt(K_NIGHT_FROM, g_set.nightFromMin);
   g_prefs.putInt(K_NIGHT_TO, g_set.nightToMin);
   g_prefs.putBool(K_WX_EN, g_set.wxEn);
+  g_prefs.putBool(K_TEMP_F, g_set.tempF);
   g_prefs.putBool(K_ISS_EN, g_set.issEn);
   g_prefs.putBool(K_LOGO_EN, g_set.logoEn);
   g_prefs.putBool(K_MAP_EN, g_set.mapEn);
