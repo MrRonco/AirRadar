@@ -22,24 +22,36 @@ static const int CONTENT_W    = CARD_W - 32;   // st_card pad_all is 16
 // Overview card
 static const int OV_HOME_Y    = 0;             // weather row
 static const int OV_DATE_Y    = 34;
-// The weather row has 136 px and four things wanting to sit in it, so every
-// element is measured rather than hoped at (rule 13). LVGL rounds each glyph's
-// advance to whole pixels ((adv_w + 8) >> 4, lv_font_fmt_txt.c:177), so these
-// are exact, not estimates. font_val22 carries tabular figures, so a digit and
-// the minus sign are both 14.25 px -> 14 px rounded:
+// The weather row is 136 px carrying six elements, so every one of them is
+// measured rather than hoped at (rule 13). LVGL rounds each glyph advance to
+// whole pixels ((adv_w + 8) >> 4, lv_font_fmt_txt.c:177), so the numbers below
+// are exact. Two readings, each a VALUE in font_body18 and a QUALIFIER in
+// font_micro13 — that pairing is the row's whole grammar:
 //
-//    0 ..  22   weather icon
-//   24 ..  66   temperature, worst case "-40" = 3 x 14 px
-//   68 ..  84   unit, "°C"/"°F" = 2 x 8 px in font_micro13 (monospace)
-//   86 .. 136   wind, right-aligned, worst case "NW 120" = 6 x 8 = 48 px
+//    0 ..  16   weather icon
+//   18 ..  49   temperature, worst case "-40" = 31 px
+//   51 ..  67   unit, "°C"/"°F" = 2 x 8 px (micro13 is monospace)
+//                       ... right-aligned at 136, laid out right to left ...
+//        16     wind icon
+//        16     cardinal, worst case "NW"
+//        29     speed, worst case "120"
 //
-// 2 px of clearance in the -40° / 120 km/h blizzard case, ~35 px on an
-// ordinary day. The wind GLYPH used to open the right-hand block and is gone:
-// 22 px is a sixth of the row, the cardinal already says "wind", and the
-// glyph is what collided with the degree sign.
-static const int OV_TEMP_X    = 24;
+// It only fits because the icons came down from 22 px and the temperature
+// from font_val22 (which needed 42 px for "-40") — at the old sizes the worst
+// case wanted 187 px and the degree sign sat on top of the wind glyph. Both
+// icons are the same size on purpose; they are peers.
+//
+// The wind block's internal gaps are the one thing NOT fixed. Sized flat they
+// are wrong at both ends: 2 px makes "W 8" read as one token on the ordinary
+// day the row spends 99% of its life in, and 6 px does not fit -40°/120 km/h.
+// So they take what the two readings leave behind, clamped — 6 px normally,
+// squeezing to 2 in the blizzard, where the blocks still clear by 4 px.
+static const int WX_ICON_PX   = 16;   // must match WX_PX in tools/genassets.py
+static const int OV_TEMP_X    = 18;
 static const int OV_UNIT_GAP  = 2;    // number -> "°C"
-static const int OV_WIND_W    = 50;
+static const int OV_WIND_GAP_MIN = 2;
+static const int OV_WIND_GAP_MAX = 6;
+static const int OV_ROW_CLEAR = 6;    // wanted between the two readings
 static const int OV_HAIR1_Y   = 62;
 static const int OV_COUNT_Y   = 90;            // hero numeral
 static const int OV_INRANGE_Y = 154;           // stacked UNDER the numeral
@@ -133,9 +145,10 @@ static lv_obj_t *s_tmTime, *s_tmDate;
 static char s_bufTime[8], s_bufDate[20];
 
 // Weather pill
-static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxUnit, *s_wxWind;
+static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxUnit;
+static lv_obj_t *s_wxWindIcon, *s_wxDir, *s_wxSpd;
 static const lv_img_dsc_t* s_wxIconSrc = nullptr;
-static char s_bufTemp[8], s_bufUnit[4], s_bufWind[32];
+static char s_bufTemp[8], s_bufUnit[4], s_bufWdir[4], s_bufWspd[8];
 
 // Range pill
 static lv_obj_t *s_rngLbl;
@@ -182,6 +195,12 @@ static bool setTextCached(lv_obj_t* lbl, char* cache, size_t cap, const char* tx
   snprintf(cache, cap, "%s", txt);
   lv_label_set_text(lbl, cache);
   return true;
+}
+
+// Exactly the measurement lv_label does for itself, so a position derived from
+// it cannot drift from what gets drawn.
+static int txtW(const char* s, const lv_font_t* f) {
+  return (int)lv_txt_get_width(s, strlen(s), f, 0, LV_TEXT_FLAG_NONE);
 }
 
 static void setColorCached(lv_obj_t* lbl, lv_color_t* cache, lv_color_t c) {
@@ -248,27 +267,37 @@ static void buildOverview(lv_obj_t* parent) {
   // Weather heads the card. It used to float in a pill on the vertical axis,
   // directly over the map and on top of the compass N. "Home" is gone: it once
   // meant "local feed vs cloud", and that lives in the SOURCE row below.
+  // Three vertical anchors, all derived rather than nudged by eye. A label's
+  // baseline sits (line_height - base_line) below its top edge, so giving the
+  // micro13 qualifiers that difference as an offset puts them on the body18
+  // values' baseline exactly. The icons centre on the body18 line box, which
+  // lands them on the middle of the digits' cap band.
+  const int microY = OV_HOME_Y + (F_UI15->line_height - F_UI15->base_line)
+                               - (F_UI12->line_height - F_UI12->base_line);
+  const int iconY  = OV_HOME_Y + (F_UI15->line_height - WX_ICON_PX) / 2;
+
   s_wxIcon = lv_img_create(card);
   lv_img_set_src(s_wxIcon, wxIconFor(0));
-  lv_obj_set_pos(s_wxIcon, 0, OV_HOME_Y + 2);
-  s_wxTemp = mkLbl(card, F_M20, C_IVORY);
+  lv_obj_set_pos(s_wxIcon, 0, iconY);
+  s_wxTemp = mkLbl(card, F_UI15, C_IVORY);
   lv_label_set_text(s_wxTemp, "--");
   lv_obj_set_pos(s_wxTemp, OV_TEMP_X, OV_HOME_Y);
-  // The unit and the wind ride on the temperature's baseline. Derived from the
-  // two faces' metrics, not nudged by eye: a label's baseline sits
-  // (line_height - base_line) below its top edge, so matching that offset
-  // matches the baselines. The unit's x is set in updateWeatherPill once the
-  // number has been measured — "25" and "-40" are not the same width.
-  const int baseY = OV_HOME_Y + (F_M20->line_height  - F_M20->base_line)
-                              - (F_UI12->line_height - F_UI12->base_line);
   s_wxUnit = mkLbl(card, F_UI12, C_IVORY2);
-  lv_obj_set_pos(s_wxUnit, OV_TEMP_X, baseY);
-  // Fixed width + TEXT_ALIGN_RIGHT, not SIZE_CONTENT: a content-sized box
-  // under-measures here and clips from the left (the "DHCP" -> "CP" bug).
-  s_wxWind = mkLbl(card, F_UI12, C_IVORY2);
-  lv_obj_set_width(s_wxWind, OV_WIND_W);
-  lv_obj_set_style_text_align(s_wxWind, LV_TEXT_ALIGN_RIGHT, 0);
-  lv_obj_set_pos(s_wxWind, CONTENT_W - OV_WIND_W, baseY);
+  lv_obj_set_pos(s_wxUnit, OV_TEMP_X, microY);
+
+  // The wind block is right-aligned by measurement in updateWeatherPill — x is
+  // laid out right to left from CONTENT_W as the reading changes width. Fixed
+  // widths with TEXT_ALIGN_RIGHT would work too, but they cost the row 3 px it
+  // does not have in the worst case.
+  s_wxWindIcon = lv_img_create(card);
+  lv_img_set_src(s_wxWindIcon, &img_wx_wind);
+  lv_obj_set_style_img_recolor(s_wxWindIcon, C_IVORY2, 0);
+  lv_obj_set_style_img_recolor_opa(s_wxWindIcon, LV_OPA_COVER, 0);
+  lv_obj_set_pos(s_wxWindIcon, CONTENT_W - WX_ICON_PX, iconY);
+  s_wxDir = mkLbl(card, F_UI12, C_IVORY2);
+  lv_obj_set_pos(s_wxDir, CONTENT_W, microY);
+  s_wxSpd = mkLbl(card, F_UI15, C_IVORY2);
+  lv_obj_set_pos(s_wxSpd, CONTENT_W, OV_HOME_Y);
   s_tmDate = mkLbl(card, F_MONO13, C_DIM);
   lv_obj_set_style_text_letter_space(s_tmDate, 1, 0);
   lv_obj_align(s_tmDate, LV_ALIGN_TOP_MID, 0, OV_DATE_Y);
@@ -819,7 +848,9 @@ static void updateWeatherPill() {
   setHiddenCached(s_wxIcon, !show);
   setHiddenCached(s_wxTemp, !show);
   setHiddenCached(s_wxUnit, !show);
-  setHiddenCached(s_wxWind, !show);
+  setHiddenCached(s_wxWindIcon, !show);
+  setHiddenCached(s_wxDir, !show);
+  setHiddenCached(s_wxSpd, !show);
   if (!show) return;
 
   const lv_img_dsc_t* ic = wxIconFor(g_wx.wmoCode);
@@ -832,17 +863,33 @@ static void updateWeatherPill() {
   // else — /api/state's temp_c, MQTT and the weather cache are all canonical.
   float t = g_set.tempF ? g_wx.tempC * 9.0f / 5.0f + 32.0f : g_wx.tempC;
   snprintf(b, sizeof(b), "%d", (int)lroundf(t));
-  if (setTextCached(s_wxTemp, s_bufTemp, sizeof(s_bufTemp), b)) {
-    // Measure the number and place the unit against it. lv_txt_get_width is
-    // the same measurement the label itself does, so this cannot drift.
-    lv_coord_t w = lv_txt_get_width(b, strlen(b), F_M20, 0, LV_TEXT_FLAG_NONE);
-    lv_obj_set_x(s_wxUnit, OV_TEMP_X + w + OV_UNIT_GAP);
-  }
+  bool tempCh = setTextCached(s_wxTemp, s_bufTemp, sizeof(s_bufTemp), b);
+  // "°C" and "°F" are the same width — micro13 is monospace — so the unit
+  // never moves the layout, only the number does.
   setTextCached(s_wxUnit, s_bufUnit, sizeof(s_bufUnit),
                 g_set.tempF ? "\xC2\xB0" "F" : "\xC2\xB0" "C");
-  snprintf(b, sizeof(b), "%s %d", cardinal8((float)g_wx.windDirDeg),
-           (int)lroundf(g_wx.windKmh));
-  setTextCached(s_wxWind, s_bufWind, sizeof(s_bufWind), b);
+  int tempEnd = OV_TEMP_X + txtW(s_bufTemp, F_UI15) + OV_UNIT_GAP;
+  if (tempCh) lv_obj_set_x(s_wxUnit, tempEnd);
+  tempEnd += txtW(s_bufUnit, F_UI12);
+
+  snprintf(b, sizeof(b), "%d", (int)lroundf(g_wx.windKmh));
+  bool spdCh = setTextCached(s_wxSpd, s_bufWspd, sizeof(s_bufWspd), b);
+  bool dirCh = setTextCached(s_wxDir, s_bufWdir, sizeof(s_bufWdir),
+                             cardinal8((float)g_wx.windDirDeg));
+  // The temperature moves the wind block too — it is what the block has to
+  // clear — so a change to any of the three re-lays the whole right side.
+  if (tempCh || spdCh || dirCh) {
+    int dirW = txtW(s_bufWdir, F_UI12), spdW = txtW(s_bufWspd, F_UI15);
+    int gap = (CONTENT_W - tempEnd - OV_ROW_CLEAR
+               - WX_ICON_PX - dirW - spdW) / 2;
+    if (gap < OV_WIND_GAP_MIN) gap = OV_WIND_GAP_MIN;
+    if (gap > OV_WIND_GAP_MAX) gap = OV_WIND_GAP_MAX;
+    int x = CONTENT_W - spdW;              // right to left from the edge
+    lv_obj_set_x(s_wxSpd, x);
+    x -= gap + dirW;
+    lv_obj_set_x(s_wxDir, x);
+    lv_obj_set_x(s_wxWindIcon, x - gap - WX_ICON_PX);
+  }
 }
 
 static void updateRangePill() {
