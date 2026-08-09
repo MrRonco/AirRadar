@@ -247,6 +247,11 @@ static void htmlAppendSettings(String& h) {
   h += F(">Celsius</option><option value=1");
   if (g_set.tempF) h += F(" selected");
   h += F(">Fahrenheit</option></select>"
+         "<label>Clock</label><select name=clk24><option value=0");
+  if (!g_set.clock24) h += F(" selected");
+  h += F(">12-hour</option><option value=1");
+  if (g_set.clock24) h += F(" selected");
+  h += F(">24-hour</option></select>"
          "<button type=submit>Save</button></form></div>");
 }
 
@@ -396,6 +401,7 @@ static void handleSave() {
   }
   if (server.hasArg("lbl")) g_set.showLabels = (server.arg("lbl") == "1");
   if (server.hasArg("tempf")) g_set.tempF = (server.arg("tempf") == "1");
+  if (server.hasArg("clk24")) g_set.clock24 = (server.arg("clk24") == "1");
   settingsSaveLocation();
   settingsSaveDisplay();
   resetTracks();
@@ -591,6 +597,7 @@ static void handleApiConfigGet() {
   doc["nightto"] = g_set.nightToMin;
   doc["wxen"] = g_set.wxEn;
   doc["tempf"] = g_set.tempF;
+  doc["clk24"] = g_set.clock24;
   doc["issen"] = g_set.issEn;
   doc["logoen"] = g_set.logoEn;
   doc["mapen"] = g_set.mapEn;
@@ -665,6 +672,7 @@ static void apiCfgApply() {
   if (server.hasArg("wxen"))   { g_set.wxEn   = argBool(server.arg("wxen"));   disp = true; }
   // Display unit only — wx.temp_c in /api/state stays Celsius regardless.
   if (server.hasArg("tempf"))  { g_set.tempF  = argBool(server.arg("tempf"));  disp = true; }
+  if (server.hasArg("clk24"))  { g_set.clock24 = argBool(server.arg("clk24")); disp = true; }
   if (server.hasArg("issen"))  { g_set.issEn  = argBool(server.arg("issen"));  disp = true; }
   if (server.hasArg("logoen")) { g_set.logoEn = argBool(server.arg("logoen")); disp = true; }
   if (server.hasArg("mapen"))  { g_set.mapEn  = argBool(server.arg("mapen"));  disp = true; }

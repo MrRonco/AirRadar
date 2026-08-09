@@ -41,6 +41,7 @@ struct Settings {
   bool    nightEn;  int nightFromMin, nightToMin;
   bool    wxEn, issEn, logoEn, mapEn;
   bool    tempF;              // display unit only — g_wx.tempC stays Celsius
+  bool    clock24;            // 24-hour clock face
   uint8_t filtCls;            // FCLS_* bitmask
   int     filtAltLo, filtAltHi;   // ft, 0 = off
   String  watchlist;          // comma-separated prefixes
@@ -54,7 +55,7 @@ extern Preferences g_prefs;
 
 void settingsLoad();                       // NVS -> g_set (call once at boot)
 void settingsSaveLocation();               // lat/lon/range
-void settingsSaveDisplay();                // labels/night/wx/tempf/iss/logo/map
+void settingsSaveDisplay();                // labels/night/wx/tempf/clk24/iss/logo/map
 void settingsSaveFilters();                // cls/alt/watchlist
 void settingsSaveNetworkExtras();          // mqtt/panelPass/tz  (wifi & static IP have
                                            //  their own save paths in web/settings UI)

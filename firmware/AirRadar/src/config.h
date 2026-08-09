@@ -147,6 +147,7 @@
 #define K_WX_EN     "wxen"      // weather strip on/off
 #define K_TEMP_F    "tempf"     // true = show Fahrenheit (display only; the
                                 //  API, MQTT and the cache stay Celsius)
+#define K_CLOCK24   "clk24"     // true = 24-hour clock, false = 12-hour + AM/PM
 #define K_ISS_EN    "issen"     // ISS layer on/off
 #define K_LOGO_EN   "logoen"    // operator monogram/logo tile on/off
 #define K_MAP_EN    "mapen"     // map base layer on/off

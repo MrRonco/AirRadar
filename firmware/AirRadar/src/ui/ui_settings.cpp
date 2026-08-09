@@ -21,8 +21,8 @@ static uint32_t  s_toastHideAt = 0;
 // value labels / switches that settingsRefresh() re-reads
 static lv_obj_t *s_vCoords, *s_vRange, *s_vNight, *s_vAlt, *s_vWatch,
                 *s_vWifi, *s_vIpMode, *s_vFeed, *s_vPPass;
-static lv_obj_t *s_swLabels, *s_swNight, *s_swWx, *s_swTempF, *s_swIss,
-                *s_swLogo, *s_swMap, *s_swMqtt;
+static lv_obj_t *s_swLabels, *s_swNight, *s_swWx, *s_swTempF, *s_sw24h,
+                *s_swIss, *s_swLogo, *s_swMap, *s_swMqtt;
 static lv_obj_t *s_favBtn[AR_MAX_FAVS];
 static lv_obj_t *s_chip[4];   // AIRLINER LIGHT HELI MIL
 static lv_obj_t *s_footIp;
@@ -271,6 +271,8 @@ void settingsRefresh() {
   else lv_obj_clear_state(s_swWx, LV_STATE_CHECKED);
   if (g_set.tempF) lv_obj_add_state(s_swTempF, LV_STATE_CHECKED);
   else lv_obj_clear_state(s_swTempF, LV_STATE_CHECKED);
+  if (g_set.clock24) lv_obj_add_state(s_sw24h, LV_STATE_CHECKED);
+  else lv_obj_clear_state(s_sw24h, LV_STATE_CHECKED);
   if (g_set.issEn) lv_obj_add_state(s_swIss, LV_STATE_CHECKED);
   else lv_obj_clear_state(s_swIss, LV_STATE_CHECKED);
   if (g_set.logoEn) lv_obj_add_state(s_swLogo, LV_STATE_CHECKED);
@@ -483,6 +485,7 @@ static void swLabelsCb(lv_event_t*) { g_set.showLabels = swOn(s_swLabels); setti
 static void swNightCb(lv_event_t*)  { g_set.nightEn = swOn(s_swNight); settingsSaveDisplay(); if (!g_set.nightEn) halBacklight(true); }
 static void swWxCb(lv_event_t*)     { g_set.wxEn = swOn(s_swWx); settingsSaveDisplay(); }
 static void swTempFCb(lv_event_t*)  { g_set.tempF = swOn(s_swTempF); settingsSaveDisplay(); }
+static void sw24hCb(lv_event_t*)    { g_set.clock24 = swOn(s_sw24h); settingsSaveDisplay(); }
 static void swIssCb(lv_event_t*)    { g_set.issEn = swOn(s_swIss); settingsSaveDisplay(); }
 static void swLogoCb(lv_event_t*)   { g_set.logoEn = swOn(s_swLogo); settingsSaveDisplay(); }
 static void swMapCb(lv_event_t*)    { g_set.mapEn = swOn(s_swMap); settingsSaveDisplay(); if (g_set.mapEn) mapRequestRefresh(); scopeApplyMapImage(); }
@@ -828,6 +831,8 @@ void settingsBuild() {
   s_swWx = mkSwitch(r, g_set.wxEn, swWxCb);
   r = mkRow(g, "Fahrenheit", true);
   s_swTempF = mkSwitch(r, g_set.tempF, swTempFCb);
+  r = mkRow(g, "24-hour clock", true);
+  s_sw24h = mkSwitch(r, g_set.clock24, sw24hCb);
 
   g = mkGroup(colL, "LAYERS");
   r = mkRow(g, "ISS on radar", false);

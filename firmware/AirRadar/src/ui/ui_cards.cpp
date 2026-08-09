@@ -141,8 +141,10 @@ static lv_color_t s_colLive = {}, s_colLiveDot = {};
 static lv_color_t s_colOrigin = {}, s_colDest = {};   // dimmed while unresolved
 
 // Time card
-static lv_obj_t *s_tmTime, *s_tmDate;
-static char s_bufTime[8], s_bufDate[20];
+static lv_obj_t *s_tmTime, *s_tmPm, *s_tmDate;
+static char s_bufTime[8], s_bufPm[4], s_bufDate[20];
+static const int TM_PM_GAP = 5;   // clock -> "PM"
+static int s_pmDy = 0;            // meridiem baseline offset, computed at build
 
 // Weather pill
 static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxUnit;
@@ -469,6 +471,17 @@ static void buildTimeCard(lv_obj_t* parent) {
   lv_obj_set_size(card, CARD_W, CARD_SHORT_H);
   s_tmTime = mkLbl(card, F_NUM36, C_IVORY);
   lv_obj_center(s_tmTime);      // the date moved into the Overview header
+  // font_clock36 is digits and ':' only — deliberately, it is a tabular clock
+  // face — so the meridiem cannot live in the same label. It rides the clock's
+  // baseline in micro13 and is hidden entirely on the 24-hour face.
+  // For a CENTER-aligned label of height H the baseline sits at
+  // H - base_line - H/2 below the parent's centre; matching the two is the
+  // difference of those, which is where this offset comes from.
+  s_pmDy = (F_NUM36->line_height - F_NUM36->base_line - F_NUM36->line_height / 2) -
+           (F_UI12->line_height  - F_UI12->base_line  - F_UI12->line_height / 2);
+  s_tmPm = mkLbl(card, F_UI12, C_DIM);
+  lv_obj_align(s_tmPm, LV_ALIGN_CENTER, 0, s_pmDy);
+  lv_obj_add_flag(s_tmPm, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void buildSettingsBtn(lv_obj_t* parent) {
@@ -822,16 +835,36 @@ static void updateTimeCard() {
     // F_NUM36 carries only digits+':' — "0:00" stays inside the subset;
     // the sync hint lives on the mono date label instead.
     setTextCached(s_tmTime, s_bufTime, sizeof(s_bufTime), "0:00");
+    setHiddenCached(s_tmPm, true);
     setTextCached(s_tmDate, s_bufDate, sizeof(s_bufDate), "WAITING FOR TIME");
     return;
   }
   if (!g_timeSynced) g_timeSynced = true;      // loop context: allowed write
 
-  int h = ti.tm_hour % 12;
-  if (h == 0) h = 12;
   char b[8];
-  snprintf(b, sizeof(b), "%d:%02d", h, ti.tm_min);
-  setTextCached(s_tmTime, s_bufTime, sizeof(s_bufTime), b);
+  if (g_set.clock24) {
+    snprintf(b, sizeof(b), "%d:%02d", ti.tm_hour, ti.tm_min);
+  } else {
+    int h = ti.tm_hour % 12;
+    if (h == 0) h = 12;
+    snprintf(b, sizeof(b), "%d:%02d", h, ti.tm_min);
+  }
+  bool timeCh = setTextCached(s_tmTime, s_bufTime, sizeof(s_bufTime), b);
+  bool pmCh   = setTextCached(s_tmPm, s_bufPm, sizeof(s_bufPm),
+                              ti.tm_hour < 12 ? "AM" : "PM");
+  setHiddenCached(s_tmPm, g_set.clock24);
+  // Re-centre the pair on any change. The clock is tabular, so its width only
+  // moves when the hour crosses one digit to two ("9:05" 79 px, "12:05" 102),
+  // and the whole group must stay centred in the card when it does.
+  if (timeCh || pmCh) {
+    if (g_set.clock24) {
+      lv_obj_align(s_tmTime, LV_ALIGN_CENTER, 0, 0);
+    } else {
+      int tw = txtW(s_bufTime, F_NUM36), pw = txtW(s_bufPm, F_UI12);
+      lv_obj_align(s_tmTime, LV_ALIGN_CENTER, -(TM_PM_GAP + pw) / 2, 0);
+      lv_obj_align(s_tmPm,   LV_ALIGN_CENTER,  (tw + TM_PM_GAP) / 2, s_pmDy);
+    }
+  }
 
   char d[20];
   strftime(d, sizeof(d), "%a \xC2\xB7 %b %d", &ti);
