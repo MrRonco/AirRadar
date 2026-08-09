@@ -92,12 +92,25 @@
 // Bare glyph in the very top-right corner, clear of the Selected card at
 // y=28. Drawn small so it does not crowd the card, but its touch area is
 // expanded to 48 px via lv_obj_set_ext_click_area.
+// Both marks are centred in a notional GEAR_S cell, and both float inside it:
+// "?" sets 12 px of the 26 and the cog 16. So the 10 px gap between the CELLS
+// rendered as a 24 px gap between the MARKS, and the "?" read as marooned
+// rather than paired with the cog. HELP_CELL_X is therefore derived from the
+// gap we actually want to see — 12 px of clear air between the two glyphs.
 #define GEAR_S      26
-#define GEAR_X      (SCR_W - 12 - GEAR_S)
+#define GEAR_X      (SCR_W - 12 - GEAR_S)   // 762; the cog's ink lands 768..781
 #define GEAR_Y      2
-#define GEAR_TOUCH_PAD 11    // 26 + 2*11 = 48 px effective target
-#define HELP_X      (GEAR_X - GEAR_S - 10)
+#define HELP_X      (GEAR_X - 24)           // 738; the "?" ink lands 745..755
 #define HELP_Y      GEAR_Y
+// Touch is a SEPARATE pair of plates, deliberately not centred on the glyphs:
+// centring a 12 px mark in a 48 px target is what forced them apart to begin
+// with. The plates TILE the corner and meet at CORNER_SPLIT, the middle of the
+// visual gap, so every tap up here resolves to exactly one control. The old
+// symmetric ext_click_area overlapped its neighbour by 11 px — and reached
+// 10 px down into the Selected card, which starts at CARD_TOP_Y.
+#define CORNER_SPLIT   761
+#define CORNER_LEFT    702
+#define CORNER_TOUCH_H CARD_TOP_Y           // stop where the card begins
 
 // ============================================================
 //  Range steps (km)

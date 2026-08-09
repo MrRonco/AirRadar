@@ -500,42 +500,36 @@ static void buildTimeCard(lv_obj_t* parent) {
   lv_obj_add_flag(s_tmPm, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void buildSettingsBtn(lv_obj_t* parent) {
+// A top-right corner control: an invisible touch plate with the glyph placed on
+// it for looks alone. Separating the two is the whole point — the mark goes
+// where it reads right, the plate goes where a thumb can find it, and neither
+// drags the other around.
+//
+// No plate fill at all. The old 184x66 lit slab measured 7.26x denser and 14.7x
+// brighter than the entire radar disc; even a 52 px boxed version still read as
+// a panel.
+static void buildCornerBtn(lv_obj_t* parent, int plateX, int plateW, int cellX,
+                           const char* glyph, const lv_font_t* font,
+                           lv_event_cb_t cb) {
   lv_obj_t* btn = lv_btn_create(parent);
   lv_obj_remove_style_all(btn);
-  // No plate at all now — just the glyph, top-right of the screen. The old
-  // 184x66 lit slab measured 7.26x denser and 14.7x brighter than the entire
-  // radar disc; even the 52 px boxed version still read as a panel.
-  lv_obj_set_pos(btn, GEAR_X, GEAR_Y);
-  lv_obj_set_size(btn, GEAR_S, GEAR_S);
+  lv_obj_set_pos(btn, plateX, 0);
+  lv_obj_set_size(btn, plateW, CORNER_TOUCH_H);
   lv_obj_set_style_pad_all(btn, 0, 0);
   lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
   lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
-  // Small glyph, full-size target: the drawn icon is 26 px but the hit area is
-  // 48 px, which is the ~9 mm floor for this panel.
-  lv_obj_set_ext_click_area(btn, GEAR_TOUCH_PAD);
-  lv_obj_add_event_cb(btn, onSettingsClicked, LV_EVENT_CLICKED, NULL);
-  lv_obj_t* ico = mkLbl(btn, F_SYM16, C_DIM);
-  lv_label_set_text(ico, LV_SYMBOL_SETTINGS);
-  lv_obj_center(ico);
-  lv_obj_set_style_text_color(ico, C_CY, LV_STATE_PRESSED);
-}
+  lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
 
-// "?" beside the gear, same treatment: small glyph, full-size touch target.
-static void buildHelpBtn(lv_obj_t* parent) {
-  lv_obj_t* btn = lv_btn_create(parent);
-  lv_obj_remove_style_all(btn);
-  lv_obj_set_pos(btn, HELP_X, HELP_Y);
-  lv_obj_set_size(btn, GEAR_S, GEAR_S);
-  lv_obj_set_style_pad_all(btn, 0, 0);
-  lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
-  lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_ext_click_area(btn, GEAR_TOUCH_PAD);
-  lv_obj_add_event_cb(btn, onHelpClicked, LV_EVENT_CLICKED, NULL);
-  lv_obj_t* ico = mkLbl(btn, F_M20, C_DIM);
-  lv_label_set_text(ico, "?");
-  lv_obj_center(ico);
+  lv_obj_t* ico = mkLbl(btn, font, C_DIM);
+  lv_label_set_text(ico, glyph);
   lv_obj_set_style_text_color(ico, C_CY, LV_STATE_PRESSED);
+  // Centre the mark in its GEAR_S cell — measured, so a font change moves the
+  // glyph instead of silently unbalancing the pair — then place that cell on
+  // the plate. This reproduces exactly what lv_obj_center used to do when the
+  // cell WAS the button, which is why the two marks still share a baseline.
+  lv_obj_set_pos(ico,
+                 cellX - plateX + (GEAR_S - txtW(glyph, font)) / 2,
+                 GEAR_Y + (GEAR_S - font->line_height) / 2);
 }
 
 static void buildRangePill(lv_obj_t* parent) {
@@ -964,8 +958,11 @@ void cardsBuild(lv_obj_t* parent) {
   buildOverview(parent);
   buildSelected(parent);
   buildTimeCard(parent);
-  buildSettingsBtn(parent);
-  buildHelpBtn(parent);
+  // Left plate reaches back to CORNER_LEFT; right plate runs to the screen edge.
+  buildCornerBtn(parent, CORNER_LEFT, CORNER_SPLIT - CORNER_LEFT, HELP_X,
+                 "?", F_M20, onHelpClicked);
+  buildCornerBtn(parent, CORNER_SPLIT, SCR_W - CORNER_SPLIT, GEAR_X,
+                 LV_SYMBOL_SETTINGS, F_SYM16, onSettingsClicked);
   buildRangePill(parent);
   s_built = true;
   Serial.println("[cards] built");
