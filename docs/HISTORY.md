@@ -221,3 +221,50 @@ than that gap. Columns are even, there is a hairline under the masthead, and the
 copy is tightened throughout. One entry added — the operator tile's
 ICAO-in-brand-colour fallback, encoded since v7.2 and never explained, drawn
 through `brandColorFor()` so the sample cannot drift from the real tile.
+
+## v7.2.3 — the clock, and two things that were never tested by hand
+
+**A 12/24-hour clock toggle** (`clk24`, panel and web, defaults to 12-hour so an
+existing device looks exactly as it did). `font_clock36` carries digits and `:`
+only — deliberately, it is a tabular clock face — so the 24-hour face needs no
+new glyphs, but the meridiem cannot live in the same label. It is a separate
+`font_micro13` label riding the clock's baseline, hidden entirely on the
+24-hour face. Both offsets are derived rather than nudged: for a CENTER-aligned
+label of height H the baseline sits at `H - base_line - H/2` below the parent's
+centre, so matching the two faces is the difference of those. The pair
+re-centres when the hour crosses one digit to two — "9:05" is 79 px and "12:05"
+is 102.
+
+**The range stepper's left chevron stepped up.** The pill draws `‹ 250 KM ›` but
+the whole 168 px widget is one click target with one handler, and that handler
+passed `+1` regardless of where the tap landed. Both arrows incremented, so the
+only way to a shorter range was all the way round the cycle. `uiCycleRange(int
+dir)` had always taken a direction — nothing ever called it with `-1` from the
+pill. The tap is now hit-tested against the pill's midpoint.
+
+**The `?` was stranded, and the touch zones were wrong.** 24 px of air between
+the two marks where the cells they sit in are 10 px apart: both are centred in a
+notional 26 px cell and neither fills it, so the cell gap and the visual gap
+were never the same number. Position is now derived from the gap you see.
+
+The touch layout underneath was worse than "spread out for safety". Two 26 px
+buttons each with a symmetric 11 px `ext_click_area` gave a 48 px target apiece,
+but those targets overlapped *each other* by 11 px and both reached 10 px down
+into the Selected card — so taps near the card's top-right corner opened
+Settings. Touch is now a separate pair of plates that tile the corner, meeting
+in the middle of the visual gap and stopping at `CARD_TOP_Y`. Separating the
+mark from the plate is the whole fix: centring a 12 px glyph in a 48 px target
+is what forced the pair apart to begin with.
+
+**Also tried and reverted: a precipitation radar overlay.** RainViewer's public
+tiles are live and free, and the plumbing worked — disc-only composite into a
+separate presentation buffer so the flash-cached map stays clean, 1.25 MB of
+PSRAM only while switched on, partial invalidation so a frame change repaints
+the disc rather than the panel. Two findings are worth keeping even though the
+feature is gone. The public tiles stop at **zoom 7** — z8 and above return a PNG
+that reads "Zoom Level Not Supported", which a naive fetch will happily paint
+onto the scope. And the most common colour in the feed is *not* ground clutter,
+as the first implementation assumed; it is the light-precipitation band, and
+dropping it leaves a scatter of disconnected dots instead of weather. It was
+removed because it did not look good enough on this display, not because it did
+not work.

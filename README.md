@@ -7,7 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.2.2-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
+[![firmware](https://img.shields.io/badge/firmware-v7.2.3-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen during a real emergency: a full-bleed dark base map with the coverage disc, seven aircraft, and Air Canada 337 squawking 7600 shown as a red glyph with a red alert strip in the Overview card and a red squawk value in the Selected card">
 
@@ -90,8 +90,8 @@ computer — the whole settings tree lives behind the gear.
 <img src="docs/img/panel-settings.png" width="700" alt="The on-device settings screen: Location, Display, Layers, Filters and Network groups in a two-column layout with a pinned footer">
 
 <sub>Settings on the panel. Location, favourites and range; display and layer toggles including
-°C/°F; class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL and Home Assistant.
-The footer stays pinned while the columns scroll. Personal values blurred.</sub>
+°C/°F and a 12/24-hour clock; class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL
+and Home Assistant. The footer stays pinned while the columns scroll. Personal values blurred.</sub>
 
 </div>
 
