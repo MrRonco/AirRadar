@@ -53,13 +53,47 @@ static const char*    kNtpServer2      = "time.nist.gov";
 // ============================================================
 //  Small helpers
 // ============================================================
+// The names this device actually answers to. STA mode only — there is no
+// softAP — so the list is closed: the mDNS name, the bare label, and whatever
+// address DHCP or the static-IP screen gave us.
+//
+// A Host outside that list means the request arrived under a name we do not
+// own, which is precisely what DNS rebinding looks like from in here.
+// IPv4 only: a bracketed IPv6 literal would mis-split on the first colon, and
+// this stack never sees one.
+static bool hostAllowed(const String& raw) {
+  // Absent Host is allowed on purpose. Every browser sends one and so does
+  // curl, so rejecting buys nothing — and a client that omits it cannot be
+  // rebound, because there is no origin for a browser to be confused about.
+  if (!raw.length()) return true;
+  String h = raw;
+  const int c = h.indexOf(':');            // strip :port
+  if (c >= 0) h = h.substring(0, c);
+  h.toLowerCase();
+  return h.equals(AR_MDNS_NAME ".local") ||
+         h.equals(AR_MDNS_NAME) ||
+         h.equals(WiFi.localIP().toString());
+}
+
 static bool authed() {
+  // Host FIRST, because the cross-origin test below cannot see the attack it
+  // matters for. That test only ever proved Origin and Host AGREE — and both
+  // are the requester's to choose. Under DNS rebinding a browser sends
+  // Host: evil.com with Origin: http://evil.com, they agree, and the guard
+  // waves through a page that can then read and write everything including
+  // /update. Anchoring on a name we own is what makes the Origin check mean
+  // something.
+  const String hostHdr = server.hasHeader("Host") ? server.header("Host") : "";
+  if (!hostAllowed(hostHdr)) {
+    Serial.printf("[web] rejected, unrecognised Host: %s\n", hostHdr.c_str());
+    server.send(403, "text/plain", "unrecognised Host");
+    return false;
+  }
   // Cross-site guard: browsers auto-attach Basic credentials, so a malicious
   // page could POST here from another origin. A browser always sends Origin
   // on cross-site POSTs — reject any Origin that isn't this device.
   if (server.hasHeader("Origin")) {
     String o = server.header("Origin");
-    String hostHdr = server.hasHeader("Host") ? server.header("Host") : "";
     // Exact match only. indexOf() accepted any Origin merely CONTAINING the
     // host, so http://airradar.local.evil.com passed against airradar.local —
     // and with no panel password set this guard is the only thing protecting

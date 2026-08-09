@@ -91,6 +91,15 @@ FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
 15. **(v7.1) The CSRF guard must compare origins exactly.** A substring/`indexOf`
    check on the Host header passes `http://airradar.local.evil.com`. Build the
    two acceptable origins (`http://` + Host, `https://` + Host) and compare whole.
+   **(v7.2.4) But an exact match against Host is still not a guard.** Origin and
+   Host are BOTH the requester's to choose, so all that test ever proved is that
+   they agree — and under DNS rebinding they agree perfectly: the browser sends
+   `Host: evil.com` with `Origin: http://evil.com`, the compare passes, and with
+   no panel password `authed()` then returns true for `/update`. Validate **Host
+   against the names this device answers to** (mDNS name, bare label,
+   `WiFi.localIP()`) *before* anything else; that is the anchor the origin test
+   hangs off. Absent Host is allowed on purpose — every browser sends one, so
+   rejecting buys nothing, and a client that omits it cannot be rebound.
 17. **(v7.1) `vTaskDelete(NULL)` skips every C++ destructor in that scope.**
    It never returns, so a `DynamicJsonDocument` (or any RAII object) declared in
    a task function leaks its heap buffer on every single run. This was the
