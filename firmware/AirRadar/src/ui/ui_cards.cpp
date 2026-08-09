@@ -255,7 +255,23 @@ static void upCopy(char* dst, size_t cap, const char* src) {
 // ============================================================
 static void onSettingsClicked(lv_event_t* e) { (void)e; uiShow(SCR_SETTINGS); }
 static void onHelpClicked(lv_event_t* e)     { (void)e; helpToggle(); }
-static void onRangeClicked(lv_event_t* e)    { (void)e; uiCycleRange(+1); }
+// The pill draws a chevron at each end but is ONE click target, and this used
+// to pass +1 whatever you hit — so the left arrow stepped up like the right one
+// and the only way down was all the way round. Split on the midpoint: the half
+// you tapped is the direction you get.
+static void onRangeClicked(lv_event_t* e) {
+  lv_obj_t* pill = lv_event_get_target(e);
+  lv_indev_t* indev = lv_indev_get_act();
+  int dir = +1;
+  if (indev && pill) {
+    lv_point_t p;
+    lv_area_t  a;
+    lv_indev_get_point(indev, &p);
+    lv_obj_get_coords(pill, &a);
+    if (p.x < (a.x1 + a.x2) / 2) dir = -1;
+  }
+  uiCycleRange(dir);
+}
 
 // ============================================================
 //  Build — Overview card
