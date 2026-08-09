@@ -7,7 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.2.1-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
+[![firmware](https://img.shields.io/badge/firmware-v7.2.2-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen during a real emergency: a full-bleed dark base map with the coverage disc, seven aircraft, and Air Canada 337 squawking 7600 shown as a red glyph with a red alert strip in the Overview card and a red squawk value in the Selected card">
 
@@ -53,11 +53,12 @@ the device. The only things you supply are Wi-Fi and coordinates.
 
 <div align="center">
 
-<img src="docs/img/panel-normal.png" width="700" alt="The same display in its ordinary state: violet altitude-coloured targets, no alert strip">
+<img src="docs/img/panel-normal.png" width="700" alt="The same display in its ordinary state: eleven violet and cyan altitude-coloured targets, no alert strip, with a Porter Airlines flight pinned in the Selected card showing its logo, its Winnipeg to Ottawa route and a live instrument grid">
 
 <sub><b>The same display, nothing wrong.</b> Compare with the hero above: no alert strip in the
 Overview card, and every glyph is altitude-coloured rather than red. The emergency treatment is
-deliberately the only thing on screen that uses red.</sub>
+deliberately the only thing on screen that uses red. A Porter flight is pinned here, so the
+right-hand card is filled in.</sub>
 
 </div>
 
@@ -70,6 +71,16 @@ always know how fresh the picture is.
 display **encodes** — what the colours, sizes, dimming, rings and dots mean — because
 anything the panel already labels needs no explanation.
 
+<div align="center">
+
+<img src="docs/img/legend.png" width="700" alt="The legend overlay: three columns headed Targets, Scope and Panels, each entry pairing a live sample — a recoloured aircraft glyph, a ring, a coloured dot, a piece of sample text — with a one-line explanation of what it encodes">
+
+<sub><b>The legend.</b> Every entry carries a live sample drawn by the same code that draws the
+real thing, so it cannot drift from the display it explains. Built once at boot and hidden, so
+it costs nothing until you ask for it.</sub>
+
+</div>
+
 **Everything is configurable on-device.** First boot scans for Wi-Fi and gives you a
 three-layer touch keyboard; coordinates go in on a numpad. After that nothing needs a
 computer — the whole settings tree lives behind the gear.
@@ -78,8 +89,8 @@ computer — the whole settings tree lives behind the gear.
 
 <img src="docs/img/panel-settings.png" width="700" alt="The on-device settings screen: Location, Display, Layers, Filters and Network groups in a two-column layout with a pinned footer">
 
-<sub>Settings on the panel. Location, favourites and range; display and layer toggles;
-class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL and Home Assistant.
+<sub>Settings on the panel. Location, favourites and range; display and layer toggles including
+°C/°F; class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL and Home Assistant.
 The footer stays pinned while the columns scroll. Personal values blurred.</sub>
 
 </div>
@@ -95,7 +106,8 @@ phone app — it assumes a desktop and lays out on a fixed 1240 px grid.
 
 <img src="docs/img/web-console.png" width="880" alt="The AirRadar web console: a status strip of eight live tiles, a traffic table, the panel mirror, and configuration forms for radar, network and integrations">
 
-<sub>Live, with the panel mirror loaded. Coordinates blurred. The heap tiles are honest: pulling the 1.1 MB mirror is expensive, and this device is 24 minutes into a boot — see the <a href="#roadmap">known heap drain</a>.</sub>
+<sub>Live, with the panel mirror loaded — the mirror is the panel's actual framebuffer, not a
+re-render. Coordinates blurred; network values are documentation placeholders.</sub>
 
 </div>
 

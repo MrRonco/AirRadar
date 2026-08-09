@@ -9,7 +9,7 @@
 // ============================================================
 //  Identity
 // ============================================================
-#define AR_VERSION       "7.2.1"
+#define AR_VERSION       "7.2.2"
 // Contact URL included on purpose: several keyless APIs (Planespotters for
 // one) reject a bare product token with 403.
 #define AR_USER_AGENT    "ESP32-AirRadar/7.2 (+https://" AR_REPO_URL ")"

@@ -177,3 +177,47 @@ Also in v7.2.1: `WiFi.setSleep(false)` is re-asserted after every reconnect
 (rule 2 was being applied once, at boot, while `setAutoReconnect(true)` silently
 re-associates), and the stall detector gained the `rtcache` and `deadreck`
 stages that had been blind spots.
+
+## v7.2.2 — the weather row and the legend
+
+No new subsystems; two pieces of the display that had drifted out of shape.
+
+**The weather row.** The Overview card's top row is 136 px of card content and
+it was carrying four things: a 22 px weather icon, the temperature in
+`font_val22`, a 22 px wind glyph and the wind reading in `font_body18`. Measured
+against LVGL's per-glyph rounding, the worst case wanted 187 px — so on an
+ordinary day the degree sign sat on the wind glyph, and there was no arrangement
+of those parts that fit. Both icons are regenerated at 16 px (`genassets.py`
+emits from the same 22-unit drawing at a size constant, holding the stroke at
+1.5 px of *output* so the pen does not thin as the glyph shrinks), and the
+temperature drops to `font_body18`, which is what buys the room for both.
+
+The row came out of it with one grammar: every reading is a VALUE in
+`font_body18` and a QUALIFIER in `font_micro13` — 24 / °C, NW / 8. Baselines are
+derived from each face's `line_height - base_line` rather than nudged, and the
+icons centre on the body18 line box. The wind block's internal gaps are the only
+thing not fixed: flat gaps are wrong at both ends, so they take what the two
+readings leave behind, clamped to 2–6 px. Verified on hardware at both extremes,
+including a probe forcing -40 / NW 120.
+
+Also new: a **°C / °F toggle** (`tempf`, panel and web). It is a display
+conversion only — `g_wx.tempC`, `/api/state`'s `temp_c` and MQTT stay Celsius,
+because flipping a display preference should not change what the API means.
+
+**The legend.** Five things were wrong at once. The scrim was 236/255, so the
+clock, the range pill and any bright callsign read straight through the text.
+"tap anywhere to close" was positioned at a hardcoded offset narrower than
+"LEGEND" actually sets, and printed over the wordmark. The sample gutter was
+34 px against a 40 px "FL350" sample. Every marker had its own left edge and its
+own vertical nudge. And row pitch snapped to two buckets — 34 px for one line,
+48 for anything else — which gave a three-line entry 9 px of air and a two-line
+entry 22, the reason the columns looked ragged.
+
+The scrim is opaque, the subtitle is measured from the title and sits on its
+baseline, the gutter clears its widest sample by 10 px, markers share one edge
+and centre on the first line of their description, and entries take their
+measured height plus a fixed gap with the intra-entry line spacing set smaller
+than that gap. Columns are even, there is a hairline under the masthead, and the
+copy is tightened throughout. One entry added — the operator tile's
+ICAO-in-brand-colour fallback, encoded since v7.2 and never explained, drawn
+through `brandColorFor()` so the sample cannot drift from the real tile.

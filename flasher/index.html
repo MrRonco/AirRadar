@@ -48,13 +48,13 @@
     <p class="sub">Requires desktop <b>Chrome</b> or <b>Edge</b>. Connect the board by USB-C first.</p>
 
     <div class="beta">
-      <b>v7.2.1</b>
-      <p>Fixes the intermittent whole-screen shake. Every write to the on-device
-      flash cache starves the display's DMA &mdash; flash and PSRAM share a bus
-      &mdash; so airline-logo and route saves are now spread out rather than
-      written the moment they arrive. Measured over 7.6&nbsp;hours: from roughly
-      one shake a minute to one an hour. Also carries the v7.2.0 memory-leak fix,
-      which holds steady across a 21-hour soak.</p>
+      <b>v7.2.2</b>
+      <p>Display polish. The weather row no longer runs the temperature into the
+      wind glyph &mdash; both icons are smaller and matched, the wind speed is
+      larger, and there is a new <b>&deg;C / &deg;F</b> toggle. The legend behind
+      the <b>?</b> was rebuilt: it is opaque now, so the radar no longer reads
+      through it, and nothing overlaps. Carries the v7.2.1 screen-shake fix and
+      the v7.2.0 memory-leak fix.</p>
     </div>
 
     <div class="btnwrap">
@@ -74,7 +74,7 @@
       </ol>
     </div>
 
-    <div class="foot">v7.2.1 · <a href="https://github.com/MrRonco/AirRadar">github.com/MrRonco/AirRadar</a> · by Franco Raso</div>
+    <div class="foot">v7.2.2 · <a href="https://github.com/MrRonco/AirRadar">github.com/MrRonco/AirRadar</a> · by Franco Raso</div>
   </div>
 </body>
 </html>
