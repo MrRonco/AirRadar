@@ -81,8 +81,12 @@
 #define CARD_SHORT_H 52
 #define CARD_L_X  12
 #define CARD_R_X  (SCR_W - 12 - CARD_W)   // 620
-#define CARD_TOP_Y 28
-#define CARD_BOT_Y 416
+// 24/412, not 28/416. The stack ran 28..468 -- optical centre 248 against the
+// disc's 240, with a 28 px top margin and a 12 px bottom one. The 28 was
+// reserved for the corner controls, but that is a RIGHT-EDGE reservation, not a
+// full-width one. Now centre 244, margins 24/16.
+#define CARD_TOP_Y 24
+#define CARD_BOT_Y 412
 #define CARD_RADIUS 17
 // Bottom band: range stepper | clock | gear. The weather pill is gone — it now
 // heads the Overview card, which vacates the vertical axis so the compass N can
@@ -102,6 +106,10 @@
 #define GEAR_Y      2
 #define HELP_X      (GEAR_X - 24)           // 738; the "?" ink lands 745..755
 #define HELP_Y      GEAR_Y
+// Overlay screens (settings, legend) share one margin. Main keeps CARD_L_X 12
+// because that is a TANGENCY constraint -- the cards touch the disc -- not a
+// margin, and changing it would break the composition's best decision.
+#define PAGE_PAD    20
 // Touch is a SEPARATE pair of plates, deliberately not centred on the glyphs:
 // centring a 12 px mark in a 48 px target is what forced them apart to begin
 // with. The plates TILE the corner and meet at CORNER_SPLIT, the middle of the
@@ -110,7 +118,29 @@
 // 10 px down into the Selected card, which starts at CARD_TOP_Y.
 #define CORNER_SPLIT   761
 #define CORNER_LEFT    702
-#define CORNER_TOUCH_H CARD_TOP_Y           // stop where the card begins
+// Deliberately tied to CARD_TOP_Y: the plates must stop where the Selected card
+// begins or taps on its corner open Settings. Centring the card stack (24/412)
+// therefore costs these plates 4 px of height, 28 -> 24. Accepted: they are
+// 59 and 39 px WIDE, they sit against the physical top edge so you cannot
+// overshoot upward, and the glyph ink (y 7..22) stays comfortably inside.
+#define CORNER_TOUCH_H CARD_TOP_Y
+
+// ============================================================
+//  Altitude ramp — ONE definition
+// ============================================================
+// These were duplicated: theme.h held C_ALT_* for the legend and the cards,
+// while core/state.cpp's altColorRGB() -- the path that actually colours every
+// glyph on the scope -- carried its own hardcoded bytes. Both comments claimed
+// "cyan left the ramp"; only one of them was changed when it did, so the tokens
+// and the glyphs disagreed. config.h is the one header both layers already
+// include, so the ramp lives here and theme.h/state.cpp derive from it.
+//
+// Luminance descends 0.599 -> 0.49 -> 0.321 so low/near reads loud without
+// consulting the legend. No cyan: that means "live" and nothing else.
+#define AR_ALT_LOW_RGB   0xffc061   // below 10,000 ft  — amber
+#define AR_ALT_MID_RGB   0xa8bfc9   // 10k–30k          — ice/steel
+#define AR_ALT_HIGH_RGB  0x9b8ce0   // above 30,000 ft  — violet
+#define AR_ALT_NONE_RGB  0xaab4c0   // altitude unknown — ivory2
 
 // ============================================================
 //  Range steps (km)

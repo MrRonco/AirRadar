@@ -33,9 +33,9 @@
 // Altitude ramp, luminance now descending 0.599 -> 0.491 -> 0.321 so the band
 // reads low/near = loud, high/far = quiet without consulting a legend. Cyan is
 // no longer in this ramp: it means "live" and nothing else.
-#define C_ALT_LOW  lv_color_hex(0xffc061)
-#define C_ALT_MID  lv_color_hex(0x6fc7d8)
-#define C_ALT_HIGH lv_color_hex(0x9b8ce0)
+#define C_ALT_LOW  lv_color_hex(AR_ALT_LOW_RGB)
+#define C_ALT_MID  lv_color_hex(AR_ALT_MID_RGB)
+#define C_ALT_HIGH lv_color_hex(AR_ALT_HIGH_RGB)
 #define C_BORDER   lv_color_hex(0xb4cde6)   // card hairline (use with low opa)
 #define C_RING     lv_color_hex(0x2b4d5d)   // scope ring
 #define C_RING_DIM lv_color_hex(0x193040)   // crosshair
@@ -44,8 +44,20 @@
 // LV_OPA_COVER on purpose: at 216 every card returned LV_COVER_RES_NOT_COVER,
 // so each 1 Hz label repaint recomposited the whole screen root — to buy a
 // measured 1.057:1 difference. Opaque restores the LV_COVER_RES_COVER path.
+// Radius scale. Nine literals were in use (17/26/13/12/11/10/9/7/6) and
+// everything between 6 and 13 is indistinguishable at 1-3 m, so eight of them
+// were paying complexity for nothing -- five sat in one settings viewport.
+#define R_SM          8    // chips, favourite buttons
+#define R_MD         12    // buttons, text areas, toast, settings groups
+#define R_LG   CARD_RADIUS // cards and pills (17)
+
 #define OPA_CARD     LV_OPA_COVER
 #define OPA_BORDER    40    // the only elevation cue now that shadows are gone
+// Internal rules were also 40 -- identical to the card outline -- so the left
+// card read as four stacked panels rather than one card with sections. A
+// container edge has to outweigh its own divisions.
+#define OPA_HAIR      22
+#define HAIR_INSET     8    // px each side; an inset rule reads as WITHIN
 #define OPA_PILL     168    // weather/range pill body
 
 // ---------- fonts ----------

@@ -182,13 +182,17 @@ static lv_obj_t* mkBox(lv_obj_t* p) {                 // bare container
   return o;
 }
 
+// Inset, not full-bleed. A rule that runs the whole content width reads as a
+// boundary BETWEEN panels; pulled in from the edges it reads as a division
+// WITHIN one card. Paired with OPA_HAIR, this is what stops the Overview card
+// looking like four stacked panels.
 static lv_obj_t* mkHair(lv_obj_t* p, int y, int w) {
-  lv_obj_t* o = mkBox(p);
-  lv_obj_add_style(o, &st_hair, 0);
-  lv_obj_set_style_bg_opa(o, OPA_BORDER, 0);          // matches the card hairline
-  lv_obj_set_size(o, w, 1);
-  lv_obj_set_pos(o, 0, y);
-  return o;
+  lv_obj_t* h = lv_obj_create(p);
+  lv_obj_remove_style_all(h);
+  lv_obj_add_style(h, &st_hair, 0);
+  lv_obj_set_size(h, w - 2 * HAIR_INSET, 1);
+  lv_obj_set_pos(h, HAIR_INSET, y);
+  return h;
 }
 
 // Set label text only when it differs from the cached copy. Returns true if set.
@@ -337,7 +341,7 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_style_border_color(s_ovEmergBox, C_RED, 0);
   lv_obj_set_style_border_opa(s_ovEmergBox, 128, 0);
   lv_obj_set_style_border_width(s_ovEmergBox, 1, 0);
-  lv_obj_set_style_radius(s_ovEmergBox, 6, 0);
+  lv_obj_set_style_radius(s_ovEmergBox, R_SM, 0);
   lv_obj_set_style_pad_ver(s_ovEmergBox, 4, 0);
   lv_obj_set_style_pad_hor(s_ovEmergBox, 8, 0);
   s_ovEmergLbl = mkLbl(s_ovEmergBox, F_MONO11, C_RED);
@@ -485,7 +489,10 @@ static void buildTimeCard(lv_obj_t* parent) {
   lv_obj_add_style(card, &st_card, 0);
   lv_obj_set_pos(card, CLOCK_X, CARD_BOT_Y);
   lv_obj_set_size(card, CARD_W, CARD_SHORT_H);
-  s_tmTime = mkLbl(card, F_NUM36, C_IVORY);
+  // C_IVORY2, not C_IVORY. At 2 m the reading order was hero count -> CLOCK ->
+  // callsign -> the scope, so the instrument came fourth, behind the time. One
+  // rank quieter moves the scope up a place at zero layout cost.
+  s_tmTime = mkLbl(card, F_NUM36, C_IVORY2);
   lv_obj_center(s_tmTime);      // the date moved into the Overview header
   // font_clock36 is digits and ':' only — deliberately, it is a tabular clock
   // face — so the meridiem cannot live in the same label. It rides the clock's
@@ -755,10 +762,12 @@ static void updateSelectedGrid(const Track* t) {
 
   snprintf(b, sizeof(b), "%+d", t->vRateFpm);
   setTextCached(s_selClimb, s_bufClimb, sizeof(s_bufClimb), b);
-  lv_color_t cc = (t->vRateFpm > CLIMB_STRONG_FPM)    ? C_CY
-                  : (t->vRateFpm < -CLIMB_STRONG_FPM) ? C_AMBER
-                                                      : C_IVORY;
-  setColorCached(s_selClimb, &s_colClimb, cc);
+  // No hue. This cell used to paint climb C_CY and descent C_AMBER, and both
+  // collided inside the same card: amber simultaneously means "below 10,000 ft"
+  // on the glyph 200 px away, and cyan means "live". The sign and the tabular
+  // figures already carry direction and magnitude, so the colour was spending
+  // two reserved meanings to say nothing new.
+  setColorCached(s_selClimb, &s_colClimb, C_IVORY);
 }
 
 static void updateSelectedStatus(const Track* t, uint32_t nowMs) {

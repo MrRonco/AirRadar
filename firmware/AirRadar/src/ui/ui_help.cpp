@@ -20,7 +20,7 @@
 // ---------- layout ----------
 // 20 + 238 + 20 + 238 + 20 + 238 = 794 of 800, so the three columns are even
 // and the outer margins match the inner gutters.
-static const int HLP_PAD_X   = 20;
+static const int HLP_PAD_X   = PAGE_PAD;
 static const int HLP_TITLE_Y = 14;
 static const int HLP_HAIR_Y  = 48;
 static const int HLP_TOP     = 78;

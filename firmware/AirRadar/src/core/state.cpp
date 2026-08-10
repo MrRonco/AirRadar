@@ -266,14 +266,17 @@ bool trackOnWatchlist(const Track& t) {
 }
 
 void altColorRGB(int altFt, uint8_t& r, uint8_t& g, uint8_t& b) {
-  // Luminance descends with altitude (0.599 / 0.491 / 0.321) so the band reads
-  // low = near = loud without consulting the legend. Cyan left the ramp: it now
-  // means "live" and nothing else.
-  if (altFt >= 30000)      { r = 0x9b; g = 0x8c; b = 0xe0; }   // violet
-  else if (altFt >= 10000) { r = 0x6f; g = 0xc7; b = 0xd8; }   // teal (was C_CY)
-  else if (altFt >= 0)     { r = 0xff; g = 0xc0; b = 0x61; }   // amber
+  // Ramp lives in config.h (AR_ALT_*_RGB) because BOTH this file and theme.h
+  // need it. It used to be written out twice, and when cyan left the ramp only
+  // theme.h was updated -- so every glyph on the scope kept painting the old
+  // teal while the legend swatch showed the new colour.
+  //
   // Unknown altitude used to return 0xff6472 — byte-identical to C_RED, so an
   // aircraft with no altitude was indistinguishable from a 7700 squawk. It is
   // now plain secondary ivory; emergency owns red alone.
-  else                     { r = 0xaa; g = 0xb4; b = 0xc0; }   // unknown -> ivory2
+  uint32_t c = (altFt >= 30000)      ? AR_ALT_HIGH_RGB
+             : (altFt >= 10000)      ? AR_ALT_MID_RGB
+             : (altFt >= 0)          ? AR_ALT_LOW_RGB
+                                     : AR_ALT_NONE_RGB;
+  r = (uint8_t)(c >> 16); g = (uint8_t)(c >> 8); b = (uint8_t)c;
 }

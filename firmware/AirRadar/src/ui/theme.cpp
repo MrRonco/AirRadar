@@ -100,7 +100,7 @@ void themeInit() {
   // Hairline divider (apply to an lv_obj of height 1)
   lv_style_init(&st_hair);
   lv_style_set_bg_color(&st_hair, C_BORDER);
-  lv_style_set_bg_opa(&st_hair, 40);
+  lv_style_set_bg_opa(&st_hair, OPA_HAIR);
   lv_style_set_border_width(&st_hair, 0);
   lv_style_set_radius(&st_hair, 0);
   lv_style_set_pad_all(&st_hair, 0);

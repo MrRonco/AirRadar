@@ -445,10 +445,14 @@ static void scopeBuildRingsAndCross() {
 }
 
 static void scopeBuildRangeLabels() {
-  s_rangeLblFull = makeMicroLabel(s_clip, "", C_FAINT);
+  // C_DIM, not C_FAINT. theme.h annotates C_FAINT "DECORATION ONLY -- never
+  // text (1.9:1)", and these two numerals are the ONLY thing telling you whether
+  // a blip 100 px out is 40 km or 200 km away. Over the map they had effectively
+  // vanished. 1.99:1 -> 5.65:1.
+  s_rangeLblFull = makeMicroLabel(s_clip, "", C_DIM);
   lv_obj_align(s_rangeLblFull, LV_ALIGN_CENTER, RING_LBL_FULL_OFF,
                -RING_LBL_FULL_OFF);
-  s_rangeLblMid = makeMicroLabel(s_clip, "", C_FAINT);
+  s_rangeLblMid = makeMicroLabel(s_clip, "", C_DIM);
   lv_obj_align(s_rangeLblMid, LV_ALIGN_CENTER, RING_LBL_MID_OFF,
                -RING_LBL_MID_OFF);
 }

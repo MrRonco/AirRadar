@@ -60,7 +60,7 @@ static void toast(const char* msg) {
   lv_obj_set_style_text_color(s_toast, C_IVORY, 0);
   lv_obj_set_style_bg_color(s_toast, C_CARD_HI, 0);
   lv_obj_set_style_bg_opa(s_toast, 235, 0);
-  lv_obj_set_style_radius(s_toast, 9, 0);
+  lv_obj_set_style_radius(s_toast, R_MD, 0);
   lv_obj_set_style_pad_hor(s_toast, 16, 0);
   lv_obj_set_style_pad_ver(s_toast, 9, 0);
   lv_obj_set_style_border_color(s_toast, C_BORDER, 0);
@@ -76,7 +76,7 @@ static void toast(const char* msg) {
 static lv_obj_t* mkCloseBtn(lv_obj_t* parent, lv_event_cb_t cb) {
   lv_obj_t* b = lv_btn_create(parent);
   lv_obj_set_size(b, 40, 40);
-  lv_obj_set_style_radius(b, 11, 0);
+  lv_obj_set_style_radius(b, R_MD, 0);
   lv_obj_set_style_bg_color(b, C_CARD_HI, 0);
   lv_obj_set_style_bg_opa(b, 150, 0);
   lv_obj_set_style_border_width(b, 0, 0);
@@ -96,7 +96,7 @@ static lv_obj_t* mkTitle(lv_obj_t* parent, const char* upperText) {
   lv_label_set_text(t, upperText);              // F_L28 is uppercase-only
   lv_obj_set_style_text_font(t, F_L28, 0);
   lv_obj_set_style_text_color(t, C_IVORY, 0);
-  lv_obj_set_pos(t, 28, 24);
+  lv_obj_set_pos(t, PAGE_PAD, 24);      // was 28 -- three margins across three screens
   return t;
 }
 
@@ -107,7 +107,7 @@ static lv_obj_t* mkGroup(lv_obj_t* col, const char* title) {
   lv_obj_set_height(g, LV_SIZE_CONTENT);
   lv_obj_set_style_bg_color(g, C_SURF, 0);
   lv_obj_set_style_bg_opa(g, LV_OPA_COVER, 0);   // same fill as the main cards
-  lv_obj_set_style_radius(g, 13, 0);
+  lv_obj_set_style_radius(g, R_MD, 0);
   lv_obj_set_style_border_color(g, C_BORDER, 0);
   lv_obj_set_style_border_opa(g, 20, 0);
   lv_obj_set_style_border_width(g, 1, 0);
@@ -558,7 +558,7 @@ static void wifiBuildList(int n) {
     lv_obj_set_size(b, LV_PCT(100), 46);
     lv_obj_set_style_bg_color(b, C_CARD_HI, 0);
     lv_obj_set_style_bg_opa(b, 140, 0);
-    lv_obj_set_style_radius(b, 10, 0);
+    lv_obj_set_style_radius(b, R_MD, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_t* l = lv_label_create(b);
     char t[48];
@@ -596,7 +596,7 @@ void wifiScreenBuild() {
   lv_obj_set_size(rescan, 160, 46);
   lv_obj_set_pos(rescan, 610, 112);
   lv_obj_set_style_bg_color(rescan, C_CY, 0);
-  lv_obj_set_style_radius(rescan, 10, 0);
+  lv_obj_set_style_radius(rescan, R_MD, 0);
   lv_obj_t* rl = lv_label_create(rescan);
   lv_label_set_text(rl, "RESCAN");
   lv_obj_set_style_text_font(rl, F_UI15, 0);
@@ -646,7 +646,7 @@ void coordsScreenBuild() {
     lv_obj_set_style_bg_opa(ta, 150, 0);
     lv_obj_set_style_text_font(ta, F_MONO13, 0);
     lv_obj_set_style_text_color(ta, C_IVORY, 0);
-    lv_obj_set_style_radius(ta, 10, 0);
+    lv_obj_set_style_radius(ta, R_MD, 0);
     lv_obj_add_event_cb(ta, coordFocusCb, LV_EVENT_FOCUSED, NULL);
     return ta;
   };
@@ -657,7 +657,7 @@ void coordsScreenBuild() {
   lv_obj_set_size(save, 130, 52);
   lv_obj_set_pos(save, 570, 96);
   lv_obj_set_style_bg_color(save, C_CY, 0);
-  lv_obj_set_style_radius(save, 10, 0);
+  lv_obj_set_style_radius(save, R_MD, 0);
   lv_obj_t* sl = lv_label_create(save);
   lv_label_set_text(sl, "SAVE");
   lv_obj_set_style_text_font(sl, F_UI15, 0);
@@ -730,7 +730,7 @@ void texteditOpen(const char* title, const char* initial, bool password,
   lv_obj_set_style_bg_opa(s_teTa, 150, 0);
   lv_obj_set_style_text_font(s_teTa, F_UI15, 0);
   lv_obj_set_style_text_color(s_teTa, C_IVORY, 0);
-  lv_obj_set_style_radius(s_teTa, 10, 0);
+  lv_obj_set_style_radius(s_teTa, R_MD, 0);
 
   s_teKb = lv_keyboard_create(root);
   lv_obj_set_size(s_teKb, SCR_W, 300);
@@ -785,7 +785,7 @@ void settingsBuild() {
   for (int i = 0; i < AR_MAX_FAVS; i++) {
     lv_obj_t* b = lv_btn_create(favBox);
     lv_obj_set_size(b, 28, 28);
-    lv_obj_set_style_radius(b, 7, 0);
+    lv_obj_set_style_radius(b, R_SM, 0);
     lv_obj_set_style_bg_color(b, C_CY, 0);
     lv_obj_set_style_bg_opa(b, 0, 0);
     lv_obj_set_style_border_width(b, 1, 0);
@@ -855,7 +855,7 @@ void settingsBuild() {
     lv_obj_t* b = lv_btn_create(chipBox);
     lv_obj_set_size(b, LV_SIZE_CONTENT, 24);
     lv_obj_set_style_pad_hor(b, 6, 0);
-    lv_obj_set_style_radius(b, 6, 0);
+    lv_obj_set_style_radius(b, R_SM, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_border_width(b, 0, 0);
     lv_obj_t* l = lv_label_create(b);
@@ -913,7 +913,10 @@ void settingsBuild() {
   s_footIp = lv_label_create(root);
   lv_label_set_text(s_footIp, "");
   lv_obj_set_style_text_font(s_footIp, F_MONO11, 0);
-  lv_obj_set_style_text_color(s_footIp, C_FAINT, 0);
+  // The address you cross the room to read was set in the colour theme.h
+  // forbids for text (1.99:1) -- while the decorative repo link beside it was
+  // perfectly legible. Emphasis swapped.
+  lv_obj_set_style_text_color(s_footIp, C_DIM, 0);
   lv_obj_align(s_footIp, LV_ALIGN_BOTTOM_MID, 0, -7);
   // Hairline above the pinned footer so the scrolling columns visibly end.
   lv_obj_t* fh = lv_obj_create(root);
