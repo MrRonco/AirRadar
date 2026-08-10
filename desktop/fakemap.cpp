@@ -19,6 +19,11 @@
 #include "Arduino.h"
 #include "fakemap.h"
 #include "../firmware/AirRadar/src/config.h"
+// The real thing, compiled in: the bezel is pure pixel arithmetic on an RGB565
+// buffer, so the harness engraves it exactly as the map task does. This is the
+// reason fakemap.cpp exists -- anything that draws INTO the map is invisible
+// without a map to draw into.
+#include "../firmware/AirRadar/src/ui/bezel.h"
 
 // Mirrors maptiles.cpp so the harness dims identically. If those change there,
 // change them here — the point of this file is fidelity to that pipeline.
@@ -98,6 +103,7 @@ void fakeMapBuild() {
           (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
     }
   }
+  bezelRasterise(s_buf, MAP_W, MAP_H, cx, cy, SCOPE_R);
   s_gen++;
 }
 

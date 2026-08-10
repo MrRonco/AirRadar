@@ -25,6 +25,8 @@
 #include <math.h>
 #include <string.h>
 #include "maptiles.h"
+// Pixel arithmetic only -- no LVGL, no globals -- so it is safe on core 0.
+#include "../ui/bezel.h"
 
 // ---------- file-local constants ----------
 static const int      TILE_PX          = 256;                  // slippy tile edge
@@ -123,7 +125,7 @@ static void cachePath(int km, char* out, size_t cap) {
 // leaves a device that already has a cache showing the old map forever --
 // the fetch never runs, so there is nothing to notice. Bump AR_MAP_RECIPE
 // whenever the style, the tint or the resample changes.
-#define AR_MAP_RECIPE 2   // 1 = dark_all @ x1.6, 2 = dark_nolabels @ x1.1
+#define AR_MAP_RECIPE 3   // 1 = dark_all @1.6  2 = nolabels @1.1  3 = +bezel
 static void cacheKeyNow(char* out, size_t cap) {
   snprintf(out, cap, "%.6f,%.6f,r%d", g_set.homeLat, g_set.homeLon,
            AR_MAP_RECIPE);
@@ -402,6 +404,10 @@ static void resampleAndTint(const MapJob& job, int z, double cxPx, double cyPx) 
       dstRow[ox] = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
     }
   }
+
+  // The bearing scale goes on AFTER the coverage lens, so the ticks are not
+  // dimmed by it -- they belong to the instrument, not to the ground.
+  bezelRasterise(s_back, MAP_W, MAP_H, ocx, ocy, SCOPE_R);
 }
 
 // Core-0 task: mosaic -> back buffer -> ready flag. Flag order matters:

@@ -28,7 +28,9 @@ static const lv_opa_t RING_OPA_INNER = 46;
 static const lv_opa_t CROSS_OPA      = 120;
 static const lv_opa_t TICK_OPA       = 200;
 static const int   TICK_LEN      = 12;
-static const int   NORTH_LBL_GAP = 16;          // "N" this far above the scope edge
+// Compass letters sit this far from centre: inside the 12 px cardinal tick
+// and the 9 px bezel majors, with air between.
+static const int   ROSE_R        = SCOPE_R - 26;
 static const float DIAG_45       = 0.70710678f; // sin/cos of 45 deg
 static const int   RING_LBL_INSET = 14;         // range labels sit inside their ring
 static const int   HOLDER_SZ    = 34;           // = glow / selection-ring size
@@ -607,10 +609,20 @@ void scopeBuild(lv_obj_t* parent) {
   scopeUpdateRangeLabels();
   scopeBuildIss();
 
-  // "N" above the top tick — on the screen root so the circle doesn't clip it.
-  lv_obj_t* north = makeMicroLabel(parent, "N", C_DIM);
-  lv_obj_align(north, LV_ALIGN_TOP_MID, SCOPE_CX - SCR_W / 2,
-               SCOPE_Y0 - NORTH_LBL_GAP);
+  // S1: the compass rose. "N" used to hang alone ABOVE the disc, an orphan
+  // with no siblings and no scale -- the panel could show you that something
+  // was north-east but never that it was on 038. It joins the three others
+  // INSIDE the ring now, on the crosshair, at one radius: four marks reading
+  // as one system with the engraved bearing scale (ui/bezel.cpp) rather than
+  // one mark reading as a leftover. There is no room outside the disc anyway
+  // -- the cards leave 4 px on each flank.
+  static const char* kRose[4] = {"N", "E", "S", "W"};
+  static const int   kRoseDX[4] = {0, 1, 0, -1};
+  static const int   kRoseDY[4] = {-1, 0, 1, 0};
+  for (int i = 0; i < 4; i++) {
+    lv_obj_t* l = makeMicroLabel(s_clip, kRose[i], C_DIM);
+    lv_obj_align(l, LV_ALIGN_CENTER, kRoseDX[i] * ROSE_R, kRoseDY[i] * ROSE_R);
+  }
 }
 
 // ============================================================
