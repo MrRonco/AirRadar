@@ -65,8 +65,14 @@ static const int WX_ICON_PX   = 16;   // must match WX_PX in tools/genassets.py
 static const int OV_TEMP_X    = 18;
 static const int OV_UNIT_GAP  = 2;    // number -> "°C"
 static const int OV_TOKEN_GAP    = 3;   // inside a group: icon-dir, dir-speed
-static const int OV_GUTTER_MIN   = 8;   // between the two groups; below this
-                                        //  the unit letter is dropped
+// Between the two groups. 8 when F35 set it, because nothing then marked
+// where the wind group began and the gutter was the only separator. The wind
+// pictogram now does that job -- it is a distinct non-text shape with its own
+// internal padding -- so 4 px of true gap reads as clearly as 8 did, and the
+// difference is exactly what lets the icon stay in the ordinary metric case
+// instead of being shed 99% of the time. Below this the ICON goes, not the
+// unit: the direction beside it already says the reading is wind.
+static const int OV_GUTTER_MIN   = 4;
 static const int OV_HAIR1_Y   = 62;
 // The hero group (numeral + IN RANGE) is CENTRED in whatever the alert rows
 // leave, not pinned at a fixed y. Both alert slots are usually empty, so a
@@ -185,7 +191,13 @@ static int s_heroX = 0;
 static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl, *s_ovEmergSqk;
 static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24], s_bufEmergSqk[8];
-static char s_bufFiltered[16];
+static char s_bufFiltered[16], s_bufWunit[6];
+// Whether the wind pictogram fits alongside the wind UNIT. Owned by the layout
+// block in updateWeatherPill(), read by the visibility block above it -- the
+// two used to set the same flag independently, so the visibility pass re-showed
+// an icon the layout pass had hidden and it landed back at its build position,
+// on top of "KMH" (CLAUDE.md rule 25, same shape, different property).
+static bool s_windIconFits = true;
 static char s_bufNear[12], s_bufNearD[24], s_bufFeed[12], s_bufSrc[24];
 static lv_color_t s_colSrc = {};
 static lv_color_t s_colCount = {};
@@ -218,7 +230,7 @@ static const int PM_RISE = 6;     // F31: lift off the shared baseline
 
 // Weather pill
 static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxUnit;
-static lv_obj_t *s_wxWindIcon, *s_wxDir, *s_wxSpd;
+static lv_obj_t *s_wxWindIcon, *s_wxDir, *s_wxSpd, *s_wxSpdUnit;
 static const lv_img_dsc_t* s_wxIconSrc = nullptr;
 static char s_bufTemp[8], s_bufUnit[4], s_bufWdir[4], s_bufWspd[8];
 
@@ -423,6 +435,8 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_pos(s_wxDir, CONTENT_W, microY);
   s_wxSpd = mkLbl(card, F_UI15, C_IVORY2);
   lv_obj_set_pos(s_wxSpd, CONTENT_W, OV_HOME_Y);
+  s_wxSpdUnit = mkLbl(card, F_UI12, C_MUTE);   // KMH / MPH -- see updateWeatherPill
+  lv_obj_set_pos(s_wxSpdUnit, CONTENT_W, microY);
   s_tmDate = mkLbl(card, F_MONO13, C_DIM);
   lv_obj_set_style_text_letter_space(s_tmDate, 1, 0);
   lv_obj_align(s_tmDate, LV_ALIGN_TOP_MID, 0, OV_DATE_Y);
@@ -1248,9 +1262,10 @@ static void updateWeatherPill() {
   setHiddenCached(s_wxIcon, !show);
   setHiddenCached(s_wxTemp, !show);
   setHiddenCached(s_wxUnit, !show);
-  setHiddenCached(s_wxWindIcon, !show);
+  setHiddenCached(s_wxWindIcon, !show || !s_windIconFits);
   setHiddenCached(s_wxDir, !show);
   setHiddenCached(s_wxSpd, !show);
+  setHiddenCached(s_wxSpdUnit, !show);
   if (!show) return;
 
   const lv_img_dsc_t* ic = wxIconFor(g_wx.wmoCode);
@@ -1280,12 +1295,25 @@ static void updateWeatherPill() {
   // and left the gutter fixed at 6, so at -40 C / NW 120 every space on the
   // row was 2-6 px and the whole thing collapsed into one string.
   //
-  // Now the inner gaps are fixed small and the gutter takes ALL the slack. At
-  // the extreme there still is not enough, and the only sheddable thing on the
-  // row is the unit LETTER: the degree ring stays, the C/F goes, and the
-  // 8 px it frees is what buys a legible gutter. Which unit you are in is a
-  // setting you chose, and it is on the settings screen and in /api/state --
-  // the reading is not ambiguous, only unlabelled, and only at the extremes.
+  // Now the inner gaps are fixed small and the gutter takes ALL the slack.
+  //
+  // B1. The wind had NO unit in either system -- unitsSpeedLabel() was written
+  // and never called. On an aviation instrument an unlabelled speed means
+  // KNOTS, and this one is km/h, so "NW 12" was not merely terse, it was
+  // wrong to the audience most likely to read it.
+  //
+  // The row is full, so the unit had to come out of something. Measured: the
+  // temperature group is 52 px and the wind group 54, leaving a 27 px gutter,
+  // and "KMH" is 24 -- it eats the gutter whole. The trade is between the two
+  // units, and only one of the two readings is actually ambiguous without its
+  // label: 21 vs 70 can only be Celsius vs Fahrenheit in habitable weather,
+  // while 12 could be km/h, mph or knots. So the temperature keeps its degree
+  // RING and gives up its letter permanently, and the wind gets a unit.
+  // Label the ambiguous reading, not the obvious one.
+  //
+  // If even that will not fit (-40 with a three-digit wind), shed the wind
+  // ICON rather than the wind unit: the direction beside it already says the
+  // reading is wind, so the pictogram is the most redundant thing in the row.
   //
   // The temperature moves the wind block too -- it is what the block has to
   // clear -- so a change to any of the three re-lays the whole row. unitCh is
@@ -1297,21 +1325,30 @@ static void updateWeatherPill() {
     const int spdW  = txtW(s_bufWspd, F_UI15);
     const int windW = WX_ICON_PX + OV_TOKEN_GAP + dirW + OV_TOKEN_GAP + spdW;
 
-    const char* unit = unitsTempSuffix();
-    int unitW = txtW(unit, F_UI12);
-    if (CONTENT_W - (OV_TEMP_X + tempW + OV_UNIT_GAP + unitW) - windW
-            < OV_GUTTER_MIN) {
-      unit  = "\xC2\xB0";
-      unitW = txtW(unit, F_UI12);
-    }
+    // Wind unit, abbreviated: unitsSpeedLabel() gives "km/h" (35 px) which the
+    // row cannot afford, so the row uses the 3-character form.
+    const char* sUnit = unitsImperial() ? "MPH" : "KMH";
+    const int   sUnitW = txtW(sUnit, F_UI12);
+    setTextCached(s_wxSpdUnit, s_bufWunit, sizeof(s_bufWunit), sUnit);
+
+    const char* unit = "\xC2\xB0";       // ring only -- see the note above
+    const int unitW = txtW(unit, F_UI12);
     setTextCached(s_wxUnit, s_bufUnit, sizeof(s_bufUnit), unit);
     lv_obj_set_x(s_wxUnit, OV_TEMP_X + tempW + OV_UNIT_GAP);
 
-    int x = CONTENT_W - spdW;              // right to left from the edge
+    const int tempEnd = OV_TEMP_X + tempW + OV_UNIT_GAP + unitW;
+    int windW2 = windW + OV_UNIT_GAP + sUnitW;
+    s_windIconFits = (CONTENT_W - tempEnd - windW2) >= OV_GUTTER_MIN;
+    if (!s_windIconFits) windW2 -= WX_ICON_PX + OV_TOKEN_GAP;
+    setHiddenCached(s_wxWindIcon, !s_windIconFits);
+
+    int x = CONTENT_W - sUnitW;            // right to left from the edge
+    lv_obj_set_x(s_wxSpdUnit, x);
+    x -= OV_UNIT_GAP + spdW;
     lv_obj_set_x(s_wxSpd, x);
     x -= OV_TOKEN_GAP + dirW;
     lv_obj_set_x(s_wxDir, x);
-    lv_obj_set_x(s_wxWindIcon, x - OV_TOKEN_GAP - WX_ICON_PX);
+    if (s_windIconFits) lv_obj_set_x(s_wxWindIcon, x - OV_TOKEN_GAP - WX_ICON_PX);
   }
 }
 
