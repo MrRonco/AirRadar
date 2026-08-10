@@ -76,7 +76,21 @@ static const int SEL_TILE_S   = 36;
 // The cached logo bitmap is rendered at exactly this size; if they drift the
 // image overflows the tile and clip_corner shaves its edges.
 static_assert(SEL_TILE_S == LOGO_PX, "logo bitmap must match the tile size");
-static const int SEL_TEXT_X   = 42;            // callsign/op x when logo tile shown
+// The card had FOUR elements on THREE left edges in its top 130 px: tile at 0,
+// callsign and operator at 42, route centred, airframe back at 0. The left rag
+// was visible in every state and the centred route made it worse, being the
+// largest element and the only symmetrical one.
+//
+// The tile now sits top-RIGHT as a corner brand mark -- which is what a
+// monogram is -- and every piece of text rags at 0.
+//
+// NOT promoting the callsign to font_id28 with the freed space, though the
+// review proposed it: the tile still occupies this row, so the callsign gets
+// 96 px, and "ACA184" measures 109 in id28 (SWR9999 is 136). The premise that
+// it would gain the full 136 px was wrong. It stays font_val22.
+static const int SEL_TEXT_X   = 0;
+static const int SEL_TILE_X   = CONTENT_W - SEL_TILE_S;   // 100
+static const int SEL_TEXT_W   = SEL_TILE_X - 6;           // clear of the tile
 static const int SEL_OP_Y     = 26;
 static const int SEL_ROUTE_Y  = 66;
 static const int SEL_ROUTE_H  = 32;
@@ -86,7 +100,20 @@ static const int SEL_HAIR_Y   = 154;
 static const int SEL_GRID_Y1  = 164;
 static const int SEL_GRID_Y2  = 212;
 static const int SEL_VAL_DY   = 14;            // key -> value offset in a grid cell
-static const int SEL_COL2_X   = 75;
+// Columns are RIGHT-aligned, not left-aligned at a shared x. The old
+// SEL_COL2_X = 75 was solved as an arithmetic feasibility problem -- "3.8 px
+// slack in col1" -- and 3.8 px between two 22 px tabular numerals is not a
+// gutter, it is a kerning accident: "FL330 472" read as one number.
+//
+// Measured worst cases in font_val22 (rounded per glyph as LVGL does):
+//   col1  ALT "45000" / V-S "-3072" 70 · DIST "119.9" 62 · key "V/S fpm" 56
+//   col2  SQK "7700" 56 · HDG "359°" 52 · SPD "999" 42 · key "SPD kt" 48
+// Right edges at 70 and 136 therefore clear every combination, and because the
+// figures are tabular the units digits stack into a true column down all three
+// rows. Gutter: 24 px typical, 10 px worst (DIST+SQK), against 3.8 px before.
+static const int SEL_COL1_W   = 70;            // column 1 box: 0..70
+static const int SEL_COL2_X2  = 80;            // left edge of column 2
+static const int SEL_COL2_W   = CONTENT_W - SEL_COL2_X2;
 // Solved, not guessed. font_val22 has tabular figures frozen in, so the MINUS
 // SIGN is 14.25 px -- exactly a digit -- and "-3072" is 5x14.25 = 71.2 px. The
 // two widest values in the grid are ALT "45000" and V/S "-3072", both 71.2 px.
@@ -350,7 +377,17 @@ static void buildOverview(lv_obj_t* parent) {
   s_emergDim = lv_color_mix(C_RED, C_CARD_LO, 140);
 
   mkHair(card, OV_HAIR2_Y, CONTENT_W);
-  mkMicro(card, "NEAREST", 0, OV_NEAR_Y);
+  // C_IVORY2, not the style's C_DIM. This caption is the ONLY thing separating
+  // "the nearest aircraft" from "the selected aircraft" in the card opposite --
+  // two callsign-plus-distance blocks of similar weight -- and at 2 m a 13 px
+  // C_DIM caption is the first thing to disappear. Its opposite number (the
+  // operator line) was lifted for the same reason.
+  //
+  // A matching SELECTED caption on the right card was proposed and does not
+  // fit: content already runs to y 333 of 344, and the tile occupies y 2..38,
+  // so there is no row to put it in without pushing the instrument grid off
+  // the card.
+  lv_obj_set_style_text_color(mkMicro(card, "NEAREST", 0, OV_NEAR_Y), C_IVORY2, 0);
   s_ovNear = mkLbl(card, F_M20, C_IVORY);          // identifier, larger
   lv_obj_set_pos(s_ovNear, 0, OV_NEARNAME_Y);
   s_ovNearD = mkLbl(card, F_UI15, C_IVORY2);       // distance, lighter face
@@ -374,49 +411,62 @@ static void buildOverview(lv_obj_t* parent) {
 // ============================================================
 //  Build — Selected card
 // ============================================================
-static lv_obj_t* mkGridCell(lv_obj_t* p, int x, int y, const char* key) {
-  mkMicro(p, key, x, y);
+// x/w describe the column BOX; both key and value are flush to its right edge.
+// Right-aligned numerics under a right-aligned key is the instrument idiom, and
+// it is what makes tabular figures pay off.
+static lv_obj_t* mkGridCell(lv_obj_t* p, int x, int w, int y, const char* key) {
+  lv_obj_t* k = mkMicro(p, key, x, y);
+  lv_obj_set_width(k, w);
+  lv_obj_set_style_text_align(k, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_t* v = mkLbl(p, F_M20, C_IVORY);
+  lv_obj_set_width(v, w);
+  lv_obj_set_style_text_align(v, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_set_pos(v, x, y + SEL_VAL_DY);
   return v;
 }
 
 static void buildSelectedTop(lv_obj_t* cont) {
   s_selTile = mkBox(cont);
-  lv_obj_set_pos(s_selTile, 0, SEL_TILE_Y);
+  lv_obj_set_pos(s_selTile, SEL_TILE_X, SEL_TILE_Y);
   lv_obj_set_size(s_selTile, SEL_TILE_S, SEL_TILE_S);
-  lv_obj_set_style_radius(s_selTile, 12, 0);
+  lv_obj_set_style_radius(s_selTile, R_MD, 0);
   lv_obj_set_style_bg_color(s_selTile, C_CARD_HI, 0);
   lv_obj_set_style_bg_opa(s_selTile, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(s_selTile, lv_color_white(), 0);
   lv_obj_set_style_border_opa(s_selTile, 46, 0);
   lv_obj_set_style_border_width(s_selTile, 1, 0);
   lv_obj_set_style_clip_corner(s_selTile, true, 0);   // logo respects radius 12
-  s_selIni = mkLbl(s_selTile, F_UI15, lv_color_white());  // 3 chars must
-                                                       // fit 36 px
+  // F_MONO13, not F_UI15. The old comment asserted "3 chars must fit 36 px" and
+  // it was simply untrue: font_body18 is proportional, so of twelve common ICAO
+  // codes NINE overflow the 34 px opening -- SWR 42, MMM 48, BAW 42, and ACA,
+  // the most common carrier here, 37. clip_corner was shaving a slice off both
+  // sides of nearly every monogram. micro13 is monospace at 8 px/glyph, so all
+  // three characters land in 24 px with room to spare, for any code.
+  s_selIni = mkLbl(s_selTile, F_MONO13, lv_color_white());
   lv_obj_align(s_selIni, LV_ALIGN_CENTER, 0, 0);
   s_selLogoImg = lv_img_create(s_selTile);            // real airline logo when cached
   lv_obj_align(s_selLogoImg, LV_ALIGN_CENTER, 0, 0);
   lv_obj_add_flag(s_selLogoImg, LV_OBJ_FLAG_HIDDEN);
 
-  // F_L28 needed ~102 px for a 6-glyph callsign in an 88 px slot, so "ACA306"
-  // lost its last character. F_M20 fits 7 glyphs with room to spare.
   s_selCallsign = mkLbl(cont, F_M20, C_IVORY);
   lv_label_set_long_mode(s_selCallsign, LV_LABEL_LONG_CLIP);
   lv_obj_set_pos(s_selCallsign, SEL_TEXT_X, SEL_TILE_Y - 2);
-  lv_obj_set_width(s_selCallsign, CONTENT_W - SEL_TEXT_X);
-  s_selOp = mkLbl(cont, F_UI12, C_DIM);
-  lv_label_set_long_mode(s_selOp, LV_LABEL_LONG_DOT);
+  lv_obj_set_width(s_selCallsign, SEL_TEXT_W);
+  s_selOp = mkLbl(cont, F_UI12, C_IVORY2);   // was C_DIM: the caption that
+  lv_label_set_long_mode(s_selOp, LV_LABEL_LONG_DOT);   //  identifies the card
   lv_obj_set_pos(s_selOp, SEL_TEXT_X, SEL_OP_Y);
-  lv_obj_set_width(s_selOp, CONTENT_W - SEL_TEXT_X);
+  lv_obj_set_width(s_selOp, SEL_TEXT_W);
 
   s_selRoute = mkBox(cont);
   lv_obj_set_pos(s_selRoute, 0, SEL_ROUTE_Y);
   lv_obj_set_size(s_selRoute, CONTENT_W, SEL_ROUTE_H);
-  // Centred flex row. Pinning origin hard-left and destination hard-right left
-  // the arrow floating with a much bigger gap on one side than the other.
+  // Left-aligned, joining the single text edge. It was centred, which made it
+  // the only symmetrical element in a left-ragged column -- the largest thing
+  // in the card sitting off the axis everything else shares. Pinning origin
+  // hard-left and destination hard-right is still wrong (the arrow floats), so
+  // the row packs from the left with a fixed gap.
   lv_obj_set_flex_flow(s_selRoute, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(s_selRoute, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+  lv_obj_set_flex_align(s_selRoute, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
                         LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(s_selRoute, 7, 0);
   s_selOrigin = mkLbl(s_selRoute, F_M20, C_IVORY);
@@ -438,18 +488,18 @@ static void buildSelectedTop(lv_obj_t* cont) {
 
 static void buildSelectedBottom(lv_obj_t* cont) {
   mkHair(cont, SEL_HAIR_Y, CONTENT_W);
-  s_selAlt   = mkGridCell(cont, 0,          SEL_GRID_Y1, "ALT ft");
-  s_selSpd   = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y1, "SPD kt");
-  // V/S in column 1, HDG in column 2 -- see the note on SEL_COL2_X. V/S is the
-  // widest value in the card and column 1 is the only one that can hold it.
-  s_selClimb = mkGridCell(cont, 0,          SEL_GRID_Y2, "V/S fpm");
-  s_selHdg   = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y2, "HDG");
+  s_selAlt   = mkGridCell(cont, 0,            SEL_COL1_W, SEL_GRID_Y1, "ALT ft");
+  s_selSpd   = mkGridCell(cont, SEL_COL2_X2,   SEL_COL2_W, SEL_GRID_Y1, "SPD kt");
+  // V/S stays in column 1: it ties with ALT for the widest value in the card,
+  // and column 1 is the wider of the two.
+  s_selClimb = mkGridCell(cont, 0,            SEL_COL1_W, SEL_GRID_Y2, "V/S fpm");
+  s_selHdg   = mkGridCell(cont, SEL_COL2_X2,   SEL_COL2_W, SEL_GRID_Y2, "HDG");
 
   // Same two-column grid as ALT/SPD and V-S/HDG, then a rule before the status
   // line — previously these were full-width label/value rows in a different
   // style and the status line ran straight on with nothing separating it.
-  s_selDist = mkGridCell(cont, 0,          SEL_GRID_Y3, "DIST km");
-  s_selSqk  = mkGridCell(cont, SEL_COL2_X, SEL_GRID_Y3, "SQK");
+  s_selDist = mkGridCell(cont, 0,            SEL_COL1_W, SEL_GRID_Y3, "DIST km");
+  s_selSqk  = mkGridCell(cont, SEL_COL2_X2,   SEL_COL2_W, SEL_GRID_Y3, "SQK");
   mkHair(cont, SEL_HAIR2_Y, CONTENT_W);
 
   s_selDot = mkBox(cont);
