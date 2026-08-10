@@ -397,11 +397,12 @@ static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked) {
   // were 11 px mono over a map, and they were what pushed the label past the
   // clip edge. The white selection ring is the marker; the card is the readout.
   // F27: a watchlist hit used to be marked by painting the callsign gold
-  // (#ffd77a) -- three units of hue away from the altitude amber (#ffc061)
-  // that every aircraft below 10,000 ft already wears, 20 px from it, at 2 m.
-  // They are the same colour at that distance, and hue was carrying two
-  // unrelated meanings. Mark it by FORM instead: brackets, which survive any
-  // viewing distance the text itself survives, and hand hue back to altitude.
+  // (#ffd77a) -- barely separable from the altitude amber (#ffc061) that every
+  // aircraft below 10,000 ft already wears, 20 px away. Two warm yellows on
+  // 13 px text over a map whose own colour varies underneath them is not a
+  // channel that can carry a distinction, and hue was being asked to mean two
+  // unrelated things at once. Mark it by FORM instead -- brackets -- and hand
+  // hue back to altitude.
   const bool watched = trackOnWatchlist(t);
   const char* name = t.flight[0] ? t.flight : t.hex;
   char txt[16];

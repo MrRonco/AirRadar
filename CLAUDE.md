@@ -324,6 +324,32 @@ firmware update. Entry names are limited to **`font_body18`'s subset**
 dash is U+2014 and renders as a tofu box on the panel while looking perfectly
 fine in the web UI.
 
+## How it is actually read — measured, not assumed
+
+**The panel sits on a desk, under a metre from the reader (~0.9 m / 3 ft).**
+This is written down because it was once *assumed* to be a 1–3 m ambient wall
+display, that assumption reached two full design reviews and six source
+comments, and it was wrong. At 0.9 m the six faces subtend:
+
+| face | cap height | angular size |
+|---|---|---|
+| `font_micro13` | 1.72 mm | 6.5′ |
+| `font_body18` | 2.48 mm | 9.3′ |
+| `font_val22` | 3.05 mm | 11.5′ |
+| `font_id28` | 4.00 mm | 15.1′ |
+| `font_clock36` | 4.96 mm | 18.6′ |
+| `font_hero56` | 8.39 mm | 31.5′ |
+
+(20/20 resolves ~5′; ISO 9241-303 puts comfortable reading at 16–22′; 11 pt
+body text on a laptop at 500 mm is ~18.6′.) So **nothing on the panel is
+unresolvable** — the small faces are small but legible, and the display has
+headroom for *more* information rather than less. Arguments of the form "X
+disappears at distance" do not apply here and should be treated as suspect.
+Pixel pitch is **0.1906 mm** (177.8 mm diagonal over 933 px).
+
+Touch is the exception: a target's size in millimetres is what it is
+regardless of distance, and a fingertip is 8–10 mm.
+
 ## Conventions
 
 - All geometry, timings and NVS keys are named in `config.h` — no magic numbers
@@ -339,9 +365,10 @@ fine in the web UI.
   `C_DIM` key, `C_MUTE` meta (units, timers, registration, the PM suffix).
   Status footers are readings, so they stay untracked.
 - **Never mark by hue alone when the hue is already taken.** Watchlist gold
-  (#ffd77a) and altitude amber (#ffc061) are the same colour at 2 m; the
-  watchlist is marked by *form* (brackets) so hue means altitude and nothing
-  else.
+  (#ffd77a) and altitude amber (#ffc061) are two warm yellows on 13 px text
+  over a map whose own colour varies underneath them — not a channel that can
+  carry a distinction. The watchlist is marked by *form* (brackets) so hue
+  means altitude and nothing else.
 - The **desktop harness** (`desktop/`) compiles these same `ui_*.cpp` against
   SDL2 and renders every screen and seven scenarios headless in ~2 s. Use it
   for anything about layout, typography or state; it says nothing about DMA,

@@ -454,9 +454,10 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_style_pad_ver(s_ovEmergBox, 4, 0);
   lv_obj_set_style_pad_hor(s_ovEmergBox, 8, 0);
   // Two labels, not one. The whole alarm used to be a single 11 px mono string
-  // -- which does not resolve at 2 m at all, so the red bar did the work and
-  // "! 7600 ACA337" was decoration. The squawk now uses font_val22, whose
-  // tabular digits are already in the subset, and reads across a room.
+  // -- the same size as a grid key -- so the red bar did all the work and
+  // "! 7600 ACA337" was decoration on it. An alarm should be the loudest thing
+  // in the card, not the quietest; the squawk now uses font_val22, whose
+  // tabular digits are already in the subset.
   s_ovEmergSqk = mkLbl(s_ovEmergBox, F_M20, C_ALERT);
   lv_obj_align(s_ovEmergSqk, LV_ALIGN_LEFT_MID, 0, 0);
   s_ovEmergLbl = mkLbl(s_ovEmergBox, F_MONO11, C_ALERT);
@@ -469,9 +470,9 @@ static void buildOverview(lv_obj_t* parent) {
   mkHair(card, OV_HAIR2_Y, CONTENT_W);
   // C_IVORY2, not the style's C_DIM. This caption is the ONLY thing separating
   // "the nearest aircraft" from "the selected aircraft" in the card opposite --
-  // two callsign-plus-distance blocks of similar weight -- and at 2 m a 13 px
-  // C_DIM caption is the first thing to disappear. Its opposite number (the
-  // operator line) was lifted for the same reason.
+  // two callsign-plus-distance blocks of near-identical weight -- so it is
+  // doing a heading's job and had been given a key's rank. Its opposite number
+  // (the operator line) was lifted for the same reason.
   //
   // A matching SELECTED caption on the right card was proposed and does not
   // fit: content already runs to y 333 of 344, and the tile occupies y 2..38,
@@ -647,9 +648,10 @@ static void buildTimeCard(lv_obj_t* parent) {
   lv_obj_add_style(card, &st_card, 0);
   lv_obj_set_pos(card, CLOCK_X, CARD_BOT_Y);
   lv_obj_set_size(card, CARD_W, CARD_SHORT_H);
-  // C_IVORY2, not C_IVORY. At 2 m the reading order was hero count -> CLOCK ->
-  // callsign -> the scope, so the instrument came fourth, behind the time. One
-  // rank quieter moves the scope up a place at zero layout cost.
+  // C_IVORY2, not C_IVORY. A 36 px numeral at full ivory outranked everything
+  // except the hero count, so the reading order ran hero -> CLOCK -> callsign
+  // -> the scope and the instrument came fourth, behind the time. One rank
+  // quieter moves the scope up a place at zero layout cost.
   s_tmTime = mkLbl(card, F_NUM36, C_IVORY2);
   lv_obj_center(s_tmTime);      // the date moved into the Overview header
   // font_clock36 is digits and ':' only — deliberately, it is a tabular clock
@@ -818,8 +820,9 @@ static void updateOverview(uint32_t nowMs) {
   // When EVERY track is coasting, the hero numeral was still rendered in
   // C_IVORY -- identical to a fully live count -- so a screen showing nothing
   // but dead-reckoned fiction looked exactly like a healthy one. The only cue
-  // was a 7 px amber dot, invisible at 2 m. Amber is already the stale
-  // semantic, is not green, and is not the reserved red.
+  // was a 7 px amber dot in the status footer -- the smallest mark on the card
+  // carrying the largest caveat. Amber is already the stale semantic, is not
+  // green, and is not the reserved red.
   const bool filtered = (g_set.filtCls != AR_FILT_CLS_ALL) ||
                         g_set.filtAltLo || g_set.filtAltHi ||
                         g_set.watchlist.length();
