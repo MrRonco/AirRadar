@@ -9,14 +9,17 @@ draws the sky above your house on a 7-inch panel.
 
 [![firmware](https://img.shields.io/badge/firmware-v7.2.6-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
-<img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map under a coverage disc ringed by a graduated bearing bezel, twenty violet altitude-coloured aircraft with their callsigns, a traffic sparkline in the left card, and an Air Canada A220 pinned in the right-hand card with its logo, its Edmonton to Montreal route and a live instrument grid">
+<img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map under a coverage disc ringed by a graduated bearing bezel, twenty aircraft with their callsigns, three of them greyed and prefixed with a tilde to mark dead-reckoned positions, a full hour of traffic history as a sparkline in the left card, and an Air Canada 787 pinned in the right-hand card with its logo, its Sydney to Vancouver route and a live instrument grid">
 
 <sub>Live capture off the device via <code>GET /screen.bmp</code> — the actual framebuffer, not a
-mockup, and not a rendering of one. Twenty aircraft on an ordinary afternoon; an Air Canada A220 is
-pinned, so the right-hand card carries its operator logo, route, airframe and a live instrument
-grid. In the left card, <b>LAST HOUR</b> is a sparkline of aircraft-in-range per minute (short here
-— the device had been up fifteen minutes), and the nearest target reads <code>OUTBOUND</code>
-rather than a bare distance. The disc is ringed by a bearing scale graduated every 10°.</sub>
+mockup, and not a rendering of one. Twenty aircraft on an ordinary afternoon; the pinned target is
+a Boeing 787 eleven hours into <b>Sydney → Vancouver</b>, so the right-hand card carries its
+operator logo, route, airframe and a live instrument grid. The sparkline in the left card is a full
+hour of aircraft-in-range, one bar per minute. Three callsigns are greyed and prefixed <code>~</code>:
+those positions are dead-reckoned from the last known heading rather than reported, and the panel
+says so instead of drawing them like the rest. The row above the sparkline reads
+<code>6&nbsp;COASTING</code> rather than <code>LAST HOUR</code> — the two share the slot, and the
+count wins whenever there is one. The disc is ringed by a bearing scale graduated every 10°.</sub>
 
 </div>
 
