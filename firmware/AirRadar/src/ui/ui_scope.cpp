@@ -35,12 +35,29 @@ static const int   HOLDER_SZ    = 34;           // = glow / selection-ring size
 static const int   HOLDER_HALF  = HOLDER_SZ / 2;
 static const int   JET_SZ       = 26;           // img_jet, pivot at centre
 static const int   MIL_BOX_SZ   = 30;
-static const int   LBL_W        = 118;          // 13 px mono needs more than 11 px did
-static const int   LBL_H        = 28;           // two F_MONO11 lines
+// ONE line, sized to a callsign. It used to be 118x28 to hold a second line
+// ("FL330 · 147 km") that only the SELECTED target ever showed -- and both of
+// those values sit in the Selected card in 22 px type, where they are far more
+// legible than 11 px mono over a map. Dropping the line removed the redundancy
+// AND the clipping: the box is now 9 monospace glyphs, which covers every ICAO
+// flight id (max 7) and every registration fallback.
+static const int   LBL_W        = 72;
+static const int   LBL_H        = 14;           // one F_MONO11 line
 static const lv_opa_t SEL_RING_OPA = 210;
 static const lv_opa_t MIL_BOX_OPA  = 170;
-static const int   LBL_OFF_X    = HOLDER_SZ + 4; // label right of the jet
+static const int   LBL_OFF_X    = HOLDER_SZ + 4; // label beside the jet
 static const int   LBL_OFF_Y    = 10;
+// The label sits on whichever side keeps it inside the disc. Targets in the
+// eastern third used to have their callsign shaved by the clip container --
+// and because the selected target carried the widest label, the failure landed
+// on the element that most needs to look authoritative.
+//
+// Rule 12: the holder must BOUND its children, so supporting a left-side label
+// means a symmetric holder. Sized from the blip centre outward, that is
+// LBL_GAP + LBL_W each way. Net area against the old asymmetric box is +14%,
+// because halving the height pays back most of the extra width -- but it IS an
+// increase in per-glide invalidation and wants a /api/stalls check on hardware.
+static const int   LBL_GAP      = LBL_OFF_X - HOLDER_HALF;   // 21 px from centre
 // The holder must BOUND every child. lv_obj_move_to() invalidates only the
 // holder's own rect (lv_obj_move_children_by shifts children without
 // invalidating them), so a label hanging outside it left a stale ghost at the
@@ -53,8 +70,13 @@ static const int   LBL_OFF_Y    = 10;
 // ~1.4 px on each side. With OVERFLOW_VISIBLE gone the parent clips children,
 // so the cluster gets a pad and the blip centre moves to HOLDER_CX.
 static const int   CLUSTER_PAD  = 3;
-static const int   HOLDER_CX    = CLUSTER_PAD + HOLDER_HALF;  // blip centre, holder coords
-static const int   HOLDER_W     = CLUSTER_PAD + LBL_OFF_X + LBL_W;
+// The blip centre inside the holder. X and Y are NOT the same any more: the
+// holder became symmetric horizontally to allow a left-side label, but its
+// height is unchanged, so reusing CX for the vertical placement would hoist
+// every blip by 73 px.
+static const int   HOLDER_CX    = LBL_GAP + LBL_W;
+static const int   HOLDER_CY    = CLUSTER_PAD + HOLDER_HALF;
+static const int   HOLDER_W     = 2 * HOLDER_CX;
 static const int   HOLDER_H     = (CLUSTER_PAD + LBL_OFF_Y + LBL_H
                                      > 2 * CLUSTER_PAD + HOLDER_SZ)
                                     ? (CLUSTER_PAD + LBL_OFF_Y + LBL_H)
@@ -74,7 +96,13 @@ static const uint32_t POOL_WARN_MIN_MS = 5000;  // rate-limit pool-full log
 // walk targets nearest-first and grant a label only when nothing already
 // labelled sits within LABEL_MIN_SEP_PX. Selection, watchlist and emergency
 // are granted unconditionally and are seeded first so they win any contest.
-static const int LABEL_MIN_SEP_PX = 46;
+// The clash test used to be isotropic -- dx^2 + dy^2 < 46^2 -- while the ink it
+// protects is a wide, short rectangle: LBL_GAP + LBL_W across and one line
+// tall. Wrong shape in BOTH directions, so two labels 60 px apart horizontally
+// passed the test and overprinted, while labels that would have stacked
+// perfectly well vertically were refused. The test is now the ink's own box.
+static const int LABEL_CLASH_X = LBL_GAP + LBL_W;
+static const int LABEL_CLASH_Y = LBL_H + 4;
 static const int LABEL_MAX        = 8;    // ink ceiling regardless of spacing
 
 // 45deg-NE centre offsets for the two range labels (from container centre)
@@ -82,6 +110,14 @@ static const int RING_LBL_FULL_OFF =
     (int)((SCOPE_R - RING_LBL_INSET) * DIAG_45);
 static const int RING_LBL_MID_OFF =
     (int)((RING_MID_D / 2 - RING_LBL_INSET) * DIAG_45);
+
+// The two range numerals, in clip coordinates: 45 deg NE of centre. They are
+// ink on the same field, so they are avoided both by the declutter pass and by
+// the side chooser below.
+static const float kRsvX[2] = { (float)(SCOPE_R + RING_LBL_FULL_OFF),
+                                (float)(SCOPE_R + RING_LBL_MID_OFF) };
+static const float kRsvY[2] = { (float)(SCOPE_R - RING_LBL_FULL_OFF),
+                                (float)(SCOPE_R - RING_LBL_MID_OFF) };
 
 // ---------- blip pool ----------
 struct Blip {
@@ -103,7 +139,9 @@ struct Blip {
   int16_t   cAngle;
   bool      cGlowHid, cSelHid, cMilHid, cLblHid;
   bool      cLblGold;
-  char      cLbl[40];
+  bool      cLblLeft;   // label mirrored to the inboard side of the disc
+  lv_opa_t  cLblOpa;    // fades with the glyph while coasting
+  char      cLbl[16];
 };
 static Blip s_blips[AR_MAX_TRACKS];
 
@@ -193,12 +231,12 @@ static void blipCreateObjects(Blip& b) {
   // — blipPlace() centres the blip by offsetting HOLDER_CX.
   b.glow = lv_img_create(b.holder);
   lv_img_set_src(b.glow, &img_glow);
-  lv_obj_set_pos(b.glow, CLUSTER_PAD, CLUSTER_PAD);
+  lv_obj_set_pos(b.glow, HOLDER_CX - HOLDER_HALF, CLUSTER_PAD);
   lv_obj_set_style_img_recolor_opa(b.glow, LV_OPA_COVER, 0);
 
   b.selRing = makeRing(b.holder, HOLDER_SZ, C_IVORY, SEL_RING_OPA);
   lv_obj_align(b.selRing, LV_ALIGN_TOP_LEFT,           // makeRing centres by default
-               CLUSTER_PAD, CLUSTER_PAD);
+               HOLDER_CX - HOLDER_HALF, CLUSTER_PAD);
   lv_obj_add_flag(b.selRing, LV_OBJ_FLAG_HIDDEN);
 
   b.milBox = lv_obj_create(b.holder);
@@ -210,19 +248,19 @@ static void blipCreateObjects(Blip& b) {
   lv_obj_set_style_border_opa(b.milBox, MIL_BOX_OPA, 0);
   makeInert(b.milBox);
   lv_obj_align(b.milBox, LV_ALIGN_TOP_LEFT,
-               CLUSTER_PAD + (HOLDER_SZ - MIL_BOX_SZ) / 2,
+               HOLDER_CX - MIL_BOX_SZ / 2,
                CLUSTER_PAD + (HOLDER_SZ - MIL_BOX_SZ) / 2);
   lv_obj_add_flag(b.milBox, LV_OBJ_FLAG_HIDDEN);
 
   b.jet = lv_img_create(b.holder);
   lv_img_set_src(b.jet, &img_jet);
-  lv_obj_set_pos(b.jet, CLUSTER_PAD + (HOLDER_SZ - JET_SZ) / 2,
+  lv_obj_set_pos(b.jet, HOLDER_CX - JET_SZ / 2,
                         CLUSTER_PAD + (HOLDER_SZ - JET_SZ) / 2);
   lv_img_set_pivot(b.jet, JET_SZ / 2, JET_SZ / 2);
   lv_obj_set_style_img_recolor_opa(b.jet, LV_OPA_COVER, 0);
 
   b.lbl = makeMicroLabel(b.holder, "", C_IVORY2);
-  lv_obj_set_pos(b.lbl, CLUSTER_PAD + LBL_OFF_X, CLUSTER_PAD + LBL_OFF_Y);
+  lv_obj_set_pos(b.lbl, HOLDER_CX + LBL_GAP, CLUSTER_PAD + LBL_OFF_Y);
   lv_obj_set_size(b.lbl, LBL_W, LBL_H);        // fixed box: no SIZE_CONTENT growth
   lv_label_set_long_mode(b.lbl, LV_LABEL_LONG_CLIP);
 
@@ -273,12 +311,37 @@ static void blipGlide(lv_obj_t* o, lv_anim_exec_xcb_t cb, int32_t from,
   lv_anim_start(&a);
 }
 
+// Put the label on whichever side keeps it inside the disc. Called from
+// blipPlace because that is where the screen position is known.
+static void blipLabelSide(Blip& b, int cx, int cy) {
+  // Prefer the right, flip for the disc edge, and flip again if the right side
+  // would land on a range numeral. A must-have label (selected, watchlist,
+  // emergency) skips the declutter pass entirely, so without this the SELECTED
+  // target -- the one that most needs to be readable -- was the one printing
+  // over "250".
+  bool left = (cx + LBL_GAP + LBL_W) > (SCOPE_D - 2);
+  if (!left) {
+    for (int k = 0; k < 2; k++) {
+      if (fabsf(kRsvX[k] - (float)cx) < (float)LABEL_CLASH_X &&
+          fabsf(kRsvY[k] - (float)cy) < (float)LABEL_CLASH_Y &&
+          kRsvX[k] >= (float)cx) { left = true; break; }
+    }
+  }
+  if (b.cInit && b.cLblLeft == left) return;      // change-cached: a no-op
+  b.cLblLeft = left;                              //  set_pos still invalidates
+  lv_obj_set_x(b.lbl, left ? (HOLDER_CX - LBL_GAP - LBL_W)
+                           : (HOLDER_CX + LBL_GAP));
+  lv_obj_set_style_text_align(b.lbl, left ? LV_TEXT_ALIGN_RIGHT
+                                          : LV_TEXT_ALIGN_LEFT, 0);
+}
+
 // cx/cy = desired blip centre in clip-container coordinates.
 static void blipPlace(Blip& b, int cx, int cy, bool isNew) {
+  blipLabelSide(b, cx, cy);
   if (isNew) {
     lv_anim_del(b.holder, blipAnimX);
     lv_anim_del(b.holder, blipAnimY);
-    lv_obj_set_pos(b.holder, cx - HOLDER_CX, cy - HOLDER_CX);
+    lv_obj_set_pos(b.holder, cx - HOLDER_CX, cy - HOLDER_CY);
     lv_obj_clear_flag(b.holder, LV_OBJ_FLAG_HIDDEN);
     b.tgtX = (int16_t)cx;
     b.tgtY = (int16_t)cy;
@@ -293,7 +356,7 @@ static void blipPlace(Blip& b, int cx, int cy, bool isNew) {
   lv_anim_del(b.holder, blipAnimX);
   lv_anim_del(b.holder, blipAnimY);
   blipGlide(b.holder, blipAnimX, lv_obj_get_x(b.holder), cx - HOLDER_CX);
-  blipGlide(b.holder, blipAnimY, lv_obj_get_y(b.holder), cy - HOLDER_CX);
+  blipGlide(b.holder, blipAnimY, lv_obj_get_y(b.holder), cy - HOLDER_CY);
 }
 
 static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked) {
@@ -304,21 +367,13 @@ static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked) {
     b.cLblHid = !show;
   }
   if (!show) return;
-  const char* name = t.flight[0] ? t.flight : t.hex;
-  char txt[40];
-  if (selected) {
-    float dKm = haversineKm(g_set.homeLat, g_set.homeLon, t.lat, t.lon);
-    char dist[12];
-    if (dKm < 10.0f) snprintf(dist, sizeof(dist), "%.1f", dKm);
-    else             snprintf(dist, sizeof(dist), "%.0f", dKm);
-    if (t.altFt >= 0)
-      snprintf(txt, sizeof(txt), "%s\nFL%03d · %s km", name, t.altFt / 100,
-               dist);
-    else
-      snprintf(txt, sizeof(txt), "%s\n--- · %s km", name, dist);
-  } else {
-    strlcpy(txt, name, sizeof(txt));
-  }
+  // One line, always. The selected target used to get a second line carrying
+  // its flight level and distance -- both of which the Selected card already
+  // shows in 22 px tabular type a few hundred pixels away. On the scope they
+  // were 11 px mono over a map, and they were what pushed the label past the
+  // clip edge. The white selection ring is the marker; the card is the readout.
+  char txt[16];
+  strlcpy(txt, t.flight[0] ? t.flight : t.hex, sizeof(txt));
   if (!b.cInit || strcmp(txt, b.cLbl) != 0) {
     strlcpy(b.cLbl, txt, sizeof(b.cLbl));
     lv_label_set_text(b.lbl, txt);
@@ -330,7 +385,8 @@ static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked) {
   }
 }
 
-static void blipStyle(Blip& b, const Track& t, uint32_t nowMs, bool ranked) {
+static void blipStyle(Blip& b, const Track& t, uint32_t nowMs, bool ranked,
+                      bool nearest) {
   bool selected  = g_selHex[0] && !strcmp(t.hex, g_selHex);
   bool emergency = sqIsEmergency(t.squawk);
   // Signed: applyPending can stamp lastApiMs a hair AFTER our caller's nowMs;
@@ -353,16 +409,28 @@ static void blipStyle(Blip& b, const Track& t, uint32_t nowMs, bool ranked) {
     lv_img_set_angle(b.jet, angle);
   }
 
+  // The label fades WITH the glyph. Only the glyph used to dim, so a coasting
+  // target's callsign rendered byte-identical to a live one's -- the legend
+  // promises "faded = position estimated" and half the mark was not keeping it.
   lv_opa_t jetOpa = coasting ? COAST_OPA : LV_OPA_COVER;
+  if (!b.cInit || b.cLblOpa != jetOpa) {
+    b.cLblOpa = jetOpa;
+    lv_obj_set_style_text_opa(b.lbl, jetOpa, 0);
+  }
   if (emergency) jetOpa = ((nowMs / BLINK_HALF_MS) & 1) ? BLINK_HI : BLINK_LO;
   if (!b.cInit || jetOpa != b.cOpa) {
     b.cOpa = jetOpa;
     lv_obj_set_style_img_opa(b.jet, jetOpa, 0);
   }
 
-  if (!b.cInit || b.cGlowHid != coasting) {
-    b.cGlowHid = coasting;
-    setHidden(b.glow, coasting);
+  // Emphasis only. A 34 px halo on every blip merges into a smear once a dozen
+  // targets are up -- and when everything is emphasised nothing is. Above ~12
+  // tracks this also SHRINKS per-tick invalidation, so it pays for itself.
+  const bool glowOn = !coasting && (selected || trackOnWatchlist(t) ||
+                                    sqIsEmergency(t.squawk) || nearest);
+  if (!b.cInit || b.cGlowHid != !glowOn) {
+    b.cGlowHid = !glowOn;
+    setHidden(b.glow, !glowOn);
   }
   if (!b.cInit || b.cSelHid != !selected) {
     b.cSelHid = !selected;
@@ -552,7 +620,14 @@ void scopeUpdate(uint32_t nowMs) {
   bool  ranked[AR_MAX_TRACKS] = {false};
   float lx[LABEL_MAX], ly[LABEL_MAX];
   int   nLbl = 0;
-  const float sep2 = (float)LABEL_MIN_SEP_PX * (float)LABEL_MIN_SEP_PX;
+  // The two range numerals are ink on the same field and were never in the
+  // clash test, so a callsign could land straight on top of one -- which only
+  // became obvious once they stopped being C_FAINT and could actually be seen.
+  // They sit at 45 deg NE of centre, and they are RESERVED rather than counted:
+  // LABEL_MAX is a budget for callsigns, not for chrome.
+  // kRsv* are CLIP coordinates; this loop works in SCREEN coordinates, so the
+  // comparison has to be made in one space. Getting this wrong produced a
+  // spurious clash that silently cost a label.
   for (int pass = 0; pass < 2; pass++) {
     for (int oi = 0; oi < g_orderN && nLbl < LABEL_MAX; oi++) {
       int idx = g_orderIdx[oi];
@@ -565,9 +640,14 @@ void scopeUpdate(uint32_t nowMs) {
       if (!scopeToScreen(t.lat, t.lon, sx, sy)) continue;
       if (!must) {
         bool clash = false;
+        const float cxL = sx - SCOPE_X0, cyL = sy - SCOPE_Y0;
+        for (int k = 0; k < 2 && !clash; k++) {
+          if (fabsf(kRsvX[k] - cxL) < LABEL_CLASH_X &&
+              fabsf(kRsvY[k] - cyL) < LABEL_CLASH_Y) clash = true;
+        }
         for (int k = 0; k < nLbl && !clash; k++) {
-          float dx = lx[k] - sx, dy = ly[k] - sy;
-          if (dx * dx + dy * dy < sep2) clash = true;
+          if (fabsf(lx[k] - sx) < LABEL_CLASH_X &&
+              fabsf(ly[k] - sy) < LABEL_CLASH_Y) clash = true;
         }
         if (clash) continue;
       }
@@ -590,7 +670,10 @@ void scopeUpdate(uint32_t nowMs) {
     Blip& b = s_blips[slot];
     blipPlace(b, (int)lroundf(sx) - SCOPE_X0, (int)lroundf(sy) - SCOPE_Y0,
               isNew);
-    blipStyle(b, t, nowMs, ranked[i]);
+    // This loop walks track SLOTS, so "nearest" is the slot g_orderIdx[0]
+    // names -- g_orderIdx is the distance-sorted index, not this loop's cursor.
+    const bool isNear = (g_orderN > 0 && g_orderIdx[0] == i);
+    blipStyle(b, t, nowMs, ranked[i], isNear);
   }
 
   for (int i = 0; i < AR_MAX_TRACKS; i++)

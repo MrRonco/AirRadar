@@ -148,6 +148,7 @@ static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24];
 static char s_bufNear[12], s_bufNearD[24], s_bufFeed[12], s_bufSrc[24];
 static lv_color_t s_colSrc = {};
+static lv_color_t s_colCount = {};
 static lv_color_t s_colEmerg = {};
 static lv_color_t s_emergDim;                  // computed at build
 
@@ -637,6 +638,13 @@ static void updateOverview(uint32_t nowMs) {
     snprintf(b, sizeof(b), "%d COASTING", coasting);
     setTextCached(s_ovHeard, s_bufHeard, sizeof(s_bufHeard), b);
   }
+  // When EVERY track is coasting, the hero numeral was still rendered in
+  // C_IVORY -- identical to a fully live count -- so a screen showing nothing
+  // but dead-reckoned fiction looked exactly like a healthy one. The only cue
+  // was a 7 px amber dot, invisible at 2 m. Amber is already the stale
+  // semantic, is not green, and is not the reserved red.
+  const bool allCoasting = (g_orderN > 0 && coasting == g_orderN);
+  setColorCached(s_ovCount, &s_colCount, allCoasting ? C_AMBER : C_IVORY);
 
   updateEmergencyStrip(nowMs);
 
