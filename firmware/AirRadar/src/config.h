@@ -193,6 +193,12 @@
 #define K_NIGHT_FROM "nightfr"  // minutes since midnight (e.g. 1380 = 23:00)
 #define K_NIGHT_TO  "nightto"   // minutes since midnight (e.g. 360 = 06:00)
 #define K_WX_EN     "wxen"      // weather strip on/off
+// Night mode: how long a tap keeps the backlight up, and how long a newly
+// seen emergency squawk does. Both are one-shots, not toggles -- the panel
+// returns to dark on its own.
+#define AR_NIGHT_WAKE_MS   (30 * 1000)
+#define AR_NIGHT_ALERT_MS  (60 * 1000)
+
 #define K_UNITS     "units"     // 0 = metric, 1 = imperial. DISPLAY ONLY --
                                 //  g_wx.tempC, g_set.rangeKm, /api/state and
                                 //  MQTT all stay metric. See core/units.h.

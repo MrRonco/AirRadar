@@ -31,6 +31,8 @@
 static uint32_t s_lastUiTick   = 0;
 static uint32_t s_lastPosTick  = 0;
 static uint32_t s_lastNightChk = 0;
+static uint32_t s_wakeUntilMs  = 0;   // quiet-hours reprieve; 0 = none pending
+static char     s_nightAlertHex[8] = "";   // emergency already woken for
 
 static void applyStaticIpIfSet() {
   if (!g_set.netStatic) return;
@@ -189,20 +191,60 @@ void loop() {
   }
   #undef STAGE
 
-  // Night mode: backlight off during quiet hours, any touch wakes it
+  // ---- Night mode ----------------------------------------------------
+  // Tap-to-wake used to last less than a second. The wake below turned the
+  // backlight on; the check above turned it straight back off on its next
+  // 1 s tick unless a finger was STILL on the glass, because the only thing
+  // keeping it lit was halTouchRead() returning true in that instant. There
+  // was no timer. Quiet hours default to seven hours a day, so for seven
+  // hours the only interaction this device offers responded and then took
+  // itself away -- which reads as a hardware fault, not a policy.
+  //
+  // s_wakeUntilMs is that missing timer: a tap buys AR_NIGHT_WAKE_MS and the
+  // panel goes dark again on its own.
+  const bool quiet = g_set.nightEn && g_timeSynced && uiNightActive();
+
+  if (!halBacklightState() && halTouchRead(nullptr, nullptr)) {
+    halBacklight(true);                       // tap-to-wake
+    if (quiet) s_wakeUntilMs = now + AR_NIGHT_WAKE_MS;
+  }
+
   if (now - s_lastNightChk >= 1000) {
     s_lastNightChk = now;
+
+    // A 7700 overhead at 03:00 was invisible by design. Light the panel for a
+    // NEWLY seen emergency -- keyed on the hex so one aircraft holding a
+    // squawk for an hour wakes the room once, not every second. Checked on
+    // the 1 s tick, not in the loop body: the loop runs ~500 times a second
+    // and this walks the whole track table.
+    if (quiet) {
+      Track* e = tracksFirstEmergency();
+      if (e && strcmp(e->hex, s_nightAlertHex) != 0) {
+        strlcpy(s_nightAlertHex, e->hex, sizeof(s_nightAlertHex));
+        s_wakeUntilMs = now + AR_NIGHT_ALERT_MS;
+        halBacklight(true);                   // the timer alone does not light it
+        Serial.printf("[night] emergency %s -- waking panel\n", e->hex);
+      } else if (!e) {
+        s_nightAlertHex[0] = 0;               // rearm once the sky is clear
+      }
+    } else {
+      s_nightAlertHex[0] = 0;
+    }
+
     if (g_set.nightEn && g_timeSynced) {
-      bool night = uiNightActive();
-      if (night && halBacklightState()) {
-        if (!halTouchRead(nullptr, nullptr)) halBacklight(false);
-      } else if (!night && !halBacklightState()) {
+      // Signed compare: s_wakeUntilMs wraps with millis() every 49 days.
+      const bool reprieve = s_wakeUntilMs && (int32_t)(s_wakeUntilMs - now) > 0;
+      if (quiet && halBacklightState()) {
+        if (!reprieve && !halTouchRead(nullptr, nullptr)) {
+          halBacklight(false);
+          s_wakeUntilMs = 0;
+        }
+      } else if (!quiet && !halBacklightState()) {
         halBacklight(true);
+        s_wakeUntilMs = 0;                    // daylight owns it again
       }
     }
   }
-  if (!halBacklightState() && halTouchRead(nullptr, nullptr))
-    halBacklight(true);                       // tap-to-wake
 
   delay(2);                                   // yield; LVGL cadence is timer-driven
 }
