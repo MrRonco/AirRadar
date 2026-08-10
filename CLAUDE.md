@@ -18,7 +18,7 @@ that keep the renderer from fighting the panel DMA.
 | Version-by-version narrative | [`docs/HISTORY.md`](docs/HISTORY.md) |
 | What is shipped, parked and blocked | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 
-Current version **v7.2.3**. The firmware is an LVGL 8.3 application under
+Current version **v7.2.4**. The firmware is an LVGL 8.3 application under
 `firmware/AirRadar/`; the root `AirRadar.ino` is the **legacy v6** single-sketch
 app, kept only as the reference for proven data and bring-up logic. The rules
 below apply to both.
