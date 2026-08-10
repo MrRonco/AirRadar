@@ -9,11 +9,12 @@ draws the sky above your house on a 7-inch panel.
 
 [![firmware](https://img.shields.io/badge/firmware-v7.2.4-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
-<img src="docs/img/panel.png" width="820" alt="AirRadar main screen during a real emergency: a full-bleed dark base map with the coverage disc, seven aircraft, and Air Canada 337 squawking 7600 shown as a red glyph with a red alert strip in the Overview card and a red squawk value in the Selected card">
+<img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map under a coverage disc ringed by a graduated bearing bezel, six violet altitude-coloured aircraft with their callsigns, and a WestJet 737 pinned in the right-hand card with its logo, its Winnipeg to Edmonton route and a live instrument grid">
 
-<sub>Live capture off the device via <code>GET /screen.bmp</code> — the actual framebuffer, not a mockup.
-Air Canada 337 is squawking <b>7600</b>, radio failure: red glyph, red squawk, and the alert strip in the
-Overview card. Every other target stays violet, because red means emergency and nothing else.</sub>
+<sub>Live capture off the device via <code>GET /screen.bmp</code> — the actual framebuffer, not a
+mockup, and not a rendering of one. Six aircraft over the house on an ordinary evening; a WestJet
+737 is pinned, so the right-hand card carries its operator logo, route, airframe and a live
+instrument grid. The disc is ringed by a bearing scale graduated every 10°.</sub>
 
 </div>
 
@@ -57,12 +58,15 @@ This is the layer alone; the bearing bezel and the scope chrome are composited o
 
 <div align="center">
 
-<img src="docs/img/panel-normal.png" width="700" alt="The same display in its ordinary state: six violet altitude-coloured targets around a graduated bearing bezel, no alert strip, with a WestJet flight pinned in the Selected card showing its logo, its Winnipeg to Edmonton route and a live instrument grid">
+<img src="docs/img/panel-emergency.png" width="700" alt="The same display with an emergency: Air Canada 337 squawking 7600 drawn as a red glyph, a red 7600 alert strip in the Overview card, and a red squawk value in the Selected card, while every other target stays violet">
 
-<sub><b>The same display, nothing wrong.</b> Compare with the hero above: no alert strip in the
-Overview card, and every glyph is altitude-coloured rather than red. The emergency treatment is
-deliberately the only thing on screen that uses red. A WestJet flight is pinned here, so the
-right-hand card is filled in.</sub>
+<sub><b>The same display, something wrong.</b> A squawk of <b>7600</b> is radio failure, and it is
+the one condition that overrides the altitude palette: red glyph, red squawk value, and an alert
+strip in the Overview card naming the aircraft. Every other target stays violet, because red means
+emergency and nothing else — which is also why the airline brand tile is the only other red on the
+panel and why it is kept small. Rendered in the desktop harness: waiting for a real 7600 is not a
+documentation strategy, and the alternative is flashing a build with the state hardcoded, which is
+how this device once got boot-looped.</sub>
 
 </div>
 
