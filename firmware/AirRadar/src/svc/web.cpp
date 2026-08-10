@@ -249,6 +249,34 @@ static void htmlAppendHead(String& h) {
          // box so the PAGE never scrolls sideways -- hiding columns would mean
          // deciding which aircraft facts a phone user does not deserve.
          ".tw{overflow-x:auto}"
+         // ...and on a desktop it scrolls VERTICALLY too, inside the height its
+         // neighbour already establishes. The traffic list is the one element
+         // on this page whose size is set by the sky rather than by the design:
+         // 40 aircraft made the card 1,055 px tall beside a 360 px panel mirror,
+         // so the page ran on for 700 px of dead column and everything below the
+         // fold moved depending on how busy the afternoon was.
+         //
+         // The row is stretched and the scroller absolutely positioned inside
+         // the traffic card, which is what makes the match exact rather than
+         // approximate: an absolutely positioned child contributes nothing to
+         // its parent's intrinsic height, so the row is sized by the mirror
+         // alone and the list takes whatever that turns out to be. No JS, no
+         // measured constant, and it survives a window resize on its own.
+         //
+         // The floor matters for the unloaded state -- the mirror is ~140 px
+         // until someone asks for it, and a four-row traffic list is worse than
+         // a slightly tall one. Phones keep the old behaviour: there is no
+         // second column there to match, and a nested vertical scroll inside a
+         // page scroll is a trap.
+         "@media(min-width:901px){"
+         ".c21{align-items:stretch}"
+         ".c21>.b:first-child{position:relative;min-height:340px}"
+         ".c21>.b:first-child>.tw{position:absolute;top:35px;left:14px;right:14px;"
+         "bottom:14px;overflow:auto}"
+         // Scrolled far enough and the columns lose their names, which is the
+         // whole reason a header exists. It sticks to the top of the scroller.
+         ".c21>.b:first-child th{position:sticky;top:0;background:#182231;z-index:1}"
+         "}"
          "details.dg>summary{cursor:pointer;font:500 11px/1.7 ui-monospace,"
          "SFMono-Regular,Menlo,monospace;color:#8e9baa;letter-spacing:.06em;"
          "text-transform:uppercase;padding:4px 0}"

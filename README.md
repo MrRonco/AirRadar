@@ -128,13 +128,15 @@ the one time you need the console urgently is the one time you are not at your d
 
 <div align="center">
 
-<img src="docs/img/web-console.png" width="880" alt="The AirRadar web console: a status strip of five live tiles above an open diagnostics group, a traffic table with a squawk column, the panel mirror, and configuration forms for radar, network and integrations">
+<img src="docs/img/web-console.png" width="880" alt="The AirRadar web console: a status strip of five live tiles above an open diagnostics group, a traffic table with a squawk column scrolling inside a box the same height as the panel mirror beside it, and configuration forms for radar, network and integrations">
 
 <sub>Live, with the panel mirror loaded — the mirror is the panel's actual framebuffer, not a
 re-render. The two headline tiles are <b>IN RANGE</b> and <b>COASTING</b>, which measure the same
 population; heap and TLS counters moved into <b>DIAGNOSTICS</b>, open here. Clicking a row in the
-traffic table pins that aircraft on the panel. Coordinates rounded and network values replaced
-with documentation placeholders.</sub>
+traffic table pins that aircraft on the panel. The traffic list is the one element on the page
+whose length is set by the sky rather than by the design, so it is bounded by the height of the
+card beside it and scrolls inside that, with its header pinned. Coordinates rounded and network
+values replaced with documentation placeholders.</sub>
 
 </div>
 
