@@ -89,11 +89,48 @@ BUILD=firmware/AirRadar/build/esp32.esp32.esp32s3
 BOOTAPP=$(find ~/Library/Arduino15/packages/esp32 -name boot_app0.bin | head -1)
 
 python3 -m esptool --chip esp32s3 merge_bin -o flasher/airradar-merged.bin \
-  --flash_mode qio --flash_freq 80m --flash_size 16MB \
+  --flash_mode keep --flash_freq keep --flash_size 16MB \
   0x0     "$BUILD/AirRadar.ino.bootloader.bin" \
   0x8000  "$BUILD/AirRadar.ino.partitions.bin" \
   0xe000  "$BOOTAPP" \
   0x10000 "$BUILD/AirRadar.ino.bin"
+```
+
+**`keep`, not `qio` — this one bricks the installer.** `--flash-mode` PATCHES
+byte 2 of the bootloader header at offset 0, and the ROM reads that byte to
+configure the flash interface *before* it loads anything. The Arduino core
+builds the bootloader as **DIO (0x02)** on this board; forcing `qio` rewrites
+it to 0x00 and the ROM then cannot read flash, so it hangs and the RTC/TG0
+watchdogs reset it forever:
+
+```
+rst:0x10 (RTCWDT_RTC_RST) / rst:0x7 (TG0WDT_SYS_RST)
+load:0x3fce2820,len:0x10cc
+ets_loader.c 78
+```
+
+Nothing else is wrong with such an image — every offset, magic, digest and the
+app itself verify fine, which is why it survived review. The app's OWN header
+still says QIO and the bootloader reconfigures the interface once it is
+running; only the bootloader's header has to match how the ROM must read
+flash. `keep` leaves all three parameters exactly as the core built them.
+
+Verify by comparison, not by flashing a working device — the merged image is a
+FIRST-INSTALL image and installing it erases NVS (`merge_bin` pads the gaps
+with 0xFF, and 0x9000-0xdfff is the NVS partition). The check that settles it
+costs nothing:
+
+```bash
+# every component byte-identical to what arduino-cli flashes and boots
+python3 - <<'EOF'
+B='firmware/AirRadar/build/esp32.esp32.esp32s3/'
+m=open('flasher/airradar-merged.bin','rb').read()
+for name, off, path in (('bootloader',0x0,B+'AirRadar.ino.bootloader.bin'),
+                        ('partitions',0x8000,B+'AirRadar.ino.partitions.bin'),
+                        ('app',0x10000,B+'AirRadar.ino.bin')):
+    b=open(path,'rb').read()
+    print(name, 'OK' if m[off:off+len(b)]==b else 'DIFFERS')
+EOF
 ```
 
 (`esptool` ships inside the esp32 core at

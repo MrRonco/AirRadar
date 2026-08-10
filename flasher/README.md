@@ -33,9 +33,12 @@ ESP Web Tools flashes a single **merged** binary at offset 0. The authoritative 
 merge recipe is [`../firmware/BUILD.md`](../firmware/BUILD.md) section C — follow that
 one, so there is only ever a single source of truth.
 
-The merge must include `boot_app0.bin` at `0xe000` and the correct flash flags
-(`--flash-mode qio --flash-freq 80m --flash-size 16MB`). Omit either and you get an image
-that appears to flash but does not boot correctly.
+The merge must include `boot_app0.bin` at `0xe000` and must pass
+**`--flash-mode keep --flash-freq keep`**. Forcing `qio` rewrites byte 2 of the
+bootloader header, which the ROM reads before it can load anything — the board builds its
+bootloader as DIO, and a QIO header there produces a watchdog boot loop from an image
+whose offsets, magics and digests all verify. v7.2.3's published installer shipped with
+exactly that fault.
 
 Verify before committing:
 

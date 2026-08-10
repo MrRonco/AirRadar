@@ -192,6 +192,20 @@ FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
    measurement can't come out wrong, it isn't evidence.
    Corollary: the harness had rendered this in every screenshot all along. A
    faithful renderer does not help if nobody knows what to compare against.
+28. **(v7.2.4) The web flasher's merged image must be merged with
+   `--flash-mode keep`.** `--flash-mode qio` patches byte 2 of the BOOTLOADER
+   header at offset 0, and the ROM reads that byte to configure the flash
+   interface before it loads anything. This board's core builds its bootloader
+   as **DIO (0x02)**; a QIO header there hangs the ROM and the RTC/TG0
+   watchdogs reset it forever (`ets_loader.c 78`, no second-stage output).
+   Every offset, magic, SHA digest and the app itself verify fine — which is
+   why v7.2.3's published installer shipped broken and nobody noticed: the
+   owner always flashes over USB with `arduino-cli`, which writes the built
+   DIO bootloader. Verify a merged image by proving each component is
+   **byte-identical to the build output**, never by installing it on a working
+   device: it is a first-install image and the 0xFF padding between components
+   covers 0x9000-0xdfff, which is NVS. That is a wiped configuration, learned
+   the expensive way.
 16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
    decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
    over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,
