@@ -34,6 +34,7 @@ void uiInit() {
   settingsBuild();
   wifiScreenBuild();
   coordsScreenBuild();
+  pickerBuild();
   // SCR_TEXTEDIT content is (re)built by texteditOpen()
 
   g_screen = SCR_MAIN;

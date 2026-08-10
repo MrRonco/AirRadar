@@ -4,6 +4,8 @@
 // generic text editor, toast + async flows (settingsPoll).
 #include <WiFi.h>
 #include "ui.h"
+#include "../core/units.h"
+#include "../core/timezones.h"
 #include "../core/tracks.h"
 #include "../net/feeder.h"
 #include "../net/enrich.h"
@@ -20,8 +22,9 @@ static uint32_t  s_toastHideAt = 0;
 
 // value labels / switches that settingsRefresh() re-reads
 static lv_obj_t *s_vCoords, *s_vRange, *s_vNight, *s_vAlt, *s_vWatch,
-                *s_vWifi, *s_vIpMode, *s_vFeed, *s_vPPass;
-static lv_obj_t *s_swLabels, *s_swNight, *s_swWx, *s_swTempF, *s_sw24h,
+                *s_vWifi, *s_vIpMode, *s_vFeed, *s_vPPass,
+                *s_vUnits, *s_vTz;
+static lv_obj_t *s_swLabels, *s_swNight, *s_swWx, *s_sw24h,
                 *s_swIss, *s_swLogo, *s_swMap, *s_swMqtt;
 static lv_obj_t *s_favBtn[AR_MAX_FAVS];
 static lv_obj_t *s_chip[4];   // AIRLINER LIGHT HELI MIL
@@ -212,7 +215,8 @@ static void refreshLocationRows() {
   char b[36];
   snprintf(b, sizeof(b), "%.3f, %.3f", g_set.homeLat, g_set.homeLon);
   lv_label_set_text(s_vCoords, b);
-  snprintf(b, sizeof(b), "%d km", g_set.rangeKm);
+  snprintf(b, sizeof(b), "%d %s", unitsDistI((float)g_set.rangeKm),
+           unitsDistLabel());
   lv_label_set_text(s_vRange, b);
 }
 static void refreshNightRow() {
@@ -288,8 +292,8 @@ void settingsRefresh() {
   else lv_obj_clear_state(s_swNight, LV_STATE_CHECKED);
   if (g_set.wxEn) lv_obj_add_state(s_swWx, LV_STATE_CHECKED);
   else lv_obj_clear_state(s_swWx, LV_STATE_CHECKED);
-  if (g_set.tempF) lv_obj_add_state(s_swTempF, LV_STATE_CHECKED);
-  else lv_obj_clear_state(s_swTempF, LV_STATE_CHECKED);
+  lv_label_set_text(s_vUnits, unitsName());
+  lv_label_set_text(s_vTz, tzNameOf(g_set.tz.c_str()));
   if (g_set.clock24) lv_obj_add_state(s_sw24h, LV_STATE_CHECKED);
   else lv_obj_clear_state(s_sw24h, LV_STATE_CHECKED);
   if (g_set.issEn) lv_obj_add_state(s_swIss, LV_STATE_CHECKED);
@@ -503,7 +507,32 @@ static void rebootRow(lv_event_t*) { confirmReboot("Reboot the device now?"); }
 static void swLabelsCb(lv_event_t*) { g_set.showLabels = swOn(s_swLabels); settingsSaveDisplay(); scopeUpdate(millis()); }
 static void swNightCb(lv_event_t*)  { g_set.nightEn = swOn(s_swNight); settingsSaveDisplay(); if (!g_set.nightEn) halBacklight(true); }
 static void swWxCb(lv_event_t*)     { g_set.wxEn = swOn(s_swWx); settingsSaveDisplay(); }
-static void swTempFCb(lv_event_t*)  { g_set.tempF = swOn(s_swTempF); settingsSaveDisplay(); }
+// Two systems, so a tap toggles rather than opening a list for two entries.
+// If a third (nautical) is ever added this becomes a picker like the timezone.
+static void unitsRow(lv_event_t*) {
+  g_set.units = unitsImperial() ? AR_UNITS_METRIC : AR_UNITS_IMPERIAL;
+  settingsSaveDisplay();
+  lv_label_set_text(s_vUnits, unitsName());
+  refreshLocationRows();          // the Range row is in kilometres or miles
+  cardsUpdate(millis());          // and so is every reading on the main screen
+  scopeUpdate(millis());
+  scopeRelabelRings();
+}
+
+static void tzPicked(int idx) {
+  if (idx < 0 || idx >= kTimezoneCount) return;
+  g_set.tz = kTimezones[idx].posix;
+  settingsSaveNetworkExtras();
+  configTzTime(g_set.tz.c_str(), "pool.ntp.org", "time.nist.gov");
+  lv_label_set_text(s_vTz, tzNameOf(g_set.tz.c_str()));
+  toast("Time zone set");
+}
+static void editTz(lv_event_t*) {
+  static const char* names[kTimezoneCount];
+  for (int i = 0; i < kTimezoneCount; i++) names[i] = kTimezones[i].name;
+  pickerOpen("TIME ZONE", names, kTimezoneCount,
+             tzIndexOf(g_set.tz.c_str()), tzPicked);
+}
 static void sw24hCb(lv_event_t*)    { g_set.clock24 = swOn(s_sw24h); settingsSaveDisplay(); }
 static void swIssCb(lv_event_t*)    { g_set.issEn = swOn(s_swIss); settingsSaveDisplay(); }
 static void swLogoCb(lv_event_t*)   { g_set.logoEn = swOn(s_swLogo); settingsSaveDisplay(); }
@@ -622,6 +651,79 @@ void wifiScreenBuild() {
   lv_obj_set_style_text_color(rl, C_INK, 0);
   lv_obj_center(rl);
   lv_obj_add_event_cb(rescan, wifiRescan, LV_EVENT_CLICKED, NULL);
+}
+
+// ============================================================
+//  Generic picker (SCR_PICKER)
+// ============================================================
+// One screen, any list. Built once at boot with an empty body and refilled on
+// open, because the alternative -- building a screen per list -- is what makes
+// a settings UI sprawl. The rows are recreated per open rather than pooled:
+// this runs on a user tap, not on a tick, so it is allowed to be simple.
+static lv_obj_t* s_pickList = nullptr;
+static lv_obj_t* s_pickTitle = nullptr;
+static void (*s_pickCb)(int) = nullptr;
+
+static void pickerBack(lv_event_t*) { uiShow(SCR_SETTINGS); }
+
+static void pickerRowCb(lv_event_t* e) {
+  const int idx = (int)(intptr_t)lv_event_get_user_data(e);
+  void (*cb)(int) = s_pickCb;
+  uiShow(SCR_SETTINGS);            // leave first: the callback may toast
+  if (cb) cb(idx);
+}
+
+void pickerBuild() {
+  lv_obj_t* root = uiScreenRoot(SCR_PICKER);
+  s_pickTitle = mkTitle(root, "");
+  mkCloseBtn(root, pickerBack);
+  s_pickList = lv_obj_create(root);
+  lv_obj_remove_style_all(s_pickList);
+  lv_obj_set_pos(s_pickList, PAGE_PAD, 74);
+  lv_obj_set_size(s_pickList, SCR_W - 2 * PAGE_PAD, SCR_H - 74 - PAGE_PAD);
+  lv_obj_set_flex_flow(s_pickList, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(s_pickList, 6, 0);
+  lv_obj_set_scroll_dir(s_pickList, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(s_pickList, LV_SCROLLBAR_MODE_ON);
+  lv_obj_set_style_bg_color(s_pickList, C_BORDER, LV_PART_SCROLLBAR);
+  lv_obj_set_style_bg_opa(s_pickList, 70, LV_PART_SCROLLBAR);
+  lv_obj_set_style_width(s_pickList, 3, LV_PART_SCROLLBAR);
+  lv_obj_set_style_radius(s_pickList, 2, LV_PART_SCROLLBAR);
+}
+
+void pickerOpen(const char* title, const char** names, int count, int sel,
+                void (*onPick)(int)) {
+  if (!s_pickList) return;
+  s_pickCb = onPick;
+  lv_label_set_text(s_pickTitle, title);
+  lv_obj_clean(s_pickList);
+  for (int i = 0; i < count; i++) {
+    lv_obj_t* row = lv_obj_create(s_pickList);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, LV_PCT(100), 44);        // same target as a settings row
+    lv_obj_set_style_bg_color(row, i == sel ? C_CY : C_SURF, 0);
+    lv_obj_set_style_bg_opa(row, i == sel ? 28 : LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(row, R_MD, 0);
+    lv_obj_set_style_border_color(row, i == sel ? C_CY : C_BORDER, 0);
+    lv_obj_set_style_border_opa(row, i == sel ? 140 : 20, 0);
+    lv_obj_set_style_border_width(row, 1, 0);
+    lv_obj_set_style_pad_hor(row, 16, 0);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(row, pickerRowCb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+    lv_obj_t* l = lv_label_create(row);
+    lv_label_set_text(l, names[i]);
+    lv_obj_set_style_text_font(l, F_UI15, 0);
+    lv_obj_set_style_text_color(l, i == sel ? C_CY : C_IVORY, 0);
+    lv_obj_align(l, LV_ALIGN_LEFT_MID, 0, 0);
+  }
+  uiShow(SCR_PICKER);
+  // Scroll the current choice into view -- a 27-entry list that always opens
+  // at the top makes the user hunt for what is already set.
+  if (sel >= 0) {
+    lv_obj_t* row = lv_obj_get_child(s_pickList, sel);
+    if (row) lv_obj_scroll_to_view(row, LV_ANIM_OFF);
+  }
 }
 
 // ============================================================
@@ -858,10 +960,16 @@ void settingsBuild() {
   s_swNight = mkSwitch(nbox, g_set.nightEn, swNightCb);
   r = mkRow(g, "Weather strip", true);
   s_swWx = mkSwitch(r, g_set.wxEn, swWxCb);
-  r = mkRow(g, "Fahrenheit", true);
-  s_swTempF = mkSwitch(r, g_set.tempF, swTempFCb);
+  r = mkRow(g, "Units", true);
+  s_vUnits = mkChevronValue(r, "Metric");
+  lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(r, unitsRow, LV_EVENT_CLICKED, NULL);
   r = mkRow(g, "24-hour clock", true);
   s_sw24h = mkSwitch(r, g_set.clock24, sw24hCb);
+  r = mkRow(g, "Time zone", true);
+  s_vTz = mkChevronValue(r, "--");
+  lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(r, editTz, LV_EVENT_CLICKED, NULL);
 
   g = mkGroup(colL, "LAYERS");
   r = mkRow(g, "ISS on radar", false);

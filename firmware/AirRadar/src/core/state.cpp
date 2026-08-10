@@ -3,6 +3,7 @@
 // state.cpp — shared state storage, settings persistence, core math.
 #include <math.h>
 #include "state.h"
+#include "units.h"
 
 // ---------- live state ----------
 Track    g_tracks[AR_MAX_TRACKS];
@@ -66,7 +67,17 @@ void settingsLoad() {
   g_set.nightFromMin = g_prefs.getInt(K_NIGHT_FROM, 23 * 60);
   g_set.nightToMin   = g_prefs.getInt(K_NIGHT_TO, 6 * 60);
   g_set.wxEn      = g_prefs.getBool(K_WX_EN, true);
-  g_set.tempF     = g_prefs.getBool(K_TEMP_F, false);
+  // v7.2.4 replaced the Fahrenheit boolean with a whole-system units choice.
+  // A user who had ticked Fahrenheit meant "imperial", so carry them over
+  // rather than silently resetting them to metric on upgrade. The old key is
+  // read, never written again, and disappears on its own the first time
+  // settings are saved.
+  if (g_prefs.isKey(K_UNITS))
+    g_set.units = (uint8_t)g_prefs.getUChar(K_UNITS, AR_UNITS_METRIC);
+  else
+    g_set.units = g_prefs.getBool(K_TEMP_F, false) ? AR_UNITS_IMPERIAL
+                                                   : AR_UNITS_METRIC;
+  if (g_set.units > AR_UNITS_IMPERIAL) g_set.units = AR_UNITS_METRIC;
   g_set.clock24   = g_prefs.getBool(K_CLOCK24, false);
   g_set.issEn     = g_prefs.getBool(K_ISS_EN, true);
   // Airline logos stay ON by default. The ICAO-in-brand-colour tile is the
@@ -109,7 +120,7 @@ void settingsSaveDisplay() {
   g_prefs.putInt(K_NIGHT_FROM, g_set.nightFromMin);
   g_prefs.putInt(K_NIGHT_TO, g_set.nightToMin);
   g_prefs.putBool(K_WX_EN, g_set.wxEn);
-  g_prefs.putBool(K_TEMP_F, g_set.tempF);
+  g_prefs.putUChar(K_UNITS, g_set.units);
   g_prefs.putBool(K_CLOCK24, g_set.clock24);
   g_prefs.putBool(K_ISS_EN, g_set.issEn);
   g_prefs.putBool(K_LOGO_EN, g_set.logoEn);

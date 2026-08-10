@@ -8,6 +8,7 @@
 //   SCR_WIFI     — scan list + password keyboard (ui_settings.cpp)
 //   SCR_COORDS   — lat/lon editor (ui_settings.cpp)
 //   SCR_TEXTEDIT — generic single-field editor w/ keyboard (ui_settings.cpp)
+//   SCR_PICKER   — generic scrolling single-choice list (ui_settings.cpp)
 //
 // Pixel spec: see theme.h + config.h geometry. The build target is the
 // browser-verified mock; when in doubt match the mock.
@@ -30,6 +31,8 @@ void uiCycleRange(int dir);
 void scopeBuild(lv_obj_t* parent);   // circular map + rings + blip pool + ISS
 void scopeUpdate(uint32_t nowMs);    // sync blips to g_tracks (anim to new pos)
 void scopeApplyMapImage();           // re-set map src when mapGeneration() bumps
+void scopeRelabelRings();            // force the range numerals to redraw
+                                     //  (the km/mi choice changed, not the range)
 
 // ---- main screen cards (ui_cards.cpp) ----
 void cardsBuild(lv_obj_t* parent);   // overview, selected, time, settings btn,
@@ -44,6 +47,13 @@ void wifiScreenOpen();               // start an async scan, then show SCR_WIFI
 void coordsScreenBuild();            // SCR_COORDS
 void texteditOpen(const char* title, const char* initial, bool password,
                   void (*onSave)(const char* value));   // SCR_TEXTEDIT
+// A scrolling single-choice list. `names` must outlive the screen (a static
+// table, not a stack array). `sel` is the currently chosen index, or -1 when
+// the stored value is not in the list -- the picker marks nothing in that
+// case rather than lying about which row is active.
+void pickerOpen(const char* title, const char** names, int count, int sel,
+                void (*onPick)(int index));            // SCR_PICKER
+void pickerBuild();                                    // called once by uiInit
 void settingsPoll(uint32_t nowMs);   // drives async flows (wifi connect spinner);
                                      //  called from uiTick every tick
 

@@ -10,6 +10,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "ui.h"
+#include "../core/units.h"
 #include "brandcolor.h"
 #include "../core/tracks.h"
 #include "../net/logos.h"
@@ -193,6 +194,7 @@ static lv_opa_t   s_emergOpa = 0;
 // Selected
 static lv_obj_t *s_selCont, *s_selEmpty;
 static lv_obj_t *s_selTile, *s_selIni, *s_selLogoImg, *s_selCallsign, *s_selOp;
+static lv_obj_t *s_selDistKey = nullptr;   // "DIST km" / "DIST mi"
 static const lv_img_dsc_t* s_selLogoShown = nullptr;   // change cache for the tile
 static lv_obj_t *s_selRoute, *s_selOrigin, *s_selDest;
 static lv_obj_t *s_selFrame, *s_selIdent, *s_selMil;
@@ -514,8 +516,13 @@ static void buildOverview(lv_obj_t* parent) {
 // x/w describe the column BOX; both key and value are flush to its right edge.
 // Right-aligned numerics under a right-aligned key is the instrument idiom, and
 // it is what makes tabular figures pay off.
-static lv_obj_t* mkGridCell(lv_obj_t* p, int x, int w, int y, const char* key) {
+// outKey is for the ONE cell whose unit is not fixed: DIST carries km or mi,
+// and the review's own rule is that units live in the key, so the key is what
+// has to change when the system does.
+static lv_obj_t* mkGridCell(lv_obj_t* p, int x, int w, int y, const char* key,
+                            lv_obj_t** outKey = nullptr) {
   lv_obj_t* k = mkMicro(p, key, x, y);
+  if (outKey) *outKey = k;
   lv_obj_set_width(k, w);
   lv_obj_set_style_text_align(k, LV_TEXT_ALIGN_RIGHT, 0);
   lv_obj_t* v = mkLbl(p, F_M20, C_IVORY);
@@ -598,7 +605,8 @@ static void buildSelectedBottom(lv_obj_t* cont) {
   // Same two-column grid as ALT/SPD and V-S/HDG, then a rule before the status
   // line — previously these were full-width label/value rows in a different
   // style and the status line ran straight on with nothing separating it.
-  s_selDist = mkGridCell(cont, 0,            SEL_COL1_W, SEL_GRID_Y3, "DIST km");
+  s_selDist = mkGridCell(cont, 0,            SEL_COL1_W, SEL_GRID_Y3,
+                         "DIST km", &s_selDistKey);
   s_selSqk  = mkGridCell(cont, SEL_COL2_X2,   SEL_COL2_W, SEL_GRID_Y3, "SQK");
   mkHair(cont, SEL_HAIR2_Y, CONTENT_W);
 
@@ -842,7 +850,8 @@ static void updateOverview(uint32_t nowMs) {
     strlcpy(s_nearHex, n->hex, sizeof(s_nearHex));
     float d = haversineKm(g_set.homeLat, g_set.homeLon, n->lat, n->lon);
     float brg = bearingTo(g_set.homeLat, g_set.homeLon, n->lat, n->lon);
-    snprintf(b, sizeof(b), "%.1f km %s", (double)d, cardinal8(brg));
+    snprintf(b, sizeof(b), "%.1f %s %s", (double)unitsDist(d),
+             unitsDistLabel(), cardinal8(brg));
     setTextCached(s_ovNearD, s_bufNearD, sizeof(s_bufNearD), b);
   } else {
     setTextCached(s_ovNear, s_bufNear, sizeof(s_bufNear), "--");
@@ -1081,8 +1090,15 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
   float brg = bearingTo(g_set.homeLat, g_set.homeLon, t->lat, t->lon);
   // 22 px tabular digits are 14.25 px, so five glyphs ("119.9") would fill the
   // 64 px cell exactly. Past 100 km a tenth of a kilometre is noise anyway.
-  if (d >= 100.0f) snprintf(b, sizeof(b), "%d", (int)(d + 0.5f));
-  else             snprintf(b, sizeof(b), "%.1f", (double)d);
+  {
+    char kb[12];
+    snprintf(kb, sizeof(kb), "DIST %s", unitsDistLabel());
+    static char sDistKey[12] = "";
+    setTextCached(s_selDistKey, sDistKey, sizeof(sDistKey), kb);
+  }
+  const float dU = unitsDist(d);
+  if (dU >= 100.0f) snprintf(b, sizeof(b), "%d", (int)(dU + 0.5f));
+  else              snprintf(b, sizeof(b), "%.1f", (double)dU);
   setTextCached(s_selDist, s_bufDist, sizeof(s_bufDist), b);
 
   bool emerg = sqIsEmergency(t->squawk);
@@ -1220,18 +1236,17 @@ static void updateWeatherPill() {
     lv_img_set_src(s_wxIcon, ic);
   }
   char b[32];
-  // g_set.tempF is a DISPLAY preference. g_wx.tempC stays Celsius everywhere
-  // else — /api/state's temp_c, MQTT and the weather cache are all canonical.
-  float t = g_set.tempF ? g_wx.tempC * 9.0f / 5.0f + 32.0f : g_wx.tempC;
-  snprintf(b, sizeof(b), "%d", (int)lroundf(t));
+  // A DISPLAY preference. g_wx.tempC stays Celsius everywhere else —
+  // /api/state's temp_c, MQTT and the weather cache are all canonical.
+  snprintf(b, sizeof(b), "%d", (int)lroundf(unitsTemp(g_wx.tempC)));
   bool tempCh = setTextCached(s_wxTemp, s_bufTemp, sizeof(s_bufTemp), b);
   // The unit is written by the layout block below, which is the only code that
   // knows whether the letter fits. Writing it here too would put "\xC2\xB0" "C" back
   // every tick in tight mode -- an unconditional invalidation, rule 8.
   static int8_t sUnitWas = -1;
-  const bool unitCh = (sUnitWas != (int8_t)g_set.tempF);
-  sUnitWas = (int8_t)g_set.tempF;
-  snprintf(b, sizeof(b), "%d", (int)lroundf(g_wx.windKmh));
+  const bool unitCh = (sUnitWas != (int8_t)g_set.units);
+  sUnitWas = (int8_t)g_set.units;
+  snprintf(b, sizeof(b), "%d", (int)lroundf(unitsSpeed(g_wx.windKmh)));
   bool spdCh = setTextCached(s_wxSpd, s_bufWspd, sizeof(s_bufWspd), b);
   bool dirCh = setTextCached(s_wxDir, s_bufWdir, sizeof(s_bufWdir),
                              cardinal8((float)g_wx.windDirDeg));
@@ -1259,7 +1274,7 @@ static void updateWeatherPill() {
     const int spdW  = txtW(s_bufWspd, F_UI15);
     const int windW = WX_ICON_PX + OV_TOKEN_GAP + dirW + OV_TOKEN_GAP + spdW;
 
-    const char* unit = g_set.tempF ? "\xC2\xB0" "F" : "\xC2\xB0" "C";
+    const char* unit = unitsTempSuffix();
     int unitW = txtW(unit, F_UI12);
     if (CONTENT_W - (OV_TEMP_X + tempW + OV_UNIT_GAP + unitW) - windW
             < OV_GUTTER_MIN) {
@@ -1279,7 +1294,10 @@ static void updateWeatherPill() {
 
 static void updateRangePill() {
   char b[24];
-  snprintf(b, sizeof(b), "%d KM", g_set.rangeKm);
+  // g_set.rangeKm stays the canonical kilometre step -- it keys the map cache
+  // (/mp/r<km>), the track filter and the API. Only the pill converts.
+  snprintf(b, sizeof(b), "%d %s", unitsDistI((float)g_set.rangeKm),
+           unitsDistLabelUpper());
   setTextCached(s_rngLbl, s_bufRange, sizeof(s_bufRange), b);
 }
 

@@ -22,6 +22,8 @@
 #include "scenarios.h"
 #include "../firmware/AirRadar/src/config.h"
 #include "../firmware/AirRadar/src/core/state.h"
+#include "../firmware/AirRadar/src/core/units.h"
+#include "../firmware/AirRadar/src/core/timezones.h"
 #include "../firmware/AirRadar/src/ui/ui.h"
 #include "../firmware/AirRadar/src/net/maptiles.h"
 #include "fakemap.h"
@@ -101,7 +103,9 @@ static void banner() {
 int main(int argc, char** argv) {
   const char* shot = nullptr;
   const char* screen = "main";
-  int tintNum = 0;              // 0 = leave fakemap.cpp's own default alone
+  int tintNum = 0;
+  bool imperial = false;
+  int  scrollY = 0;              // 0 = leave fakemap.cpp's own default alone
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
     else if (!strcmp(argv[i], "--scenario") && i + 1 < argc) s_scenario = atoi(argv[++i]);
@@ -110,6 +114,15 @@ int main(int argc, char** argv) {
     // The harness can show the RELATIVE effect of this knob, never the correct
     // absolute value -- the synthetic map's base brightness is invented.
     else if (!strcmp(argv[i], "--tint") && i + 1 < argc) tintNum = atoi(argv[++i]);
+    // --imperial renders the whole UI in the other unit system. Worth a flag
+    // rather than a keypress: every unit-bearing reading has to be checked for
+    // width at once, and "155 MI" is not the same size as "250 KM".
+    else if (!strcmp(argv[i], "--imperial")) imperial = true;
+    // --scroll N pushes the settings columns down before the shot. Without it
+    // the harness can only ever review the top 352 px of a screen that is
+    // ~630 px tall, which is how two new rows got added without anyone being
+    // able to look at them.
+    else if (!strcmp(argv[i], "--scroll") && i + 1 < argc) scrollY = atoi(argv[++i]);
   }
 
   if (SDL_Init(shot ? 0 : SDL_INIT_VIDEO) != 0) {
@@ -147,6 +160,7 @@ int main(int argc, char** argv) {
   themeInit();
   mapBegin();          // same order as the firmware's setup()
   if (tintNum > 0) fakeMapSetTint(tintNum, 10);
+  if (imperial) g_set.units = AR_UNITS_IMPERIAL;
   uiInit();
   scenarioApply(s_scenario);
   uiTick(millis());
@@ -154,7 +168,28 @@ int main(int argc, char** argv) {
   if (shot) {
     if (!strcmp(screen, "settings")) uiShow(SCR_SETTINGS);
     else if (!strcmp(screen, "legend")) helpToggle();
+    else if (!strcmp(screen, "tz")) {
+      // Reaches SCR_PICKER through the real settings code path rather than a
+      // harness-only shortcut, so what is rendered is what a tap produces.
+      static const char* names[kTimezoneCount];
+      for (int i = 0; i < kTimezoneCount; i++) names[i] = kTimezones[i].name;
+      pickerOpen("TIME ZONE", names, kTimezoneCount,
+                 tzIndexOf(g_set.tz.c_str()), nullptr);
+    }
     for (int i = 0; i < 8; i++) { lv_timer_handler(); SDL_Delay(20); }
+    if (scrollY) {
+      lv_obj_t* root = uiScreenRoot(g_screen);
+      for (uint32_t i = 0; i < lv_obj_get_child_cnt(root); i++) {
+        lv_obj_t* c = lv_obj_get_child(root, i);
+        // Only things with content BELOW the fold. LVGL flags plain labels
+        // scrollable too, and scrolling those just walked the page title off
+        // the top of the diagnostic.
+        if (lv_obj_has_flag(c, LV_OBJ_FLAG_SCROLLABLE) &&
+            lv_obj_get_scroll_bottom(c) > 0)
+          lv_obj_scroll_by(c, 0, -scrollY, LV_ANIM_OFF);
+      }
+      for (int i = 0; i < 4; i++) { lv_timer_handler(); SDL_Delay(10); }
+    }
     uiTick(millis());
     lv_timer_handler();
     const bool ok = writeBmp(shot);

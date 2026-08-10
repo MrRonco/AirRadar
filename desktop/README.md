@@ -48,10 +48,19 @@ Mouse is touch. Clicking the range chevrons, the gear and the `?` all work.
 
 ```
 ./airradar-ui --shot out.bmp                       # main screen
-./airradar-ui --shot out.bmp --screen settings     # or legend
+./airradar-ui --shot out.bmp --screen settings     # or legend, or tz
 ./airradar-ui --shot out.bmp --scenario 3
+./airradar-ui --shot out.bmp --imperial            # the other unit system
+./airradar-ui --shot out.bmp --screen settings --scroll 170
 make shots                                         # every scenario -> shots/
 ```
+
+`--scroll` exists because the settings columns are ~630 px of content in a
+352 px viewport: without it the harness can only ever review the top third of
+that screen, which is how two new rows once got added with nobody able to look
+at them. `--imperial` flips the whole unit system in one go, which is the only
+way to check that every unit-bearing reading still fits — "155 MI" is not the
+same width as "250 KM".
 
 No display required, so a UI change can be reviewed on a machine with no
 monitor attached — or by a tool. Output is a 24-bit bottom-up BMP, the same

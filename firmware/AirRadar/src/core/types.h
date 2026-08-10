@@ -73,6 +73,7 @@ enum Screen : uint8_t {
   SCR_WIFI,        // scan list + password keyboard
   SCR_COORDS,      // lat/lon editor
   SCR_TEXTEDIT,    // generic text editor (feeder url, watchlist, mqtt uri, ...)
+  SCR_PICKER,      // generic scrolling single-choice list (time zone, ...)
   SCR_COUNT
 };
 

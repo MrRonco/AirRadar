@@ -285,11 +285,30 @@ README lists the sources; these are the details that matter in the code.
 v5/v6 keys kept for in-place upgrade: `ssid pass lat lon lbl rng feed nstat nip
 ngw nmask ndns`. v7 adds `tz` (POSIX TZ), `ppass` (panel/API password),
 `mqtten mqtturi`, `nighten nightfr nightto` (quiet-hours minutes),
-`wxen issen logoen mapen` (layer toggles), `tempf` (Fahrenheit — display only;
-`g_wx.tempC`, `/api/state`'s `temp_c` and MQTT stay Celsius),
+`wxen issen logoen mapen` (layer toggles), `units` (0 metric / 1 imperial),
 `fcls` (class filter bitmask),
 `faltlo falthi` (altitude filter), `watch` (watchlist prefixes) and
 `fav{0..2}{lat,lon,nam}` (favourite locations).
+`tempf` is v7.2.3's Fahrenheit boolean — read once by `settingsLoad()` to
+migrate an existing user onto `units`, never written again.
+
+**Units are a DISPLAY layer and nothing else** (`core/units.h`). `g_wx.tempC`
+is Celsius, `g_set.rangeKm` is kilometres, and `/api/state`, MQTT, the map
+cache path `/mp/r<km>` and the track filter are all metric regardless of the
+setting — verified live: with the panel reading 64 °F / SW 6, the API still
+served `temp_c: 18`, `wind_kmh: 9.7`, `dist_km: 24.04`. Convert at the point
+of drawing, never before. **Altitude (ft), ground speed (kt) and vertical rate
+(fpm) never convert** — they are ICAO standard worldwide, arrive in those
+units on the ADS-B wire, and changing them would put the panel out of step
+with every other aviation source.
+
+**Time zones** are a curated POSIX table in `core/timezones.h`, not tzdata —
+newlib has no zone database and 450 KB of it in a 3 MB app partition for a
+clock is not a trade worth making. The cost is that a DST-rule change needs a
+firmware update. Entry names are limited to **`font_body18`'s subset**
+(`0x20-0x7E`, `0xB0`, `0xB7`): the separator is a middle dot, because an em
+dash is U+2014 and renders as a tofu box on the panel while looking perfectly
+fine in the web UI.
 
 ## Conventions
 

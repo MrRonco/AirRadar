@@ -193,8 +193,11 @@
 #define K_NIGHT_FROM "nightfr"  // minutes since midnight (e.g. 1380 = 23:00)
 #define K_NIGHT_TO  "nightto"   // minutes since midnight (e.g. 360 = 06:00)
 #define K_WX_EN     "wxen"      // weather strip on/off
-#define K_TEMP_F    "tempf"     // true = show Fahrenheit (display only; the
-                                //  API, MQTT and the cache stay Celsius)
+#define K_UNITS     "units"     // 0 = metric, 1 = imperial. DISPLAY ONLY --
+                                //  g_wx.tempC, g_set.rangeKm, /api/state and
+                                //  MQTT all stay metric. See core/units.h.
+#define K_TEMP_F    "tempf"     // v7.2.3 and earlier. Read once to migrate a
+                                //  Fahrenheit user onto K_UNITS, then ignored.
 #define K_CLOCK24   "clk24"     // true = 24-hour clock, false = 12-hour + AM/PM
 #define K_ISS_EN    "issen"     // ISS layer on/off
 #define K_LOGO_EN   "logoen"    // operator monogram/logo tile on/off

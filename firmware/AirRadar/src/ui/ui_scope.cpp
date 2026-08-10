@@ -12,6 +12,7 @@
 #include <math.h>
 #include <string.h>
 #include "ui.h"
+#include "../core/units.h"
 #include "../core/tracks.h"
 #include "../net/enrich.h"
 #include "../net/maptiles.h"
@@ -562,12 +563,17 @@ static void scopeBuildRangeLabels() {
 static void scopeUpdateRangeLabels() {
   if (g_set.rangeKm == s_lastRangeShown) return;
   s_lastRangeShown = g_set.rangeKm;
-  lv_label_set_text_fmt(s_rangeLblFull, "%d", g_set.rangeKm);
+  lv_label_set_text_fmt(s_rangeLblFull, "%d", unitsDistI((float)g_set.rangeKm));
   lv_label_set_text_fmt(s_rangeLblMid, "%d",
-                        (int)(g_set.rangeKm * 2.0f / 3.0f + 0.5f));
+                        unitsDistI(g_set.rangeKm * 2.0f / 3.0f));
   lv_label_set_text_fmt(s_rangeLblIn, "%d",
-                        (int)(g_set.rangeKm / 3.0f + 0.5f));
+                        unitsDistI(g_set.rangeKm / 3.0f));
 }
+
+// The numerals are change-cached against the RANGE, so flipping km -> mi
+// leaves them stale: the range did not move, only the unit did. Drop the
+// cache and re-run.
+void scopeRelabelRings() { s_lastRangeShown = -1; scopeUpdateRangeLabels(); }
 
 static void scopeBuildIss() {
   s_issImg = lv_img_create(s_clip);

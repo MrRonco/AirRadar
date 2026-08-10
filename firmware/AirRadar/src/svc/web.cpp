@@ -18,6 +18,8 @@
 #include <Update.h>
 #include <ArduinoJson.h>
 #include "web.h"
+#include "../core/units.h"
+#include "../core/timezones.h"
 #include "heapwalk.h"
 #include "../core/stall.h"
 #include "mqtt.h"
@@ -210,6 +212,9 @@ static void htmlAppendHead(String& h) {
          "border:1px solid #26313f;border-radius:6px;"
          "font:13px ui-monospace,SFMono-Regular,Menlo,monospace}"
          "input[type=checkbox]{width:auto;margin:0 7px 0 0}input[type=file]{padding:6px}"
+         // A hint sits UNDER the control it qualifies and reads as commentary,
+         // not as another field: no uppercase, no mono, one rank down.
+         ".hint{margin:5px 0 0;font:12px/1.5 system-ui;color:#75828f}"
          "button{padding:9px 15px;background:#54dcee;color:#05080d;border:0;border-radius:7px;"
          "font:600 13px system-ui;cursor:pointer;margin-top:11px}"
          "button.d{background:#ff6472;color:#fff}"
@@ -276,11 +281,14 @@ static void htmlAppendSettings(String& h) {
   h += F(">On</option><option value=0");
   if (!g_set.showLabels) h += F(" selected");
   h += F(">Off</option></select>"
-         "<label>Temperature</label><select name=tempf><option value=0");
-  if (!g_set.tempF) h += F(" selected");
-  h += F(">Celsius</option><option value=1");
-  if (g_set.tempF) h += F(" selected");
-  h += F(">Fahrenheit</option></select>"
+         "<label>Units</label><select name=units><option value=0");
+  if (!unitsImperial()) h += F(" selected");
+  h += F(">Metric &mdash; \xc2\xb0" "C, km/h, km</option><option value=1");
+  if (unitsImperial()) h += F(" selected");
+  h += F(">Imperial &mdash; \xc2\xb0" "F, mph, mi</option></select>"
+         "<p class=hint>Altitude, ground speed and vertical rate stay in "
+         "ft / kt / fpm either way &mdash; those are ICAO standard worldwide "
+         "and arrive in those units on the ADS-B wire.</p>"
          "<label>Clock</label><select name=clk24><option value=0");
   if (!g_set.clock24) h += F(" selected");
   h += F(">12-hour</option><option value=1");
@@ -325,9 +333,27 @@ static void htmlAppendIntegrations(String& h) {
          "<label>MQTT URI (blank = keep, - = clear)</label><input name=mqtturi placeholder='");
   if (g_set.mqttUri.length()) h += htmlEscape(mqttUriRedacted(g_set.mqttUri));
   else h += F("mqtt://user:pass@host:1883");
-  h += F("'><label>Timezone (POSIX TZ)</label><input name=tz value='");
+  h += F("'><label>Time zone</label><select name=tzsel id=tzsel "
+         "onchange=\"document.getElementById('tzc').style.display="
+         "this.value=='custom'?'block':'none'\">");
+  const int tzi = tzIndexOf(g_set.tz.c_str());
+  for (int i = 0; i < kTimezoneCount; i++) {
+    h += F("<option value=");
+    h += String(i);
+    if (i == tzi) h += F(" selected");
+    h += F(">");
+    h += kTimezones[i].name;
+    h += F("</option>");
+  }
+  h += F("<option value=custom");
+  if (tzi < 0) h += F(" selected");
+  h += F(">Custom POSIX TZ&hellip;</option></select>"
+         "<div id=tzc style='display:");
+  h += (tzi < 0) ? F("block") : F("none");
+  h += F("'><label>Custom POSIX TZ</label><input name=tz value='");
   h += htmlEscape(g_set.tz);
-  h += F("'><label>Panel password (blank = keep, - = clear)</label>"
+  h += F("'></div>"
+         "<label>Panel password (blank = keep, - = clear)</label>"
          "<input type=password name=ppass autocomplete=off>"
          "<button type=submit>Save</button></form>"
          "<form method=post action=/update enctype='multipart/form-data' "
@@ -434,7 +460,9 @@ static void handleSave() {
     }
   }
   if (server.hasArg("lbl")) g_set.showLabels = (server.arg("lbl") == "1");
-  if (server.hasArg("tempf")) g_set.tempF = (server.arg("tempf") == "1");
+  if (server.hasArg("units"))
+    g_set.units = (server.arg("units") == "1") ? AR_UNITS_IMPERIAL
+                                               : AR_UNITS_METRIC;
   if (server.hasArg("clk24")) g_set.clock24 = (server.arg("clk24") == "1");
   settingsSaveLocation();
   settingsSaveDisplay();
@@ -529,7 +557,15 @@ static void handleIntegrations() {
   g_set.mqttEn = server.hasArg("mqtten");
   if (uri == "-") g_set.mqttUri = "";          // "-" clears
   else if (uri.length()) g_set.mqttUri = uri;  // blank keeps (never echoed back)
-  if (tz.length()) g_set.tz = tz;
+  // The dropdown wins unless it says "custom", in which case the free-text
+  // field does. Neither may clear the zone: an empty submission keeps what is
+  // stored, the same guard the Wi-Fi password field needs (rule 14).
+  if (server.hasArg("tzsel") && server.arg("tzsel") != "custom") {
+    const int i = server.arg("tzsel").toInt();
+    if (i >= 0 && i < kTimezoneCount) g_set.tz = kTimezones[i].posix;
+  } else if (tz.length()) {
+    g_set.tz = tz;
+  }
   String pp = server.arg("ppass");
   if (pp == "-") g_set.panelPass = "";         // "-" clears
   else if (pp.length()) g_set.panelPass = pp;  // blank keeps
@@ -619,6 +655,7 @@ static void handleApiConfigGet() {
   doc["lbl"] = g_set.showLabels;
   doc["feed"] = g_set.feedUrl;
   doc["tz"] = g_set.tz;
+  doc["tz_name"] = tzNameOf(g_set.tz.c_str());
   doc["nstat"] = g_set.netStatic;
   doc["nip"] = g_set.netIp;
   doc["ngw"] = g_set.netGw;
@@ -630,7 +667,8 @@ static void handleApiConfigGet() {
   doc["nightfr"] = g_set.nightFromMin;
   doc["nightto"] = g_set.nightToMin;
   doc["wxen"] = g_set.wxEn;
-  doc["tempf"] = g_set.tempF;
+  doc["units"] = g_set.units;
+  doc["units_name"] = unitsName();
   doc["clk24"] = g_set.clock24;
   doc["issen"] = g_set.issEn;
   doc["logoen"] = g_set.logoEn;
@@ -705,7 +743,8 @@ static void apiCfgApply() {
   if (server.hasArg("lbl"))    { g_set.showLabels = argBool(server.arg("lbl"));  disp = true; }
   if (server.hasArg("wxen"))   { g_set.wxEn   = argBool(server.arg("wxen"));   disp = true; }
   // Display unit only — wx.temp_c in /api/state stays Celsius regardless.
-  if (server.hasArg("tempf"))  { g_set.tempF  = argBool(server.arg("tempf"));  disp = true; }
+  if (server.hasArg("units"))  { g_set.units  = argBool(server.arg("units")) ? AR_UNITS_IMPERIAL
+                                                                            : AR_UNITS_METRIC; disp = true; }
   if (server.hasArg("clk24"))  { g_set.clock24 = argBool(server.arg("clk24")); disp = true; }
   if (server.hasArg("issen"))  { g_set.issEn  = argBool(server.arg("issen"));  disp = true; }
   if (server.hasArg("logoen")) { g_set.logoEn = argBool(server.arg("logoen")); disp = true; }

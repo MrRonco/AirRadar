@@ -19,6 +19,14 @@ class Preferences {
   size_t putInt   (const char* k, int v)    { n[k] = v; return 4; }
   size_t putDouble(const char* k, double v) { f[k] = v; return 8; }
   size_t putString(const char* k, const String& v) { s[k] = v; return v.length(); }
+  // getUChar/putUChar/isKey exist on the real Arduino Preferences and the
+  // units migration needs all three: isKey() is how settingsLoad() tells a
+  // fresh v7.2.4 key apart from an absent one it has to migrate from tempf.
+  uint8_t getUChar(const char* k, uint8_t d = 0) { auto i = n.find(k); return i == n.end() ? d : (uint8_t)i->second; }
+  size_t  putUChar(const char* k, uint8_t v)     { n[k] = v; return 1; }
+  bool    isKey(const char* k) {
+    return b.count(k) || n.count(k) || f.count(k) || s.count(k);
+  }
  private:
   std::map<std::string, bool>        b;
   std::map<std::string, long>        n;

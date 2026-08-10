@@ -40,7 +40,9 @@ struct Settings {
   bool    mqttEn;   String mqttUri;
   bool    nightEn;  int nightFromMin, nightToMin;
   bool    wxEn, issEn, logoEn, mapEn;
-  bool    tempF;              // display unit only — g_wx.tempC stays Celsius
+  uint8_t units;              // AR_UNITS_METRIC / _IMPERIAL. DISPLAY ONLY:
+                              //  g_wx.tempC stays Celsius and g_set.rangeKm
+                              //  stays kilometres. See core/units.h.
   bool    clock24;            // 24-hour clock face
   uint8_t filtCls;            // FCLS_* bitmask
   int     filtAltLo, filtAltHi;   // ft, 0 = off
