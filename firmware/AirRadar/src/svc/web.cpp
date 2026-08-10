@@ -280,7 +280,9 @@ static void htmlAppendSettings(String& h) {
          "<div class=b><p class=t>Radar &amp; feed</p><form method=post action=/save>"
          "<label>Latitude</label><input name=lat value='");
   h += String(g_set.homeLat, 6);
-  h += F("'><label>Longitude</label><input name=lon value='");
+  h += F("' type=number step=any min=-90 max=90 inputmode=decimal>"
+         "<label>Longitude</label><input name=lon type=number step=any "
+         "min=-180 max=180 inputmode=decimal value='");
   h += String(g_set.homeLon, 6);
   h += F("'><label>Feeder URL</label><input name=feed value='");
   h += htmlEscape(g_set.feedUrl);
@@ -470,24 +472,68 @@ static void handleRoot() {
 // ============================================================
 //  Form handlers (v6 semantics)
 // ============================================================
+// B9. A coordinate field is not a number field just because it holds numbers.
+// Arduino's String::toDouble() returns 0.0 for anything it cannot parse, and
+// 0.0 passes a -90..90 range check -- so "46,45" with a comma silently moved
+// home to 0N 0E in the Gulf of Guinea, wiped the tracks, refetched the map and
+// redirected with no error and no confirmation. Reject rather than ignore, and
+// check the STRING before trusting the conversion.
+static bool numericArg(const char* name, double& out) {
+  String v = server.arg(name);
+  v.trim();
+  if (!v.length()) return false;
+  // The WHOLE string, not just its first character. Checking only the head
+  // let "46,45" through: toDouble() parses 46, stops at the comma and returns
+  // a perfectly in-range 46.0, so the guard passed and the radar moved half a
+  // degree without a word. That is the same partial-validation mistake the
+  // original bug was, one character further along.
+  size_t i = 0;
+  if (v[i] == '-' || v[i] == '+') i++;
+  int digits = 0, dots = 0;
+  for (; i < v.length(); i++) {
+    const char c = v[i];
+    if (c >= '0' && c <= '9') { digits++; continue; }
+    if (c == '.' && dots == 0) { dots++; continue; }
+    return false;                       // anything else at all
+  }
+  if (!digits) return false;
+  out = v.toDouble();
+  return true;
+}
+
 static void handleSave() {
   if (!authed()) return;
+  double lat = g_set.homeLat, lon = g_set.homeLon;
+  bool locCh = false;
+
   if (server.hasArg("lat")) {
-    double v = server.arg("lat").toDouble();
-    if (v >= -90 && v <= 90) g_set.homeLat = v;
+    if (!numericArg("lat", lat) || lat < -90 || lat > 90) {
+      server.send(400, "text/plain", "Latitude must be a number between -90 and 90");
+      return;
+    }
+    locCh |= (lat != g_set.homeLat);
   }
   if (server.hasArg("lon")) {
-    double v = server.arg("lon").toDouble();
-    if (v >= -180 && v <= 180) g_set.homeLon = v;
+    if (!numericArg("lon", lon) || lon < -180 || lon > 180) {
+      server.send(400, "text/plain", "Longitude must be a number between -180 and 180");
+      return;
+    }
+    locCh |= (lon != g_set.homeLon);
   }
   if (server.hasArg("feed")) {
     String v = server.arg("feed");
     v.trim();
-    if (v.startsWith("http://") || v.startsWith("https://")) {
-      g_set.feedUrl = v;
-      g_prefs.putString("feed", g_set.feedUrl);
+    if (!v.startsWith("http://") && !v.startsWith("https://")) {
+      // Silently discarding this was worse than rejecting it: the field
+      // reverted on reload and the owner concluded Save was broken.
+      server.send(400, "text/plain", "Feeder URL must start with http:// or https://");
+      return;
     }
+    if (v != g_set.feedUrl) { g_set.feedUrl = v; g_prefs.putString("feed", v); locCh = true; }
   }
+  g_set.homeLat = lat;
+  g_set.homeLon = lon;
+
   if (server.hasArg("lbl")) g_set.showLabels = (server.arg("lbl") == "1");
   if (server.hasArg("units"))
     g_set.units = (server.arg("units") == "1") ? AR_UNITS_IMPERIAL
@@ -495,11 +541,15 @@ static void handleSave() {
   if (server.hasArg("clk24")) g_set.clock24 = (server.arg("clk24") == "1");
   settingsSaveLocation();
   settingsSaveDisplay();
-  resetTracks();
   feederUpdateSrcName();
-  feederKick();
-  mapRequestRefresh();
-  enrichKickWeather();
+  // Only the expensive half is conditional. Changing the clock to 24-hour used
+  // to reset every track and refetch fifteen map tiles into a 750 KB cache.
+  if (locCh) {
+    resetTracks();
+    feederKick();
+    mapRequestRefresh();
+    enrichKickWeather();
+  }
   redirectHome();
 }
 
