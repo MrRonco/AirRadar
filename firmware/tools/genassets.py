@@ -101,13 +101,18 @@ d.polygon([(S(0), S(0)), (S(8), S(5)), (S(0), S(10))], fill="white")
 emit(img, "img_arrowhead")
 
 # ---------------- weather icons, line style ----------------
-# Authored in a 22-unit design space and emitted at WX_PX. The stroke stays at
-# a fixed 1.5 px of OUTPUT (LW is in supersampled units and the canvas shrinks
-# with it), which is what keeps a line icon legible as it gets smaller — the
-# glyph shrinks, the pen does not.
+# Authored in a 22-unit design space and emitted at WX_PX. The stroke is a
+# fixed weight in OUTPUT pixels (LW is in supersampled units and the canvas
+# shrinks with it), which is what keeps a line icon legible as it gets smaller
+# — the glyph shrinks, the pen does not.
+#
+# F26: 1.5 px was a hairline beside Inter Medium numerals at 18 px, so the two
+# halves of the weather row disagreed on weight — the number looked drawn, the
+# icon looked traced. 1.75 px is the closest match the supersampler can hit
+# (LW must be a whole number of supersampled units: 7/4).
 WX_PX = 16                     # must match WX_ICON_PX in ui/ui_cards.cpp
 WX_K = WX_PX / 22.0
-LW = int(1.7 * SS)             # 6 supersampled -> 1.5 px out
+LW = int(1.75 * SS)            # 7 supersampled -> 1.75 px out
 
 def W(v):                      # 22-unit design coords -> supersampled pixels
     return v * WX_K * SS

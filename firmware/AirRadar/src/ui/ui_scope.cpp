@@ -105,19 +105,27 @@ static const int LABEL_CLASH_X = LBL_GAP + LBL_W;
 static const int LABEL_CLASH_Y = LBL_H + 4;
 static const int LABEL_MAX        = 8;    // ink ceiling regardless of spacing
 
-// 45deg-NE centre offsets for the two range labels (from container centre)
+// 45deg-NE centre offsets for the range labels (from container centre).
+// F30: there are three rings and only two of them ever carried a number, so
+// the innermost was a line with no meaning -- the one ring a reader is most
+// likely to be judging a close-in target against.
 static const int RING_LBL_FULL_OFF =
     (int)((SCOPE_R - RING_LBL_INSET) * DIAG_45);
 static const int RING_LBL_MID_OFF =
     (int)((RING_MID_D / 2 - RING_LBL_INSET) * DIAG_45);
+static const int RING_LBL_INNER_OFF =
+    (int)((RING_INNER_D / 2 - RING_LBL_INSET) * DIAG_45);
 
-// The two range numerals, in clip coordinates: 45 deg NE of centre. They are
-// ink on the same field, so they are avoided both by the declutter pass and by
-// the side chooser below.
-static const float kRsvX[2] = { (float)(SCOPE_R + RING_LBL_FULL_OFF),
-                                (float)(SCOPE_R + RING_LBL_MID_OFF) };
-static const float kRsvY[2] = { (float)(SCOPE_R - RING_LBL_FULL_OFF),
-                                (float)(SCOPE_R - RING_LBL_MID_OFF) };
+// The range numerals, in clip coordinates: 45 deg NE of centre. They are ink
+// on the same field, so they are avoided both by the declutter pass and by the
+// side chooser below.
+static const int   kRsvN = 3;
+static const float kRsvX[kRsvN] = { (float)(SCOPE_R + RING_LBL_FULL_OFF),
+                                    (float)(SCOPE_R + RING_LBL_MID_OFF),
+                                    (float)(SCOPE_R + RING_LBL_INNER_OFF) };
+static const float kRsvY[kRsvN] = { (float)(SCOPE_R - RING_LBL_FULL_OFF),
+                                    (float)(SCOPE_R - RING_LBL_MID_OFF),
+                                    (float)(SCOPE_R - RING_LBL_INNER_OFF) };
 
 // ---------- blip pool ----------
 struct Blip {
@@ -138,7 +146,7 @@ struct Blip {
   lv_opa_t  cOpa;
   int16_t   cAngle;
   bool      cGlowHid, cSelHid, cMilHid, cLblHid;
-  bool      cLblGold;
+  bool      cLblWatch;
   bool      cLblLeft;   // label mirrored to the inboard side of the disc
   lv_opa_t  cLblOpa;    // fades with the glyph while coasting
   char      cLbl[16];
@@ -149,6 +157,7 @@ static lv_obj_t* s_clip         = nullptr;   // circular clip container
 static lv_obj_t* s_mapImg       = nullptr;
 static bool      s_issRaisePending = false;  // z-order fix deferred out of blipBuild
 static lv_obj_t* s_rangeLblMid  = nullptr;
+static lv_obj_t* s_rangeLblIn   = nullptr;
 static lv_obj_t* s_rangeLblFull = nullptr;
 static lv_obj_t* s_issImg       = nullptr;
 static lv_obj_t* s_issLbl       = nullptr;
@@ -321,7 +330,7 @@ static void blipLabelSide(Blip& b, int cx, int cy) {
   // over "250".
   bool left = (cx + LBL_GAP + LBL_W) > (SCOPE_D - 2);
   if (!left) {
-    for (int k = 0; k < 2; k++) {
+    for (int k = 0; k < kRsvN; k++) {
       if (fabsf(kRsvX[k] - (float)cx) < (float)LABEL_CLASH_X &&
           fabsf(kRsvY[k] - (float)cy) < (float)LABEL_CLASH_Y &&
           kRsvX[k] >= (float)cx) { left = true; break; }
@@ -372,16 +381,24 @@ static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked) {
   // shows in 22 px tabular type a few hundred pixels away. On the scope they
   // were 11 px mono over a map, and they were what pushed the label past the
   // clip edge. The white selection ring is the marker; the card is the readout.
+  // F27: a watchlist hit used to be marked by painting the callsign gold
+  // (#ffd77a) -- three units of hue away from the altitude amber (#ffc061)
+  // that every aircraft below 10,000 ft already wears, 20 px from it, at 2 m.
+  // They are the same colour at that distance, and hue was carrying two
+  // unrelated meanings. Mark it by FORM instead: brackets, which survive any
+  // viewing distance the text itself survives, and hand hue back to altitude.
+  const bool watched = trackOnWatchlist(t);
+  const char* name = t.flight[0] ? t.flight : t.hex;
   char txt[16];
-  strlcpy(txt, t.flight[0] ? t.flight : t.hex, sizeof(txt));
+  if (watched) snprintf(txt, sizeof(txt), "[%.7s]", name);
+  else         strlcpy(txt, name, sizeof(txt));
   if (!b.cInit || strcmp(txt, b.cLbl) != 0) {
     strlcpy(b.cLbl, txt, sizeof(b.cLbl));
     lv_label_set_text(b.lbl, txt);
   }
-  bool gold = trackOnWatchlist(t);
-  if (!b.cInit || gold != b.cLblGold) {
-    b.cLblGold = gold;
-    lv_obj_set_style_text_color(b.lbl, gold ? C_GOLD : C_IVORY2, 0);
+  if (!b.cInit || watched != b.cLblWatch) {
+    b.cLblWatch = watched;
+    lv_obj_set_style_text_color(b.lbl, watched ? C_IVORY : C_IVORY2, 0);
   }
 }
 
@@ -523,6 +540,9 @@ static void scopeBuildRangeLabels() {
   s_rangeLblMid = makeMicroLabel(s_clip, "", C_DIM);
   lv_obj_align(s_rangeLblMid, LV_ALIGN_CENTER, RING_LBL_MID_OFF,
                -RING_LBL_MID_OFF);
+  s_rangeLblIn = makeMicroLabel(s_clip, "", C_DIM);
+  lv_obj_align(s_rangeLblIn, LV_ALIGN_CENTER, RING_LBL_INNER_OFF,
+               -RING_LBL_INNER_OFF);
 }
 
 static void scopeUpdateRangeLabels() {
@@ -531,6 +551,8 @@ static void scopeUpdateRangeLabels() {
   lv_label_set_text_fmt(s_rangeLblFull, "%d", g_set.rangeKm);
   lv_label_set_text_fmt(s_rangeLblMid, "%d",
                         (int)(g_set.rangeKm * 2.0f / 3.0f + 0.5f));
+  lv_label_set_text_fmt(s_rangeLblIn, "%d",
+                        (int)(g_set.rangeKm / 3.0f + 0.5f));
 }
 
 static void scopeBuildIss() {
@@ -641,7 +663,7 @@ void scopeUpdate(uint32_t nowMs) {
       if (!must) {
         bool clash = false;
         const float cxL = sx - SCOPE_X0, cyL = sy - SCOPE_Y0;
-        for (int k = 0; k < 2 && !clash; k++) {
+        for (int k = 0; k < kRsvN && !clash; k++) {
           if (fabsf(kRsvX[k] - cxL) < LABEL_CLASH_X &&
               fabsf(kRsvY[k] - cyL) < LABEL_CLASH_Y) clash = true;
         }

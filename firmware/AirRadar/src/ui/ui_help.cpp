@@ -124,6 +124,59 @@ static void hRing(lv_obj_t* p, int x, int y, lv_color_t c, int d) {
   lv_obj_set_pos(r, x, sampleY(y, d));
 }
 
+// F28: an instruction ("North is always up") sat at the same indent as a
+// swatch entry, which made it read as an entry whose icon had failed to load.
+// A note takes the whole column width, starts at the column's own left edge
+// and drops one colour rank, so the two kinds of line cannot be confused.
+static int hNote(lv_obj_t* p, int x, int y, const char* text) {
+  lv_obj_t* l = lv_label_create(p);
+  lv_obj_set_style_text_font(l, F_MONO13, 0);
+  lv_obj_set_style_text_color(l, C_MUTE, 0);
+  lv_obj_set_style_text_line_space(l, HLP_LINE_SP, 0);
+  lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(l, HLP_COL_W);
+  lv_label_set_text(l, text);
+  lv_obj_set_pos(l, x, y);
+  lv_obj_update_layout(l);
+  return lv_obj_get_height(l) + HLP_ROW_GAP;
+}
+
+// The rule that opens the notes block. Inset like every other hairline.
+static int hNoteHair(lv_obj_t* p, int x, int y) {
+  lv_obj_t* h = hBox(p);
+  lv_obj_add_style(h, &st_hair, 0);
+  lv_obj_set_size(h, HLP_COL_W, 1);
+  lv_obj_set_pos(h, x, y);
+  return HLP_ROW_GAP;
+}
+
+// F29: the selection ring and the range-ring sample were both a single 16 px
+// circle -- two entries, one shape, meaning nothing until you read the text.
+// The range rings are THREE concentric circles on the scope, so draw three.
+static void hRings(lv_obj_t* p, int x, int y, lv_color_t c) {
+  // 18 / 11 / a 3 px centre dot. A third *outlined* circle at 6 px renders as
+  // a blob at 1 px border width -- the ring reads as a dot anyway, so draw the
+  // dot and let the two outlines carry the concentric idea.
+  static const int      kD[3] = {18, 11, 3};
+  static const lv_opa_t kO[3] = {210, 150, 110};   // as they fade on the scope
+  for (int i = 0; i < 3; i++) {
+    lv_obj_t* r = hBox(p);
+    lv_obj_set_size(r, kD[i], kD[i]);
+    lv_obj_set_style_radius(r, LV_RADIUS_CIRCLE, 0);
+    if (i == 2) {
+      lv_obj_set_style_bg_color(r, c, 0);
+      lv_obj_set_style_bg_opa(r, kO[i], 0);
+    } else {
+      lv_obj_set_style_bg_opa(r, LV_OPA_TRANSP, 0);
+      lv_obj_set_style_border_width(r, 1, 0);
+      lv_obj_set_style_border_color(r, c, 0);
+      lv_obj_set_style_border_opa(r, kO[i], 0);
+    }
+    lv_obj_set_pos(r, x + (kD[0] - kD[i]) / 2,
+                      sampleY(y, kD[0]) + (kD[0] - kD[i]) / 2);
+  }
+}
+
 static void hText(lv_obj_t* p, int x, int y, const char* txt,
                   lv_color_t c, const lv_font_t* f) {
   lv_obj_t* l = lv_label_create(p);
@@ -182,7 +235,9 @@ void helpBuild(lv_obj_t* parent) {
   hJet(s_overlay, c1, sampleY(y, 26), C_IVORY2, LV_OPA_COVER, 900, 256);
   y += hRow(s_overlay, c1, y, "Altitude not reported");
   hJet(s_overlay, c1, sampleY(y, 26), C_ALT_MID, 150, 900, 256);
-  y += hRow(s_overlay, c1, y, "Faded: coasting. Position estimated from the last report");
+  y += hRow(s_overlay, c1, y,
+            "Faded: COASTING. Still counted and tracked, position estimated "
+            "from the last report");
   hJet(s_overlay, c1, sampleY(y, 26), C_ALERT, LV_OPA_COVER, 900, 256);
   y += hRow(s_overlay, c1, y, "Emergency squawk 7500 / 7600 / 7700");
 
@@ -201,13 +256,14 @@ void helpBuild(lv_obj_t* parent) {
     lv_obj_set_pos(b, c2, sampleY(y, 15));
   }
   y += hRow(s_overlay, c2, y, "Square box marks a military aircraft");
-  hText(s_overlay, c2, y, "ABC", C_GOLD, F_MONO13);
-  y += hRow(s_overlay, c2, y, "Gold callsign is on your watchlist");
-  hRing(s_overlay, c2, y, C_RING, 16);
-  y += hRow(s_overlay, c2, y, "Rings are one third, two thirds and full range");
-  y += hRow(s_overlay, c2, y, "Circle edge is your range limit. Map beyond it is dimmed");
-  y += hRow(s_overlay, c2, y, "North is always up");
-  y += hRow(s_overlay, c2, y, "Tap a target to select it. Swipe to cycle");
+  hText(s_overlay, c2, y, "[ABC]", C_IVORY, F_MONO13);
+  y += hRow(s_overlay, c2, y, "Brackets mark a callsign on your watchlist");
+  hRings(s_overlay, c2, y, C_RING);
+  y += hRow(s_overlay, c2, y, "Range rings, each labelled in km at the north-east");
+  y += hNoteHair(s_overlay, c2, y);
+  y += hNote(s_overlay, c2, y, "North is always up. The circle edge is your range "
+                               "limit, and the map beyond it is dimmed.");
+  y += hNote(s_overlay, c2, y, "Tap a target to select it. Swipe to cycle.");
 
   // ---------- panels ----------
   hHeading(s_overlay, c3, HLP_TOP - 22, "PANELS");
@@ -218,9 +274,6 @@ void helpBuild(lv_obj_t* parent) {
   y += hRow(s_overlay, c3, y, "Falling back to the cloud feed");
   hDot(s_overlay, c3, y, C_AMBER);
   y += hRow(s_overlay, c3, y, "Feed has gone stale");
-  // No sample: the word IS the sample, and "COASTING" is 64 px of monospace
-  // against a 44 px gutter.
-  y += hRow(s_overlay, c3, y, "COASTING: counted, still tracked, no recent position");
   hText(s_overlay, c3, y, "FL350", C_IVORY, F_MONO13);
   y += hRow(s_overlay, c3, y, "Flight level: hundreds of feet, above 10,000");
   hText(s_overlay, c3, y, "--", C_DIM, F_MONO13);

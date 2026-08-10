@@ -49,9 +49,9 @@ static const int OV_DATE_Y    = 34;
 static const int WX_ICON_PX   = 16;   // must match WX_PX in tools/genassets.py
 static const int OV_TEMP_X    = 18;
 static const int OV_UNIT_GAP  = 2;    // number -> "°C"
-static const int OV_WIND_GAP_MIN = 2;
-static const int OV_WIND_GAP_MAX = 6;
-static const int OV_ROW_CLEAR = 6;    // wanted between the two readings
+static const int OV_TOKEN_GAP    = 3;   // inside a group: icon-dir, dir-speed
+static const int OV_GUTTER_MIN   = 8;   // between the two groups; below this
+                                        //  the unit letter is dropped
 static const int OV_HAIR1_Y   = 62;
 // The hero group (numeral + IN RANGE) is CENTRED in whatever the alert rows
 // leave, not pinned at a fixed y. Both alert slots are usually empty, so a
@@ -150,8 +150,7 @@ static const uint32_t EMERG_BLINK_MS   = 500;
 // Recolor hex strings for the range pill (mirror C_DIM / C_CY in theme.h)
 // The chevrons are the range pill's whole affordance -- the vessel now matches
 // the clock card beside it, so nothing else says "this one is a control".
-static const char* RECOLOR_STEP = "3fb6c8";   // C_CY_SOFT
-static const char* RECOLOR_VAL = "aab4c0";   // C_IVORY2, was cyan
+static const int RNG_CHEV_INSET = 16;
 
 // ============================================================
 //  Widgets + caches
@@ -160,6 +159,9 @@ static bool s_built = false;
 
 // Overview
 static lv_obj_t *s_ovCount, *s_ovInRange, *s_ovHeard, *s_ovFiltered;
+// font_hero56: ofs_x is 6 for '1' and 3-4 for every other digit.
+static const int HERO_ONE_KERN = 2;
+static int s_heroX = 0;
 static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl, *s_ovEmergSqk;
 static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24], s_bufEmergSqk[8];
@@ -190,6 +192,7 @@ static lv_obj_t *s_tmTime, *s_tmPm, *s_tmDate;
 static char s_bufTime[8], s_bufPm[4], s_bufDate[20];
 static const int TM_PM_GAP = 5;   // clock -> "PM"
 static int s_pmDy = 0;            // meridiem baseline offset, computed at build
+static const int PM_RISE = 6;     // F31: lift off the shared baseline
 
 // Weather pill
 static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxUnit;
@@ -630,6 +633,12 @@ static void buildTimeCard(lv_obj_t* parent) {
   // difference of those, which is where this offset comes from.
   s_pmDy = (F_NUM36->line_height - F_NUM36->base_line - F_NUM36->line_height / 2) -
            (F_UI12->line_height  - F_UI12->base_line  - F_UI12->line_height / 2);
+  // F31: on a shared baseline the meridiem's 9 px cap band sat inside the
+  // BOTTOM THIRD of the digits' 26 px band (measured: digits 13..38, PM 30..38
+  // in card coordinates), which reads as a subscript rather than a suffix.
+  // Raise it so its band centres just below the digits' centre -- still
+  // subordinate, no longer hanging off the bottom.
+  s_pmDy -= PM_RISE;
   s_tmPm = mkLbl(card, F_UI12, C_MUTE);        // a suffix is meta, not data
   lv_obj_align(s_tmPm, LV_ALIGN_CENTER, 0, s_pmDy);
   lv_obj_add_flag(s_tmPm, LV_OBJ_FLAG_HIDDEN);
@@ -643,9 +652,15 @@ static void buildTimeCard(lv_obj_t* parent) {
 // No plate fill at all. The old 184x66 lit slab measured 7.26x denser and 14.7x
 // brighter than the entire radar disc; even a 52 px boxed version still read as
 // a panel.
+// F25: the cog is a 26 px filled vector and the "?" was a 20 px text glyph, so
+// the pair read as two different kinds of mark -- one solid, one thin. Ringing
+// the "?" gives it the cog's enclosed footprint and its optical weight, at the
+// cost of one circle. Only the "?" asks for it; the cog already has a body.
+static const int RING_D = 18;   // bottom lands exactly on CARD_TOP_Y
+
 static void buildCornerBtn(lv_obj_t* parent, int plateX, int plateW, int cellX,
                            const char* glyph, const lv_font_t* font,
-                           lv_event_cb_t cb) {
+                           lv_event_cb_t cb, bool ring = false) {
   lv_obj_t* btn = lv_btn_create(parent);
   lv_obj_remove_style_all(btn);
   lv_obj_set_pos(btn, plateX, 0);
@@ -655,9 +670,34 @@ static void buildCornerBtn(lv_obj_t* parent, int plateX, int plateW, int cellX,
   lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
 
+  const int ringX = cellX - plateX + (GEAR_S - RING_D) / 2;
+  const int ringY = GEAR_Y + (GEAR_S - RING_D) / 2;
+  lv_obj_t* ringObj = nullptr;
+  if (ring) {
+    ringObj = mkBox(btn);
+    lv_obj_set_size(ringObj, RING_D, RING_D);
+    lv_obj_set_style_radius(ringObj, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_color(ringObj, C_DIM, 0);
+    lv_obj_set_style_border_opa(ringObj, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(ringObj, 1, 0);
+    lv_obj_set_pos(ringObj, ringX, ringY);
+  }
+
   lv_obj_t* ico = mkLbl(btn, font, C_DIM);
   lv_label_set_text(ico, glyph);
   lv_obj_set_style_text_color(ico, C_CY, LV_STATE_PRESSED);
+  if (ringObj) {
+    // The ring is the mark now, so the glyph only has to fill it: centred in
+    // the ring by measurement, not by lv_obj_center, because the ring is a
+    // sibling on the plate rather than the glyph's parent.
+    // Centre the label BOX, not the ink. micro13's descent is 4 px and the "?"
+    // uses none of it, so nudging for the descender overshot and dropped the
+    // glyph onto the ring; box-centring leaves it a hair high, which is where
+    // a "?" wants to sit anyway.
+    lv_obj_set_pos(ico, ringX + (RING_D - txtW(glyph, font)) / 2,
+                        ringY + (RING_D - font->line_height) / 2);
+    return;
+  }
   // Centre the mark in its GEAR_S cell — measured, so a font change moves the
   // glyph instead of silently unbalancing the pair — then place that cell on
   // the plate. This reproduces exactly what lv_obj_center used to do when the
@@ -684,9 +724,19 @@ static void buildRangePill(lv_obj_t* parent) {
   lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_bg_color(pill, C_SURF_HI, LV_STATE_PRESSED);
   lv_obj_add_event_cb(pill, onRangeClicked, LV_EVENT_CLICKED, NULL);
-  s_rngLbl = mkLbl(pill, F_MONO13, C_DIM);
-  lv_label_set_recolor(s_rngLbl, true);
+  // F33: the chevrons used to sit either side of the value in one recoloured
+  // label, so the whole control was ~90 px of ink in the middle of a 168 px
+  // pill and the left/right tap split had no visual expression at all. Pushing
+  // them to the pill's inner edges makes each one stand IN the half it steps,
+  // which is the only cue this control can afford.
+  s_rngLbl = mkLbl(pill, F_MONO13, C_IVORY2);
   lv_obj_center(s_rngLbl);
+  lv_obj_t* chL = mkLbl(pill, F_MONO13, C_CY_SOFT);
+  lv_label_set_text(chL, "\xE2\x80\xB9");
+  lv_obj_align(chL, LV_ALIGN_LEFT_MID, RNG_CHEV_INSET, 0);
+  lv_obj_t* chR = mkLbl(pill, F_MONO13, C_CY_SOFT);
+  lv_label_set_text(chR, "\xE2\x80\xBA");
+  lv_obj_align(chR, LV_ALIGN_RIGHT_MID, -RNG_CHEV_INSET, 0);
 }
 
 // ============================================================
@@ -718,6 +768,13 @@ static void updateOverview(uint32_t nowMs) {
   char b[24];
   snprintf(b, sizeof(b), "%d", g_orderN);
   setTextCached(s_ovCount, s_bufCount, sizeof(s_bufCount), b);
+  // F32: tabular figures give every digit the same 36.1 px advance, so a "1"
+  // pays for its narrowness in side bearing -- measured in font_hero56.c, its
+  // ofs_x is 6 where every other digit is 3 or 4. A hero starting with 1 puts
+  // its ink 2 px right of where a 6 would, which at 56 px is visible against
+  // the IN RANGE caption pinned at x=0. Shift the label, not the font.
+  const int heroX = (b[0] == '1') ? -HERO_ONE_KERN : 0;
+  if (heroX != s_heroX) { s_heroX = heroX; lv_obj_set_x(s_ovCount, heroX); }
   // "N IN RANGE / of M heard" compared a 60 s coast window against a single
   // poll, so the two numbers openly disagreed. Name the difference instead:
   // the gap IS the coasting set. Row collapses when nothing is coasting.
@@ -829,6 +886,64 @@ static void selApplyLogoLayout() {
   lv_obj_set_width(s_selOp, CONTENT_W - SEL_TEXT_X);
 }
 
+// F34: the operator caption is 94 px of monospace -- eleven characters -- and
+// the ADS-B wire delivers a carrier's REGISTERED name, not its trading name.
+// "UNITED AIRLINES INC" arrived and rendered as "UNITED AIRL...", a mid-word
+// cut sitting directly under the callsign, which is the worst place on the
+// card for one. The fix is to shorten deliberately instead of letting the
+// clipper decide: drop the legal suffix, then drop whole trailing words until
+// what remains fits. "UNITED AIRLINES INC" -> "UNITED", "Jazz Aviation LP" ->
+// "JAZZ", "SWISS INTERNATIONAL AIR LINES LTD" -> "SWISS". LV_LABEL_LONG_DOT
+// still backs it up for the single word that is genuinely too long.
+static bool isLegalSuffix(const char* w) {
+  static const char* kSuffix[] = {
+      "INC", "INC.", "LTD", "LTD.", "LIMITED", "LLC", "LP", "PLC", "CORP",
+      "CORP.", "CO", "CO.", "COMPANY", "GMBH", "AG", "SA", "S.A.", "AB", "AS",
+      "A/S", "NV", "BV", "PTY", "PTE", "GROUP", "HOLDINGS", "DBA"};
+  for (size_t i = 0; i < sizeof(kSuffix) / sizeof(kSuffix[0]); i++)
+    if (!strcasecmp(w, kSuffix[i])) return true;
+  return false;
+}
+
+static void operatorShort(const char* src, char* out, size_t n) {
+  // Uppercase copy, single-spaced. The caption has always rendered uppercase
+  // in effect because most feeds send it that way; making it explicit means
+  // the width maths below is exact rather than nearly right.
+  char buf[64];
+  size_t k = 0;
+  bool sp = true;
+  for (const char* p = src; *p && k < sizeof(buf) - 1; p++) {
+    if (*p == ' ' || *p == '\t') { if (!sp) { buf[k++] = ' '; sp = true; } continue; }
+    buf[k++] = (char)toupper((unsigned char)*p);
+    sp = false;
+  }
+  while (k && buf[k - 1] == ' ') k--;
+  buf[k] = 0;
+
+  // Split into words, then trim from the right: legal suffixes first (they
+  // carry no information at all), then ordinary words until it fits.
+  char* w[10];
+  int nw = 0;
+  for (char* p = buf; *p && nw < 10; ) {
+    w[nw++] = p;
+    char* sepp = strchr(p, ' ');
+    if (!sepp) break;
+    *sepp = 0;
+    p = sepp + 1;
+  }
+  while (nw > 1 && isLegalSuffix(w[nw - 1])) nw--;
+
+  for (;;) {
+    out[0] = 0;
+    for (int i = 0; i < nw; i++) {
+      if (i) strlcat(out, " ", n);
+      strlcat(out, w[i], n);
+    }
+    if (nw <= 1 || txtW(out, F_UI12) <= SEL_TEXT_W) return;
+    nw--;
+  }
+}
+
 static void updateSelectedIdentity(const Track* t) {
   char cs[12];
   sanitizeCallsign(t, cs, sizeof(cs));
@@ -848,7 +963,9 @@ static void updateSelectedIdentity(const Track* t) {
   snprintf(opKey, sizeof(opKey), "%.12s|%.8s", t->ownOp, t->flight);
   if (strncmp(s_bufOwnOp, opKey, sizeof(s_bufOwnOp)) != 0) {
     snprintf(s_bufOwnOp, sizeof(s_bufOwnOp), "%s", opKey);
-    lv_label_set_text(s_selOp, t->ownOp);
+    char opShort[24];
+    operatorShort(t->ownOp, opShort, sizeof(opShort));
+    lv_label_set_text(s_selOp, opShort);
 
     // Operator identity: the 3-letter ICAO code drawn in the airline's brand
     // colour. Two initials on a coloured chip were ambiguous (AC = Air Canada
@@ -1089,39 +1206,61 @@ static void updateWeatherPill() {
   float t = g_set.tempF ? g_wx.tempC * 9.0f / 5.0f + 32.0f : g_wx.tempC;
   snprintf(b, sizeof(b), "%d", (int)lroundf(t));
   bool tempCh = setTextCached(s_wxTemp, s_bufTemp, sizeof(s_bufTemp), b);
-  // "°C" and "°F" are the same width — micro13 is monospace — so the unit
-  // never moves the layout, only the number does.
-  setTextCached(s_wxUnit, s_bufUnit, sizeof(s_bufUnit),
-                g_set.tempF ? "\xC2\xB0" "F" : "\xC2\xB0" "C");
-  int tempEnd = OV_TEMP_X + txtW(s_bufTemp, F_UI15) + OV_UNIT_GAP;
-  if (tempCh) lv_obj_set_x(s_wxUnit, tempEnd);
-  tempEnd += txtW(s_bufUnit, F_UI12);
-
+  // The unit is written by the layout block below, which is the only code that
+  // knows whether the letter fits. Writing it here too would put "\xC2\xB0" "C" back
+  // every tick in tight mode -- an unconditional invalidation, rule 8.
+  static int8_t sUnitWas = -1;
+  const bool unitCh = (sUnitWas != (int8_t)g_set.tempF);
+  sUnitWas = (int8_t)g_set.tempF;
   snprintf(b, sizeof(b), "%d", (int)lroundf(g_wx.windKmh));
   bool spdCh = setTextCached(s_wxSpd, s_bufWspd, sizeof(s_bufWspd), b);
   bool dirCh = setTextCached(s_wxDir, s_bufWdir, sizeof(s_bufWdir),
                              cardinal8((float)g_wx.windDirDeg));
-  // The temperature moves the wind block too — it is what the block has to
-  // clear — so a change to any of the three re-lays the whole right side.
-  if (tempCh || spdCh || dirCh) {
-    int dirW = txtW(s_bufWdir, F_UI12), spdW = txtW(s_bufWspd, F_UI15);
-    int gap = (CONTENT_W - tempEnd - OV_ROW_CLEAR
-               - WX_ICON_PX - dirW - spdW) / 2;
-    if (gap < OV_WIND_GAP_MIN) gap = OV_WIND_GAP_MIN;
-    if (gap > OV_WIND_GAP_MAX) gap = OV_WIND_GAP_MAX;
+
+  // F35. The row is two groups -- [icon temp unit] and [icon dir speed] -- and
+  // it only READS as two if the gutter between them is clearly larger than the
+  // gaps inside them. The old code spent the slack evenly on both wind gaps
+  // and left the gutter fixed at 6, so at -40 C / NW 120 every space on the
+  // row was 2-6 px and the whole thing collapsed into one string.
+  //
+  // Now the inner gaps are fixed small and the gutter takes ALL the slack. At
+  // the extreme there still is not enough, and the only sheddable thing on the
+  // row is the unit LETTER: the degree ring stays, the C/F goes, and the
+  // 8 px it frees is what buys a legible gutter. Which unit you are in is a
+  // setting you chose, and it is on the settings screen and in /api/state --
+  // the reading is not ambiguous, only unlabelled, and only at the extremes.
+  //
+  // The temperature moves the wind block too -- it is what the block has to
+  // clear -- so a change to any of the three re-lays the whole row. unitCh is
+  // in there for exactly one reading: -40 is the same number in C and F, so
+  // toggling the unit at -40 changes nothing else that would trigger this.
+  if (tempCh || spdCh || dirCh || unitCh) {
+    const int tempW = txtW(s_bufTemp, F_UI15);
+    const int dirW  = txtW(s_bufWdir, F_UI12);
+    const int spdW  = txtW(s_bufWspd, F_UI15);
+    const int windW = WX_ICON_PX + OV_TOKEN_GAP + dirW + OV_TOKEN_GAP + spdW;
+
+    const char* unit = g_set.tempF ? "\xC2\xB0" "F" : "\xC2\xB0" "C";
+    int unitW = txtW(unit, F_UI12);
+    if (CONTENT_W - (OV_TEMP_X + tempW + OV_UNIT_GAP + unitW) - windW
+            < OV_GUTTER_MIN) {
+      unit  = "\xC2\xB0";
+      unitW = txtW(unit, F_UI12);
+    }
+    setTextCached(s_wxUnit, s_bufUnit, sizeof(s_bufUnit), unit);
+    lv_obj_set_x(s_wxUnit, OV_TEMP_X + tempW + OV_UNIT_GAP);
+
     int x = CONTENT_W - spdW;              // right to left from the edge
     lv_obj_set_x(s_wxSpd, x);
-    x -= gap + dirW;
+    x -= OV_TOKEN_GAP + dirW;
     lv_obj_set_x(s_wxDir, x);
-    lv_obj_set_x(s_wxWindIcon, x - gap - WX_ICON_PX);
+    lv_obj_set_x(s_wxWindIcon, x - OV_TOKEN_GAP - WX_ICON_PX);
   }
 }
 
 static void updateRangePill() {
-  char b[48];
-  snprintf(b, sizeof(b),
-           "#%s \xE2\x80\xB9#  #%s %d KM#  #%s \xE2\x80\xBA#",
-           RECOLOR_STEP, RECOLOR_VAL, g_set.rangeKm, RECOLOR_STEP);
+  char b[24];
+  snprintf(b, sizeof(b), "%d KM", g_set.rangeKm);
   setTextCached(s_rngLbl, s_bufRange, sizeof(s_bufRange), b);
 }
 
@@ -1142,7 +1281,7 @@ void cardsBuild(lv_obj_t* parent) {
   buildTimeCard(parent);
   // Left plate reaches back to CORNER_LEFT; right plate runs to the screen edge.
   buildCornerBtn(parent, CORNER_LEFT, CORNER_SPLIT - CORNER_LEFT, HELP_X,
-                 "?", F_M20, onHelpClicked);
+                 "?", F_UI12, onHelpClicked, true);
   buildCornerBtn(parent, CORNER_SPLIT, SCR_W - CORNER_SPLIT, GEAR_X,
                  LV_SYMBOL_SETTINGS, F_SYM16, onSettingsClicked);
   buildRangePill(parent);
