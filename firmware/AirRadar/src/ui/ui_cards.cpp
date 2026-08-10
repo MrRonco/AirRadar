@@ -202,6 +202,7 @@ static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl, *s_ovEmergSqk;
 static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovNearCpa, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24], s_bufEmergSqk[8];
 static char s_bufFiltered[16], s_bufWunit[6], s_bufCpa[20];
+static const lv_opa_t LOGO_DIM_OPA = 64;   // 25%: white 255 -> ~193
 static bool s_sqkBoxed = false;
 static lv_color_t s_colChL = {0}, s_colChR = {0};
 // Whether the wind pictogram fits alongside the wind UNIT. Owned by the layout
@@ -584,6 +585,22 @@ static void buildSelectedTop(lv_obj_t* cont) {
   s_selLogoImg = lv_img_create(s_selTile);            // real airline logo when cached
   lv_obj_align(s_selLogoImg, LV_ALIGN_CENTER, 0, 0);
   lv_obj_add_flag(s_selLogoImg, LV_OBJ_FLAG_HIDDEN);
+  // C1. brandcolor.cpp goes to real trouble for the NO-logo case -- brand
+  // colours lightened where the true colour is too dark to read, drawn as text
+  // on a dark tile -- and none of that survives once a real logo is cached,
+  // because airline logo packs ship on WHITE canvases. So the common case (a
+  // recognised carrier, which is most of them) put an unshaded 255-white
+  // square beside the card's brightest text, on a display whose entire premise
+  // is a dim room. Bright by accident of what got cached rather than to mean
+  // anything.
+  //
+  // A recolor toward C_INK, not a re-composite at cache time: it is 36x36 =
+  // 1,296 px on a card that repaints only when its content changes, so the
+  // cost is nothing, and it stays reversible in one line. LOGO_DIM_OPA takes
+  // white to ~193, below C_IVORY's 238, so the tile stops outranking the
+  // callsign next to it.
+  lv_obj_set_style_img_recolor(s_selLogoImg, C_INK, 0);
+  lv_obj_set_style_img_recolor_opa(s_selLogoImg, LOGO_DIM_OPA, 0);
 
   s_selCallsign = mkLbl(cont, F_M20, C_IVORY);
   lv_label_set_long_mode(s_selCallsign, LV_LABEL_LONG_CLIP);

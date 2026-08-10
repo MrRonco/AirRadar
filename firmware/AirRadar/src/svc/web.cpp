@@ -217,6 +217,7 @@ static void htmlAppendHead(String& h) {
          ".hint{margin:5px 0 0;font:12px/1.5 system-ui;color:#8e9baa}"
          "tr.em{background:rgba(255,100,114,.13)}tr.em b{color:#ff8a94}"
          "td.op{max-width:210px;overflow:hidden;text-overflow:ellipsis}"
+         "tr.rw{cursor:pointer}tr.rw:hover{background:#182231}"
          "button{padding:9px 15px;background:#54dcee;color:#05080d;border:0;border-radius:7px;"
          "font:600 13px system-ui;cursor:pointer;margin-top:11px}"
          "button.d{background:#ff6472;color:#05080d}"
@@ -433,13 +434,18 @@ static void htmlAppendFooter(String& h) {
          // kilometres in the browser.
          "else for(var i=0;i<f.length;i++){var a=f[i];"
          "var em=/^(7500|7600|7700)$/.test(a.squawk||'');"
-         "b+='<tr'+(em?' class=em':'')+'><td>'+((a.flight||'').trim()||a.hex)+"
+         "b+='<tr'+(em?' class=em rw':' class=rw')+' data-h=\"'+a.hex+'\"><td>'+"
+         "((a.flight||'').trim()||a.hex)+"
          "'</td><td>'+(a.type||'')+'</td><td class=op title=\"'+(a.op||'')+'\">'+"
          "(a.op||'')+'</td><td>'+((a.origin&&a.dest)?a.origin+'&rarr;'+a.dest:"
          "'<span class=n>&mdash;</span>')+'</td><td>'+(a.alt_ft>=FLT?'FL'+Math.round(a.alt_ft/100):"
          "(a.alt_ft>=0?a.alt_ft+' ft':'&mdash;'))+'</td><td>'+D(a.dist_km)+"
          "'</td><td>'+(em?'<b>! '+a.squawk+'</b>':(a.squawk||'&mdash;'))+'</td></tr>'}"
-         "$('tb').innerHTML=b}).catch(function(){})}"
+         "$('tb').innerHTML=b;"
+         "var rs=document.querySelectorAll('#tb tr.rw');"
+         "for(var j=0;j<rs.length;j++){rs[j].onclick=function(){"
+         "fetch('/api/select?hex='+this.getAttribute('data-h'),{method:'POST'})}}"
+         "}).catch(function(){})}"
          "$('host').textContent=location.host;"
          "var t1,t2;function GO(){M();T();t1=setInterval(M,10000);t2=setInterval(T,15000)}"
          "function STOP(){clearInterval(t1);clearInterval(t2)}"
@@ -928,6 +934,33 @@ static void handleScreenBmp() {
 // reports what IT saw. Settles "is it my firewall or the firmware?" forever.
 // Plain-HTTP only (LAN diagnostics); blocking (~4s max) is fine for a manual
 // support call. Auth-guarded like everything else.
+// D3 (part). The console showed a live traffic table and clicking a row did
+// nothing, while the device already tracks g_selHex. This is the one thing a
+// mouse can do that tapping a 26 px glyph never will, and it is ten lines.
+// Runs in loop context (WebServer::handleClient is called from webLoop), so
+// touching g_selHex and the UI directly is within the threading contract.
+static void handleApiSelect() {
+  if (!authed()) return;
+  String hex = server.arg("hex");
+  hex.trim();
+  hex.toLowerCase();
+  if (!hex.length()) {                       // no hex = clear the selection
+    g_selHex[0] = 0;
+  } else {
+    if (hex.length() >= sizeof(g_selHex)) { server.send(400, "text/plain", "bad hex"); return; }
+    for (size_t i = 0; i < hex.length(); i++) {
+      const char c = hex[i];
+      if (!isxdigit((unsigned char)c)) { server.send(400, "text/plain", "bad hex"); return; }
+    }
+    if (!tracksFindByHex(hex.c_str())) { server.send(404, "text/plain", "not tracked"); return; }
+    strlcpy(g_selHex, hex.c_str(), sizeof(g_selHex));
+  }
+  // No UI calls from here. web.cpp does not include the LVGL layer and should
+  // not: the handler mutates state and uiTick renders it on the next 250 ms
+  // pass, which is the same separation every other setting already uses.
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
 static void handleApiProbe() {
   if (!authed()) return;
   String url = server.arg("url");
@@ -1131,6 +1164,7 @@ void webBegin() {
   server.on("/api/heapwalk", HTTP_GET, handleHeapWalk);
   server.on("/api/stalls", HTTP_GET, handleStalls);
   server.on("/api/probe", HTTP_GET, handleApiProbe);
+  server.on("/api/select", HTTP_POST, handleApiSelect);
   server.on("/update", HTTP_POST, handleUpdateDone, handleUpdateUpload);
   server.onNotFound(handleNotFound);
   // WebServer only retains headers we explicitly collect (for the CSRF guard).
