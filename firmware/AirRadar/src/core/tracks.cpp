@@ -53,7 +53,7 @@ static void mergePlane(const ApiPlane& p, Track& t, uint32_t now) {
 }
 
 bool tracksApplyPending() {
-  int  n = 0, heard = 0;
+  int  n = 0, heard = 0, inRange = 0;
   bool ok = false, local = true, ready = false;
   portENTER_CRITICAL(&g_dataMux);
   ready = g_pendingReady;
@@ -61,6 +61,7 @@ bool tracksApplyPending() {
     ok    = g_pendingOk;
     n     = g_pendingCount;
     heard = g_pendingHeard;
+    inRange = g_pendingInRange;
     local = g_pendingLocal;
     if (n < 0) n = 0;                       // never trust the producer blindly
     if (n > AR_MAX_TRACKS) n = AR_MAX_TRACKS;
@@ -72,6 +73,7 @@ bool tracksApplyPending() {
 
   g_feedIsLocal = local;
   g_heardCount  = heard;
+  g_inRangeTotal = inRange;
   if (!local) g_feedMsgRate = -1.0f;        // msg-rate readout is local-feeder only
 
   const uint32_t now = millis();

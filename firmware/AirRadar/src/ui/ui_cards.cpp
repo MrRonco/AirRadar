@@ -185,6 +185,7 @@ static int s_heroX = 0;
 static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl, *s_ovEmergSqk;
 static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24], s_bufEmergSqk[8];
+static char s_bufFiltered[16];
 static char s_bufNear[12], s_bufNearD[24], s_bufFeed[12], s_bufSrc[24];
 static lv_color_t s_colSrc = {};
 static lv_color_t s_colCount = {};
@@ -437,7 +438,7 @@ static void buildOverview(lv_obj_t* parent) {
   // tracksRebuildOrder() skips anything failing the filters, so the 56 px hero
   // is the FILTERED count -- turn off LIGHT and the panel reports "4 IN RANGE"
   // with total confidence while six aircraft are overhead. Nothing said so.
-  s_ovFiltered = mkMicro(card, "FILTERED", 0, OV_INRANGE_Y);
+  s_ovFiltered = mkMicro(card, "", 0, OV_INRANGE_Y);
   lv_obj_set_style_text_color(s_ovFiltered, C_AMBER, 0);
   lv_obj_align(s_ovFiltered, LV_ALIGN_TOP_RIGHT, 0, OV_INRANGE_Y);
   lv_obj_add_flag(s_ovFiltered, LV_OBJ_FLAG_HIDDEN);
@@ -826,7 +827,26 @@ static void updateOverview(uint32_t nowMs) {
   const bool filtered = (g_set.filtCls != AR_FILT_CLS_ALL) ||
                         g_set.filtAltLo || g_set.filtAltHi ||
                         g_set.watchlist.length();
-  setHiddenCached(s_ovFiltered, !filtered);
+  // Two different reasons the hero can understate the sky, one slot. CAPPED
+  // wins because it is the one the owner cannot see the cause of: FILTERED is
+  // the consequence of a setting they chose, CAPPED is the table running out
+  // of room, which nothing else on the panel would ever reveal. The feeder
+  // now keeps the NEAREST AR_MAX_TRACKS rather than the first it parsed, so
+  // the aircraft being dropped are genuinely the far ones -- but the count is
+  // still not the whole sky and has to say so.
+  const bool capped = (g_inRangeTotal > g_orderN);
+  if (capped) {
+    // "OF 57", not "57 IN RANGE": the caption to its left already says IN
+    // RANGE, and the long form is 88 px right-aligned into a 134 px row whose
+    // left half is occupied -- it overprinted the caption. Reads as
+    // "32 IN RANGE ... OF 57".
+    char cb[12];
+    snprintf(cb, sizeof(cb), "OF %d", g_inRangeTotal);
+    setTextCached(s_ovFiltered, s_bufFiltered, sizeof(s_bufFiltered), cb);
+  } else if (filtered) {
+    setTextCached(s_ovFiltered, s_bufFiltered, sizeof(s_bufFiltered), "FILTERED");
+  }
+  setHiddenCached(s_ovFiltered, !(capped || filtered));
   const bool allCoasting = (g_orderN > 0 && coasting == g_orderN);
   setColorCached(s_ovCount, &s_colCount, allCoasting ? C_AMBER : C_IVORY);
 

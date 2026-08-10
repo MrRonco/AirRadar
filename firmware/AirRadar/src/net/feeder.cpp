@@ -204,7 +204,19 @@ static bool fetchParse(Stream& s, bool local, const FeederJob& job) {
   ApiPlane* tmp = parseBuf();
   if (!tmp) return false;
 
-  int n = 0, heard = 0;
+  // The table holds AR_MAX_TRACKS. It used to keep the FIRST that many in
+  // range, in the feeder's JSON order -- and readsb/tar1090 do not sort by
+  // distance. So above the cap the panel silently dropped arbitrary aircraft,
+  // and NEAREST could name the wrong one because the genuinely closest target
+  // happened to appear 41st. Keep the nearest instead: fill, then replace the
+  // current farthest whenever a closer one arrives.
+  //
+  // Raising AR_MAX_TRACKS is not the fix -- g_tracks, g_pendingPlanes and
+  // tracks.cpp's drain buffer are all internal .bss, which is the RAM the TLS
+  // gate exists to ration (rule 11).
+  int n = 0, heard = 0, inRange = 0;
+  float dist[AR_MAX_TRACKS];
+  int   farIdx = 0;                         // valid once n == AR_MAX_TRACKS
   for (JsonObject ac : arr) {
     if (!ac["lat"].is<float>() || !ac["lon"].is<float>()) continue;
     if (local) {                            // our coast logic owns stale positions
@@ -213,22 +225,40 @@ static bool fetchParse(Stream& s, bool local, const FeederJob& job) {
     }
     heard++;                                // aircraft with a live position
     double lat = ac["lat"], lon = ac["lon"];
-    if (haversineKm(job.homeLat, job.homeLon, lat, lon) > (float)job.rangeKm) continue;
-    if (n >= AR_MAX_TRACKS) continue;       // in range but table full
-    parsePlane(ac, tmp[n]);
-    n++;
+    const float d = haversineKm(job.homeLat, job.homeLon, lat, lon);
+    if (d > (float)job.rangeKm) continue;
+    inRange++;                              // the honest count, cap or no cap
+    if (n < AR_MAX_TRACKS) {
+      parsePlane(ac, tmp[n]);
+      dist[n] = d;
+      n++;
+      if (n == AR_MAX_TRACKS) {             // table just filled: find the farthest
+        farIdx = 0;
+        for (int i = 1; i < n; i++) if (dist[i] > dist[farIdx]) farIdx = i;
+      }
+    } else if (d < dist[farIdx]) {
+      parsePlane(ac, tmp[farIdx]);          // closer than our worst: take its slot
+      dist[farIdx] = d;
+      farIdx = 0;
+      for (int i = 1; i < n; i++) if (dist[i] > dist[farIdx]) farIdx = i;
+    }
   }
 
   portENTER_CRITICAL(&g_dataMux);
-  g_pendingCount = n;
-  g_pendingHeard = heard;
+  g_pendingCount   = n;
+  g_pendingHeard   = heard;
+  g_pendingInRange = inRange;
   memcpy(g_pendingPlanes, tmp, sizeof(ApiPlane) * n);
   g_pendingOk    = true;
   g_pendingLocal = local;
   g_pendingReady = true;                    // ready flag last
   portEXIT_CRITICAL(&g_dataMux);
-  Serial.printf("[feeder] fetch(%s): %d in range, %d heard\n",
-                local ? "local" : "cloud", n, heard);
+  if (inRange > n)
+    Serial.printf("[feeder] fetch(%s): %d shown of %d in range (CAPPED), %d heard\n",
+                  local ? "local" : "cloud", n, inRange, heard);
+  else
+    Serial.printf("[feeder] fetch(%s): %d in range, %d heard\n",
+                  local ? "local" : "cloud", n, heard);
   return true;
 }
 

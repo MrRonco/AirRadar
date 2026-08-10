@@ -20,6 +20,9 @@ extern char     g_selHex[8];              // "" = nothing selected
 extern int      g_orderIdx[AR_MAX_TRACKS];// distance-sorted indexes of in-range tracks
 extern int      g_orderN;
 extern int      g_heardCount;             // aircraft with positions in last poll
+extern int      g_inRangeTotal;           // in range before the table cap; when this
+                                          //  exceeds g_orderN the hero is not the
+                                          //  whole story and the UI must say so
 extern bool     g_feedIsLocal;            // current source
 extern char     g_localSrcName[AR_LOCAL_SRC_NAME_MAX]; // shown on Overview ("LOCAL" or host)
 extern uint32_t g_lastGoodApply;          // millis of last successful apply
@@ -68,6 +71,7 @@ extern portMUX_TYPE g_dataMux;
 extern ApiPlane g_pendingPlanes[AR_MAX_TRACKS];
 extern int      g_pendingCount;
 extern int      g_pendingHeard;
+extern int      g_pendingInRange;         // in range BEFORE the AR_MAX_TRACKS cap
 extern bool     g_pendingLocal;
 extern volatile bool g_pendingReady;       // set by net task, cleared by applyPending
 extern volatile bool g_pendingOk;

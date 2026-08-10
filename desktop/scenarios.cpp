@@ -23,6 +23,7 @@ static void clearTracks() {
   g_selHex[0] = 0;
   g_orderN = 0;
   g_heardCount = 0;
+  g_inRangeTotal = 0;
 }
 
 // Place a track at a bearing/distance from home so it lands where you expect.
@@ -106,7 +107,10 @@ void scenarioApply(int n) {
     case SCN_CROWDED: {
       static const char* ops[6] = {"AIR CANADA", "WESTJET", "Porter Airlines",
                                    "UNITED AIRLINES INC", "Jazz Aviation LP", ""};
-      for (int i = 0; i < 30; i++) {
+      // AR_MAX_TRACKS aircraft, not 30 -- the interesting case is the table
+      // exactly full, because that is when the feeder starts discarding and
+      // the CAPPED disclosure has to appear.
+      for (int i = 0; i < AR_MAX_TRACKS; i++) {
         char hex[8], fl[12];
         snprintf(hex, sizeof(hex), "c0%04x", i);
         snprintf(fl, sizeof(fl), "%s%03d", (i % 3 == 0) ? "ACA" : (i % 3 == 1) ? "WJA" : "POE", i);
@@ -114,7 +118,8 @@ void scenarioApply(int n) {
             3000 + i * 1400, 260 + i * 6, (float)(i * 12 % 360),
             (i % 5 - 2) * 700, (float)(i * 12 % 360), 15.0f + i * 7.5f);
       }
-      g_heardCount = 34;
+      g_heardCount = 61;
+      g_inRangeTotal = 57;      // 57 were in range; the table holds 40
       break;
     }
 
