@@ -834,11 +834,7 @@ static void updateOverview(uint32_t nowMs) {
   // "N IN RANGE / of M heard" compared a 60 s coast window against a single
   // poll, so the two numbers openly disagreed. Name the difference instead:
   // the gap IS the coasting set. Row collapses when nothing is coasting.
-  int coasting = 0;
-  for (int i = 0; i < g_orderN; i++) {
-    const Track& t = g_tracks[g_orderIdx[i]];
-    if ((int32_t)(nowMs - t.lastApiMs) > (int32_t)AR_STALE_TRACK_MS) coasting++;
-  }
+  const int coasting = tracksCoastingCount(nowMs);
   setHiddenCached(s_ovHeard, coasting == 0);
   if (coasting > 0) {
     snprintf(b, sizeof(b), "%d COASTING", coasting);
@@ -860,7 +856,16 @@ static void updateOverview(uint32_t nowMs) {
   // now keeps the NEAREST AR_MAX_TRACKS rather than the first it parsed, so
   // the aircraft being dropped are genuinely the far ones -- but the count is
   // still not the whole sky and has to say so.
-  const bool capped = (g_inRangeTotal > g_orderN);
+  // Against AR_MAX_TRACKS, NOT against g_orderN. The two counts measure
+  // different things and comparing them produced a false positive: g_orderN is
+  // the track table -- FILTERED, and spanning a 60 s coast window -- while
+  // g_inRangeTotal is one unfiltered poll. With a class filter active and no
+  // capping at all, 30 in range against 25 shown would have lit CAPPED.
+  // Caught on the device, where /metrics reported in_range 9 beside
+  // in_range_total 6 and the inequality ran the other way.
+  //
+  // The feeder discards only when the table is full, so that is the condition.
+  const bool capped = (g_inRangeTotal > AR_MAX_TRACKS);
   if (capped) {
     // "OF 57", not "57 IN RANGE": the caption to its left already says IN
     // RANGE, and the long form is 88 px right-aligned into a 134 px row whose

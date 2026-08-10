@@ -29,3 +29,8 @@ Track* tracksFindByHex(const char* hex);
 Track* tracksSelected();                  // nullptr if none
 Track* tracksNearest();                   // first of order, nullptr if none
 Track* tracksFirstEmergency();            // in-range emergency or nullptr
+// In-range tracks older than AR_STALE_TRACK_MS -- i.e. being dead-reckoned
+// rather than reported. ONE definition: the Overview computed it inline and
+// the web console had no notion of it at all, which is why the console still
+// showed the pre-fix "heard" number the panel had already stopped trusting.
+int    tracksCoastingCount(uint32_t nowMs);

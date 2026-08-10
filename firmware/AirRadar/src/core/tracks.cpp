@@ -180,6 +180,16 @@ bool tracksSelectAtPixel(int px, int py) {
 // ============================================================
 //  Lookups
 // ============================================================
+int tracksCoastingCount(uint32_t nowMs) {
+  int n = 0;
+  for (int i = 0; i < g_orderN; i++) {
+    const Track& t = g_tracks[g_orderIdx[i]];
+    // Signed: applyPending can stamp lastApiMs a hair after nowMs.
+    if ((int32_t)(nowMs - t.lastApiMs) > (int32_t)AR_STALE_TRACK_MS) n++;
+  }
+  return n;
+}
+
 Track* tracksFindByHex(const char* hex) {
   if (!hex || !hex[0]) return nullptr;
   for (int i = 0; i < AR_MAX_TRACKS; i++)

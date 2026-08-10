@@ -242,7 +242,13 @@ static void htmlAppendStatus(String& h) {
          " &nbsp; up <span id=up>&mdash;</span> &nbsp; " AR_VERSION "</span></div>"
          "<div class='g c8'>"
          "<div class=tile><div class=tk>in range</div><div class=tv id=mR>&mdash;</div></div>"
-         "<div class=tile><div class=tk>heard</div><div class=tv id=mH>&mdash;</div></div>"
+         // "heard" beside "in range" implied heard is a superset of in range.
+         // It is not: in_range is filtered, range-limited and spans a 60 s
+         // coast window, while heard is one poll of the WHOLE SKY, unfiltered.
+         // The two are not comparable in either direction and the panel had
+         // already worked this out -- the gap between them IS the coasting
+         // set, which is the number worth a headline tile.
+         "<div class=tile><div class=tk>coasting</div><div class=tv id=mH>&mdash;</div></div>"
          "<div class=tile><div class=tk>msg rate</div><div class=tv id=mM>&mdash;</div></div>"
          "<div class=tile><div class=tk>source</div><div class=tv id=mS>&mdash;</div></div>"
          "<div class=tile><div class=tk>rssi</div><div class=tv id=mW>&mdash;</div></div>"
@@ -388,7 +394,7 @@ static void htmlAppendFooter(String& h) {
          "function M(){fetch('/metrics').then(function(r){return r.text()}).then(function(t){"
          "var m=P(t);"
          "$('mR').textContent=m.airradar_in_range;"
-         "$('mH').textContent=m.airradar_heard;"
+         "$('mH').textContent=m.airradar_coasting;"
          "$('mM').textContent=Math.round(m.airradar_msg_rate||0)+'/s';"
          "var lo=m.airradar_feed_local==1;"
          "$('mS').textContent=lo?'LOCAL':'CLOUD';"
@@ -606,6 +612,8 @@ static void handleApiState() {
   doc["src_name"] = g_localSrcName;
   doc["in_range"] = g_orderN;
   doc["heard"] = g_heardCount;
+  doc["coasting"] = tracksCoastingCount(millis());
+  doc["in_range_total"] = g_inRangeTotal;   // before the AR_MAX_TRACKS cap
   doc["msg_rate"] = g_feedMsgRate;
   doc["lat"] = g_set.homeLat;
   doc["lon"] = g_set.homeLon;
@@ -884,6 +892,10 @@ static void handleMetrics() {
   snprintf(l, sizeof(l), "airradar_in_range %d\n", g_orderN); s += l;
   s += F("# TYPE airradar_heard gauge\n");
   snprintf(l, sizeof(l), "airradar_heard %d\n", g_heardCount); s += l;
+  s += F("# TYPE airradar_coasting gauge\n");
+  snprintf(l, sizeof(l), "airradar_coasting %d\n", tracksCoastingCount(millis())); s += l;
+  s += F("# TYPE airradar_in_range_total gauge\n");
+  snprintf(l, sizeof(l), "airradar_in_range_total %d\n", g_inRangeTotal); s += l;
   s += F("# TYPE airradar_msg_rate gauge\n");
   snprintf(l, sizeof(l), "airradar_msg_rate %.2f\n", (double)g_feedMsgRate); s += l;
   s += F("# TYPE airradar_feed_local gauge\n");
