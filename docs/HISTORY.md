@@ -340,3 +340,62 @@ disc edge and the numerals alone and knew nothing about what had already been
 placed. Whoever decides *whether* a label appears has to decide *where*: the
 declutter pass now tries both sides against real rectangles and carries its
 answer forward. Closer targets win contested space.
+
+## v7.2.5 — the second audit, built
+
+Two reviewers went over thirteen panel states and the web console again, with
+the previous round's 38 fixes ruled out in advance. Thirty-two of their
+findings are implemented here. Two were withdrawn and the reason is the most
+useful thing in this release.
+
+**A premise I invented, and what it cost.** The brief handed to both reviewers
+said the panel is *"read from 1–3 metres, ambient-glanced… nobody leans in."*
+Nobody had measured that. It is a desk display, read from about 0.9 m, and the
+largest finding of the audit — that `font_micro13` at 2.9′ sits below the
+human acuity limit and most of the panel is therefore unresolvable — was an
+artefact of the invented distance. At 0.9 m it is 6.5′: small, but legible.
+Six source comments had already absorbed the wrong number as fact. `CLAUDE.md`
+now carries a measured *"How it is actually read"* table so the next person
+inherits a number rather than an assumption, and the useful inversion is that
+at desk distance the display has headroom for **more** information, not less.
+
+**The panel stops asserting things that are not true.** Above forty aircraft
+the track table kept the first forty *in the feeder's JSON order* — so the hero
+count pinned silently and `NEAREST` could name the wrong aircraft, because the
+genuinely closest one was discarded if it appeared forty-first. It keeps the
+nearest forty now and says `OF 57` when the sky holds more. A pinned aircraft
+that leaves the ring stops showing a cyan `LIVE` dot beside an empty disc. The
+web console's `IN RANGE 13` no longer sits beside `HEARD 9`, two numbers that
+could not both be true. And coasting callsigns, which measured **2.04:1**
+against the map, are marked by a leading `~` at full contrast instead —
+because the state where the panel shows a dead-reckoned guess is exactly when
+you need to read which aircraft it is.
+
+**It says whether anything is coming toward you.** `NEAREST 23.0 km SE` is a
+scalar; it cannot tell an aircraft overhead in four minutes from one that left
+twenty minutes ago. Three cosines over data already in `Track` turn it into
+`9 KM IN 3 MIN`, or `OUTBOUND`. No network, no PSRAM, no flash, no new glyphs.
+
+**And it remembers an hour.** A 60-byte ring and a 1-bit canvas, repainted
+once a minute — three orders of magnitude below the repaint that caused the
+v7.2 glitch, and nothing written to flash. It shares the emergency strip's
+slot, so it appears only when nothing is wrong.
+
+Also: tap-to-wake during quiet hours used to last under a second (the wake had
+no timer, so the next 1 s tick blanked the panel again unless a finger was
+still on the glass), and a newly seen emergency squawk now lights the panel for
+a minute at 03:00. Labels dodge other aircraft rather than being drawn through
+them. The emergency strip names the squawk — `7600 RADIO` — instead of leaving
+the reader to translate it. The CARTO attribution, defined since the map
+landed and never once drawn, is now in the gutter below the disc. "Panel
+password" was renamed **Web & API password**, because it never locked the
+panel. The console works on a phone, its destructive button went from 2.87:1 to
+6.99:1, and clicking a row in its traffic table now selects that aircraft on
+the panel.
+
+Four defects in this release were introduced by the work in it and caught
+before shipping: a disclosure that compared two counts measuring different
+populations, a coordinate guard that validated only the first character (so
+`46,45` still moved the radar), a wind icon with two owners fighting over its
+visibility, and a sparkline hidden by any single coasting aircraft. Three of
+the four were found only on the hardware.
