@@ -123,7 +123,18 @@
 // therefore costs these plates 4 px of height, 28 -> 24. Accepted: they are
 // 59 and 39 px WIDE, they sit against the physical top edge so you cannot
 // overshoot upward, and the glyph ink (y 7..22) stays comfortably inside.
-#define CORNER_TOUCH_H CARD_TOP_Y
+// C6. Was CARD_TOP_Y (24 px = 4.6 mm at 0.1906 mm/px), under the 6.35 mm
+// floor, defended in a comment as "they sit against the physical top edge so
+// you cannot overshoot upward". That is a Fitts's-Law-with-a-MOUSE argument --
+// a screen edge is an infinite target for a cursor. It does not transfer to
+// touch: a finger aiming 3 mm high lands on the bezel and registers nothing.
+//
+// The reason given for stopping at the card was that taps would open Settings.
+// Checked: buildSelected() never sets LV_OBJ_FLAG_CLICKABLE on the card or its
+// container, and s_clip spans x 188-612, nowhere near x 702-800. The card's
+// top-right corner has no action to steal, so the invisible plate can grow
+// over it for free. Only the plate grows; the glyphs stay at GEAR_Y.
+#define CORNER_TOUCH_H 44
 
 // ============================================================
 //  Altitude ramp — ONE definition

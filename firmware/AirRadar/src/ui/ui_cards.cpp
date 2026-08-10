@@ -244,7 +244,7 @@ static const int PM_RISE = 6;     // F31: lift off the shared baseline
 
 // Weather pill
 static lv_obj_t *s_wxIcon, *s_wxTemp, *s_wxUnit;
-static lv_obj_t *s_wxWindIcon, *s_wxDir, *s_wxSpd, *s_wxSpdUnit;
+static lv_obj_t *s_wxNone, *s_wxWindIcon, *s_wxDir, *s_wxSpd, *s_wxSpdUnit;
 static const lv_img_dsc_t* s_wxIconSrc = nullptr;
 static char s_bufTemp[8], s_bufUnit[4], s_bufWdir[4], s_bufWspd[8];
 
@@ -451,6 +451,10 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_pos(s_wxSpd, CONTENT_W, OV_HOME_Y);
   s_wxSpdUnit = mkLbl(card, F_UI12, C_MUTE);   // KMH / MPH -- see updateWeatherPill
   lv_obj_set_pos(s_wxSpdUnit, CONTENT_W, microY);
+  s_wxNone = mkLbl(card, F_UI15, C_MUTE);      // the row's own outage state
+  lv_label_set_text(s_wxNone, "--\xC2\xB0    \xC2\xB7    --");
+  lv_obj_set_pos(s_wxNone, 0, OV_HOME_Y);
+  lv_obj_add_flag(s_wxNone, LV_OBJ_FLAG_HIDDEN);
   s_tmDate = mkLbl(card, F_MONO13, C_DIM);
   lv_obj_set_style_text_letter_space(s_tmDate, 1, 0);
   lv_obj_align(s_tmDate, LV_ALIGN_TOP_MID, 0, OV_DATE_Y);
@@ -1410,7 +1414,15 @@ static void updateWeatherPill() {
   // The pill is gone; these three widgets are rows in the Overview card now, so
   // hide them individually. (s_wxPill no longer exists — calling
   // setHiddenCached on it would dereference nullptr.)
-  bool show = g_set.wxEn && g_wx.valid;
+  // C2. `wxEn && valid` hid icon, temperature and wind together, leaving ~37 px
+  // of dead space at the top of the card the eye lands on first -- the same
+  // symptom already fixed once for the clock, reached by a different trigger
+  // (a cold boot, or any sustained Open-Meteo outage on a device that runs
+  // 24/7). The row is turned OFF by the setting and EMPTY by a missing
+  // reading, and those are different things: the toggle hides it, an outage
+  // shows dashes.
+  const bool wxOn = g_set.wxEn;
+  const bool show = wxOn && g_wx.valid;
   setHiddenCached(s_wxIcon, !show);
   setHiddenCached(s_wxTemp, !show);
   setHiddenCached(s_wxUnit, !show);
@@ -1418,6 +1430,7 @@ static void updateWeatherPill() {
   setHiddenCached(s_wxDir, !show);
   setHiddenCached(s_wxSpd, !show);
   setHiddenCached(s_wxSpdUnit, !show);
+  setHiddenCached(s_wxNone, !(wxOn && !g_wx.valid));
   if (!show) return;
 
   const lv_img_dsc_t* ic = wxIconFor(g_wx.wmoCode);

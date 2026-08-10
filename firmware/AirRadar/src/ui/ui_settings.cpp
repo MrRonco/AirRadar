@@ -78,7 +78,9 @@ static void toast(const char* msg) {
 // ============================================================
 static lv_obj_t* mkCloseBtn(lv_obj_t* parent, lv_event_cb_t cb) {
   lv_obj_t* b = lv_btn_create(parent);
-  lv_obj_set_size(b, 40, 40);
+  // 40 px is 7.6 mm and this is the ONLY exit from every overlay screen.
+  // There is 24 px of PAGE_PAD and an empty title bar around it.
+  lv_obj_set_size(b, 52, 52);
   lv_obj_set_style_radius(b, R_MD, 0);
   lv_obj_set_style_bg_color(b, C_CARD_HI, 0);
   lv_obj_set_style_bg_opa(b, 150, 0);

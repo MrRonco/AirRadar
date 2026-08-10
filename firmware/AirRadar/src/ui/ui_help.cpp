@@ -239,7 +239,17 @@ void helpBuild(lv_obj_t* parent) {
             "Faded glyph and a ~ before the callsign: COASTING. Still counted "
             "and tracked, position estimated from the last report");
   hJet(s_overlay, c1, sampleY(y, 26), C_ALERT, LV_OPA_COVER, 900, 256);
-  y += hRow(s_overlay, c1, y, "Emergency squawk 7500 / 7600 / 7700");
+  y += hRow(s_overlay, c1, y, "Emergency squawk: 7500 HIJACK, 7600 RADIO, "
+                              "7700 MAYDAY. The Overview strip names it too");
+  // C7: the ISS is the one mark on the disc that is not an aircraft, it shows
+  // unannounced a few times a day, and nothing explained it -- which makes it
+  // look like a malfunction rather than a feature.
+  {
+    lv_obj_t* i = lv_img_create(s_overlay);
+    lv_img_set_src(i, &img_iss);
+    lv_obj_set_pos(i, c1, sampleY(y, 12));
+  }
+  y += hRow(s_overlay, c1, y, "The ISS, when it is overhead and the layer is on");
 
   // ---------- scope ----------
   hHeading(s_overlay, c2, HLP_TOP - 22, "SCOPE");
@@ -265,7 +275,8 @@ void helpBuild(lv_obj_t* parent) {
   y += hNoteHair(s_overlay, c2, y);
   y += hNote(s_overlay, c2, y, "North is always up. The circle edge is your range "
                                "limit, and the map beyond it is dimmed.");
-  y += hNote(s_overlay, c2, y, "Tap a target to select it. Swipe to cycle.");
+  y += hNote(s_overlay, c2, y, "Tap a target to select it. Tap empty sky to "
+                               "clear it. Swipe to cycle.");
 
   // ---------- panels ----------
   hHeading(s_overlay, c3, HLP_TOP - 22, "PANELS");
@@ -286,6 +297,13 @@ void helpBuild(lv_obj_t* parent) {
   // from what the panel actually renders.
   hText(s_overlay, c3, y, "ACA", brandColorFor("ACA"), F_MONO13);
   y += hRow(s_overlay, c3, y, "No logo on file: the operator's ICAO code in its own colour");
+  // The two marks that specifically mean "the number above is not the whole
+  // story" were the two the legend did not explain.
+  // One entry, not two: both marks say the same thing -- the big number is
+  // not the whole sky -- and the column has no room for the long form.
+  hText(s_overlay, c3, y, "8", C_AMBER, F_L28);
+  y += hRow(s_overlay, c3, y, "Amber count: all coasting. Beside it, OF n or "
+                              "FILTERED means more are up than shown");
 }
 
 void helpToggle() {
