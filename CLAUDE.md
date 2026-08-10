@@ -18,7 +18,7 @@ that keep the renderer from fighting the panel DMA.
 | Version-by-version narrative | [`docs/HISTORY.md`](docs/HISTORY.md) |
 | What is shipped, parked and blocked | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 
-Current version **v7.2.0-beta.1**. The firmware is an LVGL 8.3 application under
+Current version **v7.2.3**. The firmware is an LVGL 8.3 application under
 `firmware/AirRadar/`; the root `AirRadar.ino` is the **legacy v6** single-sketch
 app, kept only as the reference for proven data and bring-up logic. The rules
 below apply to both.
@@ -160,6 +160,21 @@ FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
    one sentence. The measurable signature of the shake is a **long stall with
    ZERO pixels flushed** (`/api/stalls`), which every repaint metric is
    structurally blind to.
+24. **(v7.2.4) A derived-artefact cache key must cover the RECIPE, not just the
+   inputs.** `/mp/key` held `lat,lon`, so changing the tile style or the tint
+   ramp would have left every device that already had a cache showing the old
+   map **forever** — the fetch never runs, so there is nothing to notice, no
+   error, and no way to tell from the panel that the new code is even running.
+   The key now carries `AR_MAP_RECIPE`; bump it whenever the style, the tint or
+   the resample changes. The same trap exists for `/lg/` and `/rt/tbl`.
+25. **(v7.2.4) Whoever decides WHETHER a label appears must decide WHERE.** The
+   declutter pass chose which callsigns to draw; `blipLabelSide` independently
+   chose which side each one hung on, knowing only about the disc edge and the
+   range numerals. The two answer the same question — is there a free side —
+   so the moment the numeral test was corrected (it was using a 93 px
+   callsign-sized box for a 24 px numeral), a freed label flipped straight into
+   its neighbour. The pass now tries both sides against real rectangles and
+   carries its answer to `blipPlace`.
 16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
    decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
    over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,
@@ -227,11 +242,18 @@ README lists the sources; these are the details that matter in the code.
   less competitor for the single-slot TLS gate at a 15 s cadence. (The original
   "esp-tls leaks ~1.5 KB per connection" rationale is **retracted** — see
   `docs/V7_PORT.md` note 9.)
-- **Base map** — 5×3 CARTO stitch → blue-tint → coverage-lens dim → 800×480
-  RGB565. The transient 1.9 MB mosaic is freed immediately after resampling.
-  Cached to FATFS `/mp/r<km>` keyed by `/mp/key`, so it depends only on
-  {lat, lon, range}. **Flash writes are chunked at 32 KB** — one large write
-  stalls the LCD DMA.
+- **Base map** — 5×3 CARTO `dark_nolabels` stitch → blue-tint → coverage-lens
+  dim → **bearing bezel** → 800×480 RGB565. The transient 1.9 MB mosaic is
+  freed immediately after resampling. Cached to FATFS `/mp/r<km>` keyed by
+  `/mp/key`, which carries {lat, lon, `AR_MAP_RECIPE`} — see rule 24.
+  **Flash writes are chunked at 32 KB** — one large write stalls the LCD DMA.
+- **Bearing bezel** (`ui/bezel.cpp`) — a tick every 10°, longer every 30°,
+  engraved into the map buffer *after* the coverage lens so it is not dimmed
+  with the ground. Pixels, not objects: 36 ticks in the clip container's child
+  list would cost something on every disc repaint (rule 19). The four cardinals
+  are skipped because `ui_scope` draws those as LVGL bars and owns them whether
+  or not a map exists — with the map off, the scope degrades to its axes and
+  its compass letters rather than losing them.
 - **Logos** — three tiers: RAM (24 slots) → FATFS `/lg/<ICAO>` → network. The
   prefetch pass touches `lastUse` for every *visible* airline, otherwise live
   entries become the LRU victim and a evicted `LOGO_MISS` causes repeat 404s
@@ -260,6 +282,20 @@ ngw nmask ndns`. v7 adds `tz` (POSIX TZ), `ppass` (panel/API password),
   amber/cyan/violet/red. **No greens** — owner preference.
 - Every dynamic LVGL write must be change-cached. Unchanged writes still
   invalidate and fight the panel DMA; this was the "wiggle" (rule 8).
+- **`font_micro13` has a rank system, not thirteen jobs.** Two axes, no extra
+  font: **letter-spacing** says what kind of thing it is (+1 tracked and
+  uppercase = a label that *names* something; untracked = the thing itself),
+  and **colour** says how much it matters — `C_IVORY2` heading and data,
+  `C_DIM` key, `C_MUTE` meta (units, timers, registration, the PM suffix).
+  Status footers are readings, so they stay untracked.
+- **Never mark by hue alone when the hue is already taken.** Watchlist gold
+  (#ffd77a) and altitude amber (#ffc061) are the same colour at 2 m; the
+  watchlist is marked by *form* (brackets) so hue means altitude and nothing
+  else.
+- The **desktop harness** (`desktop/`) compiles these same `ui_*.cpp` against
+  SDL2 and renders every screen and seven scenarios headless in ~2 s. Use it
+  for anything about layout, typography or state; it says nothing about DMA,
+  panel colour or touch. See `desktop/README.md`.
 - Regenerate images with `firmware/tools/genassets.py`.
 - **Fonts: six faces.** `font_hero56` / `font_clock36` (InterDisplay Light,
   **tnum frozen**), `font_id28` (Inter Medium), `font_val22` (Inter Medium,

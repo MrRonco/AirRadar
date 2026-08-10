@@ -268,3 +268,75 @@ as the first implementation assumed; it is the light-precipitation band, and
 dropping it leaves a scatter of disconnected dots instead of weather. It was
 removed because it did not look good enough on this display, not because it did
 not work.
+
+## v7.2.4 — the design review, and a tool to answer it with
+
+Two reviewers went over every screen and returned 40 findings. The owner picked
+36 of them. What made the batch possible at all was built first.
+
+**The desktop harness** (`desktop/`). On the device, looking at a layout costs a
+compile, an OTA flash, a reboot and a `GET /screen.bmp` — three minutes, with
+the panel physically present and free. Seeing a state that is not currently
+happening meant flashing firmware with the state hardcoded, and one of those
+probe builds boot-looped the device badly enough to need USB recovery. The
+harness compiles the real `ui_*.cpp`, `theme.cpp`, `tracks.cpp` and `state.cpp`
+against SDL2 on a Mac, using the firmware's own `lv_conf.h` verbatim, so LVGL
+rasterises the same `font_*.c` data and measurements taken there match the
+device. Seven scenarios — including `-40 °C / NW 120 / -3072 fpm / FL450` and a
+33-character operator name — render headless in under two seconds. It caught
+two of this batch's own bugs before they reached the panel. It says nothing
+about DMA, panel colour or touch; `/api/stalls` remains the only instrument for
+those.
+
+**A rank system for `font_micro13`.** One 13 px face was carrying thirteen
+unrelated jobs on the main screen — grid keys, operator name, airframe,
+registration, date, feed source, feed rate, scope callsigns, range value, IN
+RANGE, NEAREST, the emergency string and the PM marker. Below 18 px all thirteen
+have the same rank. Rather than add a font, the two axes already free were spent:
+letter-spacing says what kind of thing a string is, colour says how much it
+matters. `C_MUTE` had been defined and documented in `theme.h` since v7 and
+never once used; it is the missing third rank.
+
+**Hue stopped doing two jobs.** Watchlist gold `#ffd77a` and altitude amber
+`#ffc061` are the same colour at two metres, twenty pixels apart. The watchlist
+is marked by form now — brackets — and hue means altitude alone.
+
+**The weather row became two tokens instead of one string.** It only reads as
+two groups if the gutter between them beats the gaps inside them; the old code
+spent its slack evenly on both wind gaps and fixed the gutter at 6, so at
+`-40 °C / NW 120` every space on the row was between 2 and 6 px. Inner gaps are
+fixed small, the gutter takes everything left, and when even that is not enough
+the unit *letter* is dropped — the degree ring stays, and which unit you are in
+is a setting you chose.
+
+**The map became a ground.** `dark_nolabels` instead of `dark_all`: CARTO's
+labelled tiles put place names at z9–z11 under a 424 px disc already carrying
+glyphs, callsigns, three range numerals and a crosshair, and at reading distance
+a 7 px town name is not legible, only textured. The tint lift dropped from ×1.6
+to ×1.1 for the same reason.
+
+That change also exposed a trap worth more than the change itself: the map cache
+key was `lat,lon`, so any device with a warm cache would have kept serving the
+**old** map forever. The fetch never runs, so there is no error and nothing to
+notice. The key now carries `AR_MAP_RECIPE`.
+
+**A graduated bearing scale.** The panel could always show you that something
+was north-east; it could not tell you it was on 038. A tick every 10°, longer
+every 30°, engraved as *pixels* into the map buffer after the coverage lens —
+36 ticks in the clip container's child list would cost something on every disc
+repaint (rule 19), while a pass over a 19,000 px annulus on core 0 at map-build
+time costs nothing afterwards. Anti-aliasing is analytic rather than
+supersampled. The four cardinals are deliberately skipped so the scope still has
+its axes with the map switched off, and the orphaned "N" was promoted: it now
+sits inside the ring with E, S and W at one radius, four marks reading as one
+system instead of one mark reading as a leftover.
+
+**And the label declutter learned that two questions are one question.** The
+range numerals were tested against a 93 px callsign-sized box when a numeral is
+24 px wide, which with three of them reserved instead of two started silently
+eating real callsigns. Correcting it immediately produced a label flipping
+straight into its neighbour, because `blipLabelSide` chose the side from the
+disc edge and the numerals alone and knew nothing about what had already been
+placed. Whoever decides *whether* a label appears has to decide *where*: the
+declutter pass now tries both sides against real rectangles and carries its
+answer forward. Closer targets win contested space.
