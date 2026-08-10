@@ -36,7 +36,7 @@ Here a scenario is a keypress and nothing can be bricked.
 
 | | |
 |---|---|
-| `1`–`7` | pick a scenario |
+| `1`–`8` | pick a scenario |
 | `space` | next scenario |
 | `m` / `g` / `/` | main · settings · legend |
 | `s` | write `shot.bmp` |
@@ -79,6 +79,7 @@ Each one is an edge, not a pretty picture — layout bugs live at the extremes.
 | 5 | crowded | 30 aircraft, label decluttering under load |
 | 6 | coasting / stale | translucent glyphs, COASTING count, CLOUD fallback dot |
 | 7 | no NTP | `0:00` and the WAITING FOR TIME hint |
+| 8 | pinned target left the ring | the card and the disc disagreeing — no blip, but a populated Selected card |
 
 Scenario 4 is the one that earns the tool. It renders in one keypress every
 value that has historically broken a layout here: the `-3072` fpm that clipped

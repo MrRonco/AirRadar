@@ -1192,11 +1192,31 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
   if (ageMs < 0) ageMs = 0;
   bool coasting = ageMs > (int32_t)AR_STALE_TRACK_MS;
   uint32_t age = (uint32_t)ageMs / 1000U;
-  snprintf(b, sizeof(b), "%s \xC2\xB7 %lus", coasting ? "COAST" : "LIVE",
-           (unsigned long)age);
+  // A3. tracksFindByHex() has no range test but the scope loop does, so an
+  // aircraft that crosses the ring while pinned kept a fully populated card --
+  // callsign, route, flight level, a growing DIST and a cyan LIVE dot -- while
+  // the disc showed no blip at all, for up to AR_DROP_TRACK_MS. The two halves
+  // of one instrument disagreed, both at full confidence, and the only clue
+  // was a DIST that had quietly passed the number on the range pill.
+  //
+  // The card stays -- you asked for that aircraft -- but it stops claiming to
+  // be live. Selection is by ICAO hex precisely so it survives; this is the
+  // honest way to keep it.
+  // The status slot is CONTENT_W minus the dot's 14 px inset -- 120 px, so
+  // fifteen glyphs of micro13. "OUT OF RANGE - 0s" is seventeen and clips to
+  // "OUT OF RANGE - ", losing exactly the part that would have justified
+  // keeping it. The age goes: DIST already shows how far past the ring the
+  // aircraft is, and a target outside the ring drops within AR_DROP_TRACK_MS
+  // anyway, so "how fresh" stops being the useful question.
+  const bool outOfRange = d > (float)g_set.rangeKm;
+  if (outOfRange)
+    snprintf(b, sizeof(b), "OUT OF RANGE");
+  else
+    snprintf(b, sizeof(b), "%s \xC2\xB7 %lus", coasting ? "COAST" : "LIVE",
+             (unsigned long)age);
   setTextCached(s_selLive, s_bufLive, sizeof(s_bufLive), b);
-  lv_color_t lc = coasting ? C_AMBER : C_DIM;   // text matches the keys
-  lv_color_t ld = coasting ? C_AMBER : C_CY;    // dot keeps the state
+  lv_color_t lc = outOfRange ? C_MUTE : (coasting ? C_AMBER : C_DIM);
+  lv_color_t ld = outOfRange ? C_MUTE : (coasting ? C_AMBER : C_CY);
   setColorCached(s_selLive, &s_colLive, lc);
   if (s_colLiveDot.full != ld.full) {
     s_colLiveDot = ld;

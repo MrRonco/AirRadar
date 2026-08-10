@@ -66,6 +66,7 @@ const char* scenarioName(int n) {
     case SCN_CROWDED:   return "crowded (30 aircraft)";
     case SCN_COASTING:  return "all coasting / stale feed";
     case SCN_NOTIME:    return "no NTP yet";
+    case SCN_LEFTRING:  return "pinned target has left the range ring";
     default:            return "?";
   }
 }
@@ -132,6 +133,18 @@ void scenarioApply(int n) {
       g_tracks[1].lastApiMs = millis() - 52000;
       g_lastGoodApply = millis() - 45000;      // drives the STALE feed state
       g_feedIsLocal = false;                   // and the CLOUD fallback dot
+      g_heardCount = 2;
+      break;
+
+    case SCN_LEFTRING:
+      // The pinned aircraft is OUTSIDE the ring. tracksFindByHex() has no
+      // range test but the scope loop does, so the card stays populated while
+      // the disc shows no blip -- the two halves of the instrument disagreeing.
+      put(0, "c04a11", "ACA184", "AIR CANADA", "A321", "C-GJWO", 33000, 472, 137, 0,
+          60, 268, "1200", "YVR", "YYZ");                    // 268 km, ring is 250
+      put(1, "a1b2c3", "DAL298", "DELTA AIR LINES INC", "B738", "N3746H",
+          37000, 445, 250, -640, 240, 96, "1200", "ATL", "SEA");
+      strlcpy(g_selHex, "c04a11", sizeof(g_selHex));         // pinned, out of range
       g_heardCount = 2;
       break;
 
