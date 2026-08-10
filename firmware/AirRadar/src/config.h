@@ -196,6 +196,13 @@
 // Night mode: how long a tap keeps the backlight up, and how long a newly
 // seen emergency squawk does. Both are one-shots, not toggles -- the panel
 // returns to dark on its own.
+// Unit conversions used in more than one translation unit. ONE definition:
+// the altitude ramp was duplicated across two files with the same wrong
+// comment on both copies, and that is how it stayed wrong (C2).
+// A knot is one nautical mile per hour, so both readings share the number.
+#define AR_KM_PER_NM   1.852f     // also knots -> km/h
+#define AR_DEG2RAD     0.01745329f
+
 #define AR_NIGHT_WAKE_MS   (30 * 1000)
 #define AR_NIGHT_ALERT_MS  (60 * 1000)
 

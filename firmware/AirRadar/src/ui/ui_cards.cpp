@@ -95,10 +95,20 @@ static const int OV_COAST_Y   = 174;           // same face as IN RANGE
 static const int OV_EMERG_Y   = 188;
 static const int OV_EMERG_H   = 26;
 static const int OV_HAIR2_Y   = 222;
-static const int OV_NEAR_Y    = 230;           // "NEAREST" key
-static const int OV_NEARNAME_Y= 250;           // callsign, larger
-static const int OV_NEARD_Y   = 278;           // distance, left, lighter face
-static const int OV_HAIR3_Y   = 310;
+static const int OV_NEAR_Y    = 228;           // "NEAREST" key
+static const int OV_NEARNAME_Y= 246;           // callsign, larger
+static const int OV_NEARD_Y   = 272;           // distance, left, lighter face
+// D1: the approach line. OV_HAIR2_Y could not move up to make room -- COASTING
+// and the emergency strip are bottom-anchored to it and the hero is centred
+// above them, so anything below 213 collides the hero into the coast row.
+// The 18 px came out of this block's own internal gaps instead.
+static const int OV_NEARCPA_Y = 294;
+// Below this ground speed a "time to closest approach" is noise -- a hovering
+// helicopter or a taxiing aircraft produces minutes that swing wildly.
+static const float CPA_MIN_GS_KT = 40.0f;
+static const int   CPA_MAX_MIN   = 60;   // beyond an hour it is not an approach
+
+static const int OV_HAIR3_Y   = 312;
 static const int OV_FEED_Y    = 262;
 static const int OV_SRC_Y     = 322;           // single status row
 static const int OV_DOT_D     = 7;             // live dot
@@ -189,9 +199,9 @@ static lv_obj_t *s_ovCount, *s_ovInRange, *s_ovHeard, *s_ovFiltered;
 static const int HERO_ONE_KERN = 2;
 static int s_heroX = 0;
 static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl, *s_ovEmergSqk;
-static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc, *s_ovDot;
+static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovNearCpa, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24], s_bufEmergSqk[8];
-static char s_bufFiltered[16], s_bufWunit[6];
+static char s_bufFiltered[16], s_bufWunit[6], s_bufCpa[20];
 // Whether the wind pictogram fits alongside the wind UNIT. Owned by the layout
 // block in updateWeatherPill(), read by the visibility block above it -- the
 // two used to set the same flag independently, so the visibility pass re-showed
@@ -508,6 +518,8 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_pos(s_ovNear, 0, OV_NEARNAME_Y);
   s_ovNearD = mkLbl(card, F_UI15, C_IVORY2);       // distance, lighter face
   lv_obj_set_pos(s_ovNearD, 0, OV_NEARD_Y);
+  s_ovNearCpa = mkLbl(card, F_MONO13, C_MUTE);     // approach, meta rank
+  lv_obj_set_pos(s_ovNearCpa, 0, OV_NEARCPA_Y);
   mkHair(card, OV_HAIR3_Y, CONTENT_W);             // separates the status line
   // One status line: a live dot, the source and its age on the left, message
   // rate on the right. Two labelled rows for what is really one fact.
@@ -890,9 +902,40 @@ static void updateOverview(uint32_t nowMs) {
     snprintf(b, sizeof(b), "%.1f %s %s", (double)unitsDist(d),
              unitsDistLabel(), cardinal8(brg));
     setTextCached(s_ovNearD, s_bufNearD, sizeof(s_bufNearD), b);
+
+    // D1. "23.0 km SE" is a scalar: it cannot tell an aircraft that will be
+    // overhead in four minutes from one that passed twenty minutes ago and is
+    // leaving. Everything needed is already in the Track and already in loop
+    // context. With phi = track - bearing(home -> aircraft):
+    //
+    //   range rate    = gs * cos(phi)        negative closes
+    //   time to CPA   = (d / gs) * -cos(phi)
+    //   miss distance = d * |sin(phi)|
+    //
+    // Three cosines, no network, no allocation. "Six in range" is never news;
+    // "8 km in 7 minutes" is news every time, and it is the reading that gets
+    // someone to look up.
+    char cpa[20] = "";
+    const float gsKmh = n->gsKt * AR_KM_PER_NM;
+    if (n->gsKt >= CPA_MIN_GS_KT) {
+      const float phi = (n->trackDeg - brg) * AR_DEG2RAD;
+      const float cosP = cosf(phi);
+      if (cosP < 0.0f) {                       // closing
+        const int mins = (int)lroundf((d / gsKmh) * -cosP * 60.0f);
+        const int miss = unitsDistI(d * fabsf(sinf(phi)));
+        if (mins <= CPA_MAX_MIN)
+          snprintf(cpa, sizeof(cpa), "%d %s IN %d MIN", miss,
+                   unitsDistLabelUpper(), mins < 1 ? 1 : mins);
+      } else {
+        strlcpy(cpa, "OUTBOUND", sizeof(cpa));
+      }
+    }
+    setTextCached(s_ovNearCpa, s_bufCpa, sizeof(s_bufCpa), cpa);
+    setHiddenCached(s_ovNearCpa, cpa[0] == 0);
   } else {
     setTextCached(s_ovNear, s_bufNear, sizeof(s_bufNear), "--");
     setTextCached(s_ovNearD, s_bufNearD, sizeof(s_bufNearD), "");
+    setHiddenCached(s_ovNearCpa, true);
   }
 
   if (g_feedIsLocal && g_feedMsgRate >= 0.0f)

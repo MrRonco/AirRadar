@@ -90,7 +90,7 @@ void bezelRasterise(uint16_t* buf, int w, int h, int cx, int cy, int r) {
       if (dDeg > 180.0f) dDeg -= 360.0f;
       else if (dDeg < -180.0f) dDeg += 360.0f;
       const float tang = edge(BEZ_HALF_W + BEZ_FEATHER
-                              - fabsf(dDeg * 0.01745329f * d));
+                              - fabsf(dDeg * AR_DEG2RAD * d));
       if (tang <= 0.0f) continue;
 
       const float a = amp * radial * tang;

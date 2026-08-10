@@ -34,7 +34,7 @@ static const size_t   CLOUD_URL_MAX    = 128;
 static const size_t   FILTER_DOC_BYTES = 1024;       // shared parse filter
 static const size_t   STATS_FILTER_BYTES = 192;
 static const size_t   STATS_DOC_BYTES  = 4096;
-static const float    KM_PER_NM        = 1.852f;
+
 static const char     PATH_TAR1090[]   = "/tar1090/data/";
 static const char     PATH_PLAIN[]     = "/data/";
 static const char     STATS_FILE[]     = "stats.json";
@@ -296,7 +296,7 @@ static bool tryCloud(const FeederJob& job) {
     Serial.println("[feeder] TLS busy - cloud pass skipped");
     return false;                           // next poll retries in 8s
   }
-  int radiusNm = (int)ceilf(job.rangeKm / KM_PER_NM);
+  int radiusNm = (int)ceilf(job.rangeKm / AR_KM_PER_NM);
   if (radiusNm > AR_CLOUD_RADIUS_NM_CAP) radiusNm = AR_CLOUD_RADIUS_NM_CAP;
   char url[CLOUD_URL_MAX];
   snprintf(url, sizeof(url), "%s%.4f/%.4f/%d",

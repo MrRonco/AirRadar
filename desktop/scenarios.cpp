@@ -149,7 +149,9 @@ void scenarioApply(int n) {
       put(2, "c01234", "JZA239", "Jazz Aviation LP", "CRJ9", "C-GJZQ", 21000, 388, 95, 1200, 320, 52);
       put(3, "4ca7b1", "EIN122", "Aer Lingus", "A333", "EI-EDY", 37000, 505, 275, 0,  15, 205);
       put(4, "c06f2a", "POE264", "Porter Airlines Inc.", "E195", "C-GKQN", 39000, 484, 110, -64, 285, 168);
-      put(5, "a99887", "N512BA", "", "C172", "N512BA", 4200, 104, 42, 300, 130, 23);
+      // Inbound: track 290 against a bearing of 130 is closing at cos(160) of
+      // its ground speed, so this exercises the approach readout.
+      put(5, "a99887", "N512BA", "", "C172", "N512BA", 4200, 104, 290, 300, 130, 23);
       strlcpy(g_selHex, "c04a11", sizeof(g_selHex));
       g_heardCount = 8;
       break;

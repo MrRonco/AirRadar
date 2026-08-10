@@ -9,7 +9,7 @@
 #include "tracks.h"
 
 // ---------- file-local constants ----------
-static const float  KT_TO_KMH         = 1.852f;   // knots -> km/h
+
 static const float  SEC_PER_HOUR      = 3600.0f;
 static const double KM_PER_DEG_LAT    = 111.32;   // km per degree of latitude
 static const float  TAP_GRAB_RADIUS_PX = 26.0f;   // scope tap pick radius
@@ -115,7 +115,7 @@ void tracksDeadReckon(float dtSec) {
       continue;
     }
     if (t.gsKt < MIN_DR_SPEED_KT) continue;
-    float dKm = t.gsKt * KT_TO_KMH / SEC_PER_HOUR * dtSec;
+    float dKm = t.gsKt * AR_KM_PER_NM / SEC_PER_HOUR * dtSec;
     float rad = (float)d2r(t.trackDeg);
     t.lat += (dKm * cosf(rad)) / KM_PER_DEG_LAT;
     t.lon += (dKm * sinf(rad)) / (KM_PER_DEG_LAT * cos(d2r(t.lat)));
