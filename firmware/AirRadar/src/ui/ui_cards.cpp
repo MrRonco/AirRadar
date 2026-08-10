@@ -148,7 +148,9 @@ static const int      CLIMB_STRONG_FPM = 300;    // colored climb/descent
 static const uint32_t EMERG_BLINK_MS   = 500;
 
 // Recolor hex strings for the range pill (mirror C_DIM / C_CY in theme.h)
-static const char* RECOLOR_DIM = "8e9baa";
+// The chevrons are the range pill's whole affordance -- the vessel now matches
+// the clock card beside it, so nothing else says "this one is a control".
+static const char* RECOLOR_STEP = "3fb6c8";   // C_CY_SOFT
 static const char* RECOLOR_VAL = "aab4c0";   // C_IVORY2, was cyan
 
 // ============================================================
@@ -646,8 +648,15 @@ static void buildCornerBtn(lv_obj_t* parent, int plateX, int plateW, int cellX,
 
 static void buildRangePill(lv_obj_t* parent) {
   lv_obj_t* pill = mkBox(parent);
-  lv_obj_add_style(pill, &st_card, 0);      // same fill/hairline as the panels
-  lv_obj_set_style_radius(pill, LV_RADIUS_CIRCLE, 0);
+  lv_obj_add_style(pill, &st_card, 0);
+  // Same radius as the clock card beside it. These two are 168x52 on the same
+  // baseline and were disagreeing on three properties at once -- radius 26 vs
+  // 17, a different fill, a different border opacity. At 1-3 m that does not
+  // read as "one of these is interactive", it reads as two things built by
+  // different people, and the bottom edge is where the symmetry does
+  // structural work closing the columns around the disc. The chevrons carry
+  // the affordance; they are brightened instead.
+  lv_obj_set_style_radius(pill, R_LG, 0);
   lv_obj_set_style_pad_all(pill, 0, 0);
   lv_obj_set_size(pill, CARD_W, CARD_SHORT_H);
   lv_obj_set_pos(pill, CARD_L_X, RNG_PILL_Y);
@@ -1091,7 +1100,7 @@ static void updateRangePill() {
   char b[48];
   snprintf(b, sizeof(b),
            "#%s \xE2\x80\xB9#  #%s %d KM#  #%s \xE2\x80\xBA#",
-           RECOLOR_DIM, RECOLOR_VAL, g_set.rangeKm, RECOLOR_DIM);
+           RECOLOR_STEP, RECOLOR_VAL, g_set.rangeKm, RECOLOR_STEP);
   setTextCached(s_rngLbl, s_bufRange, sizeof(s_bufRange), b);
 }
 

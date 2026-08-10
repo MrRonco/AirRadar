@@ -136,6 +136,11 @@ static lv_obj_t* mkRow(lv_obj_t* group, const char* key, bool divider) {
   lv_obj_t* r = lv_obj_create(group);
   lv_obj_remove_style_all(r);
   lv_obj_set_size(r, LV_PCT(100), 33);
+  // 33 px is 6.3 mm. The corner glyphs on the main screen were given tiled
+  // 48 px plates and this screen never got the same treatment, even though
+  // mis-tapping HELI instead of MIL silently changes what the radar shows,
+  // with no undo. 8 px each side takes the row to 49.
+  lv_obj_set_ext_click_area(r, 8);
   lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(r, LV_FLEX_ALIGN_SPACE_BETWEEN,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -224,10 +229,18 @@ static void refreshFilterRows() {
   static const uint8_t bits[4] = {FCLS_AIRLINER, FCLS_LIGHT, FCLS_HELI, FCLS_MIL};
   for (int i = 0; i < 4; i++) {
     bool on = g_set.filtCls & bits[i];
-    lv_obj_set_style_bg_color(s_chip[i], on ? C_CY : C_FAINT, 0);
-    lv_obj_set_style_bg_opa(s_chip[i], on ? LV_OPA_COVER : 60, 0);
+    // Outlined when active, ghosted when inactive. Solid cyan fills made the
+    // FILTER ROW the highest-contrast thing on the settings screen -- above the
+    // section headers -- and cyan was already doing four unrelated jobs here
+    // (headers, toggles, chips, the repo link). Solid fill is now reserved for
+    // toggles: one role, one treatment.
+    lv_obj_set_style_bg_color(s_chip[i], C_CY, 0);
+    lv_obj_set_style_bg_opa(s_chip[i], on ? 28 : LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_chip[i], 1, 0);
+    lv_obj_set_style_border_color(s_chip[i], on ? C_CY : C_BORDER, 0);
+    lv_obj_set_style_border_opa(s_chip[i], on ? 140 : 50, 0);
     lv_obj_set_style_text_color(lv_obj_get_child(s_chip[i], 0),
-                                on ? C_INK : C_DIM, 0);
+                                on ? C_CY : C_MUTE, 0);
   }
 }
 static void refreshFavBtns() {
@@ -763,7 +776,17 @@ void settingsBuild() {
     // Content is taller than the screen — columns scroll vertically.
     lv_obj_add_flag(c, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(c, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(c, LV_SCROLLBAR_MODE_AUTO);
+    // ON, not AUTO. AUTO shows the bar only *while* scrolling, so a column
+    // whose content is cut off looks like a rendering fault until you happen
+    // to drag it. The bar is the only thing on this screen saying "more below".
+    lv_obj_set_scrollbar_mode(c, LV_SCROLLBAR_MODE_ON);
+    // remove_style_all() took the theme's scrollbar with it, so MODE_ON drew
+    // nothing at all. Give the part its own paint.
+    lv_obj_set_style_bg_color(c, C_BORDER, LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(c, 70, LV_PART_SCROLLBAR);
+    lv_obj_set_style_width(c, 3, LV_PART_SCROLLBAR);
+    lv_obj_set_style_radius(c, 2, LV_PART_SCROLLBAR);
+    lv_obj_set_style_pad_right(c, 2, LV_PART_SCROLLBAR);
     lv_obj_set_style_pad_bottom(c, 8, 0);
   }
   lv_obj_set_pos(colL, 24, 74);
@@ -844,17 +867,31 @@ void settingsBuild() {
 
   // ---------- RIGHT ----------
   g = mkGroup(colR, "FILTERS");
+  // Four chips do not fit beside a key. The row is 336 px wide, the key takes
+  // 148, and AIRLINER/LIGHT/HELI/MIL need 224 px of padded label -- LVGL flex
+  // overflows rather than shrinking, so the chips were drawn over the word
+  // "class" (rule 13, third time). Give them the full width on their own line;
+  // they then divide 336 four ways and each target is 78 x 32 with an 8 px
+  // halo, which is what a control that silently changes what the radar shows
+  // should have had from the start.
   r = mkRow(g, "Aircraft class", false);
-  lv_obj_t* chipBox = lv_obj_create(r);
+  lv_obj_set_height(r, 26);
+  lv_obj_set_flex_align(r, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                        LV_FLEX_ALIGN_CENTER);   // one child: SPACE_BETWEEN centres it
+  lv_obj_t* chipBox = lv_obj_create(g);
   lv_obj_remove_style_all(chipBox);
-  lv_obj_set_size(chipBox, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_size(chipBox, LV_PCT(100), 32);
+  lv_obj_set_style_pad_bottom(chipBox, 7, 0);
   lv_obj_set_flex_flow(chipBox, LV_FLEX_FLOW_ROW);
-  lv_obj_set_style_pad_column(chipBox, 4, 0);
+  lv_obj_set_style_pad_column(chipBox, 8, 0);
+  lv_obj_clear_flag(chipBox, LV_OBJ_FLAG_SCROLLABLE);
   static const char* chipNames[4] = {"AIRLINER", "LIGHT", "HELI", "MIL"};
   for (int i = 0; i < 4; i++) {
     lv_obj_t* b = lv_btn_create(chipBox);
-    lv_obj_set_size(b, LV_SIZE_CONTENT, 24);
-    lv_obj_set_style_pad_hor(b, 6, 0);
+    lv_obj_set_size(b, 0, 32);
+    lv_obj_set_flex_grow(b, 1);
+    lv_obj_set_style_pad_hor(b, 0, 0);
+    lv_obj_set_ext_click_area(b, 8);          // 32 -> 48 px, 2 px of dead space
     lv_obj_set_style_radius(b, R_SM, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_border_width(b, 0, 0);
