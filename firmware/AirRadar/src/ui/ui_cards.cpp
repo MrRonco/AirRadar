@@ -15,9 +15,23 @@
 #include "../net/logos.h"
 
 // ============================================================
-//  Layout constants (content coords — st_card pad_all is 17)
+//  Layout constants (content coords)
 // ============================================================
-static const int CONTENT_W    = CARD_W - 32;   // st_card pad_all is 16
+// LVGL's content box subtracts the BORDER as well as the padding, and st_card
+// has both: pad_all 16 and border_width 1. CONTENT_W counted only the padding,
+// so it was 136 where the container actually clips at 134 -- every element
+// positioned from CONTENT_W sat 2 px too far right and lost its last two
+// columns. On text that shaved the final antialiased column off a "3" or a
+// degree sign; on the operator tile it removed the box's right edge outright,
+// which is what made it visible. The corner arcs survived because they curve
+// inward from the edge being cut.
+//
+// Found on the panel, not in the harness: both render the same framebuffer, so
+// the bug was in every screenshot all along -- what it needed was someone
+// looking at the glass who knew the box was supposed to be closed.
+static const int CARD_PAD     = 16;            // st_card pad_all
+static const int CARD_BORDER  = 1;             // st_card border_width
+static const int CONTENT_W    = CARD_W - 2 * CARD_PAD - 2 * CARD_BORDER;  // 134
 
 // Overview card
 static const int OV_HOME_Y    = 0;             // weather row
@@ -126,9 +140,14 @@ static const int SEL_VAL_DY   = 14;            // key -> value offset in a grid 
 // Right edges at 70 and 136 therefore clear every combination, and because the
 // figures are tabular the units digits stack into a true column down all three
 // rows. Gutter: 24 px typical, 10 px worst (DIST+SQK), against 3.8 px before.
-static const int SEL_COL1_W   = 70;            // column 1 box: 0..70
-static const int SEL_COL2_X2  = 80;            // left edge of column 2
-static const int SEL_COL2_W   = CONTENT_W - SEL_COL2_X2;
+// Column 2 is sized by its WIDEST reading, not by whatever is left over. A
+// 4-digit squawk in F_M20 needs 56 px; deriving the column from a fixed left
+// edge meant the CONTENT_W correction took 2 px off it and "7700" wrapped onto
+// a second line. Size the column, then place it against the right edge.
+static const int SEL_COL1_W   = 70;                            // 0..70
+static const int SEL_COL2_W   = 56;                            // "7700" / "-999"
+static const int SEL_COL2_X2  = CONTENT_W - SEL_COL2_W;        // 78
+static_assert(SEL_COL2_X2 - SEL_COL1_W >= 6, "columns must keep a gutter");
 // Solved, not guessed. font_val22 has tabular figures frozen in, so the MINUS
 // SIGN is 14.25 px -- exactly a digit -- and "-3072" is 5x14.25 = 71.2 px. The
 // two widest values in the grid are ALT "45000" and V/S "-3072", both 71.2 px.
