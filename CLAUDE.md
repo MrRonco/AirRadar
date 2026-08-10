@@ -175,6 +175,23 @@ FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
    callsign-sized box for a 24 px numeral), a freed label flipped straight into
    its neighbour. The pass now tries both sides against real rectangles and
    carries its answer to `blipPlace`.
+26. **(v7.2.4) LVGL's content box subtracts the BORDER as well as the padding.**
+   `st_card` sets `pad_all 16` *and* `border_width 1`, so a 168 px card gives
+   its children **134**, not 136. `CONTENT_W` counted only the padding, and
+   every element positioned from it sat 2 px too far right and lost its last
+   two columns: the operator tile's right border vanished outright while its
+   corner arcs survived (they curve inward from the cut), and right-aligned
+   values lost the final antialiased column off a `3` or a `°`.
+27. **(v7.2.4) A measurement can only falsify a layout bug if the correct value
+   is known IN ADVANCE.** Rule 26 was invisible for a whole review because the
+   probe used was right-aligned *text*, and clipped text ends exactly where
+   unclipped text would — at the clip. Every reading agreed with itself and
+   proved nothing. What broke it open was the tile's **border**, whose correct
+   x is arithmetic rather than glyph metrics: it read 737 where the constant
+   predicted 736. Prefer a probe whose expected value you can compute; when a
+   measurement can't come out wrong, it isn't evidence.
+   Corollary: the harness had rendered this in every screenshot all along. A
+   faithful renderer does not help if nobody knows what to compare against.
 16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
    decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
    over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,
