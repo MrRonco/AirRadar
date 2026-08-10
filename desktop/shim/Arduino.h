@@ -139,10 +139,21 @@ inline void vTaskDelete(TaskHandle_t) {}
 // Mac's own clock stands in, so the clock card and quiet-hours read correctly
 // without a network.
 #include <ctime>
+// The firmware detects "no NTP yet" as tm_year <= 120 (i.e. before 2020). Host
+// time always passes that test, so the unsynced branch was unreachable in the
+// harness and its screenshot silently showed a normal clock. This flag makes
+// the state reproducible.
+extern bool g_fakeNtpSynced;
+// updateTimeCard() calls time()/localtime_r() DIRECTLY and tests tm_year -- it
+// never goes through getLocalTime() -- so intercepting only that helper left
+// the unsynced branch unreachable. The macro is confined to the C++ section so
+// LVGL's own .c files (which include this header for millis) are untouched.
+extern "C" time_t ar_harness_time(time_t* t);
+#define time(p) ar_harness_time(p)
 inline bool getLocalTime(struct tm* info, uint32_t = 0) {
-  const time_t now = time(nullptr);
+  const time_t now = g_fakeNtpSynced ? time(nullptr) : (time_t)0;
   localtime_r(&now, info);
-  return true;
+  return g_fakeNtpSynced;
 }
 inline void configTzTime(const char*, const char*, const char* = nullptr,
                          const char* = nullptr) {}

@@ -23,6 +23,8 @@
 #include "../firmware/AirRadar/src/config.h"
 #include "../firmware/AirRadar/src/core/state.h"
 #include "../firmware/AirRadar/src/ui/ui.h"
+#include "../firmware/AirRadar/src/net/maptiles.h"
+#include "fakemap.h"
 
 static SDL_Window*   s_win = nullptr;
 static SDL_Renderer* s_ren = nullptr;
@@ -99,10 +101,15 @@ static void banner() {
 int main(int argc, char** argv) {
   const char* shot = nullptr;
   const char* screen = "main";
+  int tintNum = 16;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
     else if (!strcmp(argv[i], "--scenario") && i + 1 < argc) s_scenario = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--screen") && i + 1 < argc) screen = argv[++i];
+    // --tint N exercises F1(b): maptiles.cpp's TINT_LUM_NUM over a fixed /10.
+    // The harness can show the RELATIVE effect of this knob, never the correct
+    // absolute value -- the synthetic map's base brightness is invented.
+    else if (!strcmp(argv[i], "--tint") && i + 1 < argc) tintNum = atoi(argv[++i]);
   }
 
   if (SDL_Init(shot ? 0 : SDL_INIT_VIDEO) != 0) {
@@ -138,6 +145,8 @@ int main(int argc, char** argv) {
   g_set.rangeKm = 250;
   g_wifiUp = true;
   themeInit();
+  mapBegin();          // same order as the firmware's setup()
+  if (tintNum != 16) fakeMapSetTint(tintNum, 10);
   uiInit();
   scenarioApply(s_scenario);
   uiTick(millis());

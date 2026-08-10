@@ -78,6 +78,7 @@ void scenarioApply(int n) {
   g_feedIsLocal = true; g_feedMsgRate = 24.0f;
   g_lastGoodApply = millis();
   g_timeSynced = true;
+  g_fakeNtpSynced = true;
 
   switch (n) {
     case SCN_EMPTY:
@@ -130,6 +131,7 @@ void scenarioApply(int n) {
       break;
 
     case SCN_NOTIME:
+      g_fakeNtpSynced = false;      // reaches the real tm_year <= 120 branch
       g_timeSynced = false;
       g_wx.valid = false;
       g_heardCount = 0;

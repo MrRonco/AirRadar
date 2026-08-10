@@ -25,11 +25,21 @@
 #include "../firmware/AirRadar/src/svc/web.h"
 #include "../firmware/AirRadar/src/svc/mqtt.h"
 #include "../firmware/AirRadar/src/hal/hal_display.h"
+#include "fakemap.h"
 
 // ---------- Arduino runtime ----------
 SerialShim Serial;
 WiFiShim   WiFi;
 EspShim    ESP;
+bool       g_fakeNtpSynced = true;
+
+// Defined with the macro lifted, so this calls the real libc time().
+#undef time
+extern "C" time_t ar_harness_time(time_t* t) {
+  const time_t v = g_fakeNtpSynced ? time(t) : (time_t)0;
+  if (!g_fakeNtpSynced && t) *t = v;
+  return v;
+}
 
 static const std::chrono::steady_clock::time_point kT0 = std::chrono::steady_clock::now();
 extern "C" uint32_t millis(void) {
@@ -83,14 +93,13 @@ void enrichRouteCacheFlush(uint32_t) {}
 bool enrichApplyRoute() { return false; }
 void enrichKickWeather() {}
 
-// No base map. The scope draws its rings and blips over the flat ink floor,
-// which is also what the device shows before the first stitch lands.
-void mapBegin() {}
+// The base map is synthetic but present — see fakemap.cpp for why that matters.
+void mapBegin() { fakeMapBuild(); }
 void mapLoop(uint32_t) {}
-void mapRequestRefresh() {}
-const lv_img_dsc_t* mapImage() { return nullptr; }
-uint32_t mapGeneration() { return 0; }
-uint16_t* mapCleanBuf() { return nullptr; }
+void mapRequestRefresh() { fakeMapBuild(); }
+const lv_img_dsc_t* mapImage() { return fakeMapImage(); }
+uint32_t mapGeneration() { return fakeMapGen(); }
+uint16_t* mapCleanBuf() { return fakeMapBuf(); }
 uint16_t* mapShowBuf(bool) { return nullptr; }
 void mapPublishShow(const lv_area_t*) {}
 const lv_area_t* mapDirtyArea() { return nullptr; }

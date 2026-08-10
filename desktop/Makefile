@@ -36,7 +36,7 @@ FW_CXX = $(SRC)/ui/ui_nav.cpp $(SRC)/ui/ui_cards.cpp $(SRC)/ui/ui_scope.cpp \
          $(SRC)/ui/brandcolor.cpp $(SRC)/core/state.cpp $(SRC)/core/tracks.cpp
 FW_C   = $(wildcard $(SRC)/assets/*.c)
 LV_C   = $(shell find $(LVGL)/src -name '*.c')
-OWN    = main.cpp fakes.cpp scenarios.cpp
+OWN    = main.cpp fakes.cpp scenarios.cpp fakemap.cpp
 
 OBJ = $(patsubst %,$(BUILD)/%.o,$(notdir $(OWN)) $(notdir $(FW_CXX)) $(notdir $(FW_C))) \
       $(patsubst $(LVGL)/%,$(BUILD)/lv/%.o,$(LV_C))
