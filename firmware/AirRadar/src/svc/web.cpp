@@ -214,18 +214,18 @@ static void htmlAppendHead(String& h) {
          "input[type=checkbox]{width:auto;margin:0 7px 0 0}input[type=file]{padding:6px}"
          // A hint sits UNDER the control it qualifies and reads as commentary,
          // not as another field: no uppercase, no mono, one rank down.
-         ".hint{margin:5px 0 0;font:12px/1.5 system-ui;color:#75828f}"
+         ".hint{margin:5px 0 0;font:12px/1.5 system-ui;color:#8e9baa}"
          "button{padding:9px 15px;background:#54dcee;color:#05080d;border:0;border-radius:7px;"
          "font:600 13px system-ui;cursor:pointer;margin-top:11px}"
-         "button.d{background:#ff6472;color:#fff}"
+         "button.d{background:#ff6472;color:#05080d}"
          "table{width:100%;border-collapse:collapse;"
          "font:13px ui-monospace,SFMono-Regular,Menlo,monospace}"
          "th{text-align:left;font:500 10px/1 ui-monospace,monospace;letter-spacing:.07em;"
-         "text-transform:uppercase;color:#75828f;padding-bottom:7px}"
+         "text-transform:uppercase;color:#8e9baa;padding-bottom:7px}"
          "td{padding:5px 0;color:#aab4c0;border-top:1px solid rgba(180,205,230,.08);"
          "white-space:nowrap}"
          ".dz{border-color:rgba(255,100,114,.45)}.dz .t{color:#ff8a94}"
-         ".n{color:#75828f;font-size:12px}a{color:#8e9baa}"
+         ".n{color:#8e9baa;font-size:12px}a{color:#8e9baa}"
          ".mir{width:100%;display:block;border-radius:6px;border:1px solid #1a222e;"
          "background:#05080d}"
          ".pill{display:inline-block;width:7px;height:7px;border-radius:50%;"
@@ -359,7 +359,8 @@ static void htmlAppendIntegrations(String& h) {
   h += F("'><label>Custom POSIX TZ</label><input name=tz value='");
   h += htmlEscape(g_set.tz);
   h += F("'></div>"
-         "<label>Panel password (blank = keep, - = clear)</label>"
+         "<label>Web &amp; API password &mdash; username \"admin\" "
+         "(blank = keep, - = clear)</label>"
          "<input type=password name=ppass autocomplete=off>"
          "<button type=submit>Save</button></form>"
          "<form method=post action=/update enctype='multipart/form-data' "

@@ -47,6 +47,9 @@ static const int   MIL_BOX_SZ   = 30;
 static const int   LBL_W        = 72;
 static const int   LBL_H        = 14;           // one F_MONO11 line
 static const lv_opa_t SEL_RING_OPA = 210;
+// The credit has to be legible, not prominent -- it is a licence obligation,
+// not a reading. C_MUTE at this opacity sits below the range numerals.
+static const lv_opa_t ATTRIB_OPA   = 150;
 static const lv_opa_t MIL_BOX_OPA  = 170;
 static const int   LBL_OFF_X    = HOLDER_SZ + 4; // label beside the jet
 static const int   LBL_OFF_Y    = 10;
@@ -164,6 +167,7 @@ static Blip s_blips[AR_MAX_TRACKS];
 
 static lv_obj_t* s_clip         = nullptr;   // circular clip container
 static lv_obj_t* s_mapImg       = nullptr;
+static lv_obj_t* s_attrib       = nullptr;   // CARTO/OSM credit, map layer only
 static bool      s_issRaisePending = false;  // z-order fix deferred out of blipBuild
 static lv_obj_t* s_rangeLblMid  = nullptr;
 static lv_obj_t* s_rangeLblIn   = nullptr;
@@ -614,6 +618,22 @@ void scopeBuild(lv_obj_t* parent) {
   lv_obj_add_flag(s_mapImg, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_background(s_mapImg);
 
+  // B5. AR_TILE_ATTRIB has existed in config.h since the map landed and a
+  // full-source grep found only its own definition -- it was never drawn.
+  // CARTO's free basemap terms ask for visible attribution and this project
+  // ships a public one-click installer, so that is a licence problem rather
+  // than a design one.
+  //
+  // It goes in the gutter below the disc, which measured empty on all thirteen
+  // captures: the disc bottom is SCOPE_Y0 + SCOPE_D and the cards either side
+  // stop short of the centre. One static label, no per-frame cost, and the
+  // string is already 7-bit ASCII so no font work.
+  s_attrib = makeMicroLabel(parent, AR_TILE_ATTRIB, C_MUTE);
+  lv_obj_set_style_text_opa(s_attrib, ATTRIB_OPA, 0);
+  lv_obj_align(s_attrib, LV_ALIGN_TOP_MID, 0,
+               SCOPE_Y0 + SCOPE_D + (SCR_H - (SCOPE_Y0 + SCOPE_D) - 16) / 2);
+  lv_obj_add_flag(s_attrib, LV_OBJ_FLAG_HIDDEN);
+
   s_clip = lv_obj_create(parent);
   lv_obj_remove_style_all(s_clip);
   lv_obj_set_pos(s_clip, SCOPE_X0, SCOPE_Y0);
@@ -780,5 +800,7 @@ void scopeApplyMapImage() {
     Serial.printf("[scope] map gen %lu applied\n", (unsigned long)gen);
   }
   bool haveImg = (lv_img_get_src(s_mapImg) != nullptr);
-  setHidden(s_mapImg, !g_set.mapEn || !haveImg);
+  const bool mapShown = g_set.mapEn && haveImg;
+  setHidden(s_mapImg, !mapShown);
+  if (s_attrib) setHidden(s_attrib, !mapShown);   // credit the tiles, not the app
 }

@@ -483,7 +483,7 @@ static void editFeeder(lv_event_t*) {
   texteditOpen("FEEDER URL", g_set.feedUrl.c_str(), false, saveFeeder);
 }
 static void editPPass(lv_event_t*) {
-  texteditOpen("PANEL PASSWORD (EMPTY = OFF)", "", true, savePanelPass);
+  texteditOpen("WEB & API PASSWORD - USER \"admin\"", "", true, savePanelPass);
 }
 static void mqttRowLong(lv_event_t* e) {
   if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED)
@@ -1043,7 +1043,13 @@ void settingsBuild() {
   lv_obj_add_event_cb(r, mqttRowLong, LV_EVENT_LONG_PRESSED, NULL);
 
   g = mkGroup(colR, "SYSTEM");
-  r = mkRow(g, "Panel password", false);
+  // B6. This guards the WEB CONSOLE and the HTTP API -- authed() in web.cpp
+  // is the only reader; no ui_*.cpp ever consults g_set.panelPass. Calling it
+  // "Panel password", on the panel, under SYSTEM, next to "Reboot device",
+  // told the owner it locked the touchscreen. It does not, and someone could
+  // reasonably have made a security decision on that. A real panel lock is a
+  // separate feature and deserves a separate name.
+  r = mkRow(g, "Web & API password", false);
   s_vPPass = mkChevronValue(r, "off");
   lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(r, editPPass, LV_EVENT_CLICKED, NULL);
