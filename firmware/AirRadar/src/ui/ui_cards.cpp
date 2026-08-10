@@ -231,11 +231,12 @@ static char s_bufOrigin[8], s_bufDest[8], s_bufFrame[36], s_bufIdent[28];
 static char s_bufAlt[16], s_bufSpd[16], s_bufHdg[16], s_bufClimb[16];
 static char s_bufDist[24], s_bufSqk[8], s_bufLive[20];
 static lv_color_t s_colAlt = {}, s_colClimb = {}, s_colSqk = {};
+static lv_color_t s_colSpd = {}, s_colHdg = {};
 static lv_color_t s_colLive = {}, s_colLiveDot = {};
 static lv_color_t s_colOrigin = {}, s_colDest = {};   // dimmed while unresolved
 
 // Time card
-static lv_obj_t *s_tmTime, *s_tmPm, *s_tmDate;
+static lv_obj_t *s_tmTime, *s_tmPm, *s_tmSync, *s_tmDate;
 static char s_bufTime[8], s_bufPm[4], s_bufDate[20];
 static const int TM_PM_GAP = 5;   // clock -> "PM"
 static int s_pmDy = 0;            // meridiem baseline offset, computed at build
@@ -717,6 +718,10 @@ static void buildTimeCard(lv_obj_t* parent) {
   s_tmPm = mkLbl(card, F_UI12, C_MUTE);        // a suffix is meta, not data
   lv_obj_align(s_tmPm, LV_ALIGN_CENTER, 0, s_pmDy);
   lv_obj_add_flag(s_tmPm, LV_OBJ_FLAG_HIDDEN);
+  s_tmSync = mkLbl(card, F_MONO13, C_MUTE);    // the clock's own null state
+  lv_label_set_text(s_tmSync, "SYNCING");
+  lv_obj_center(s_tmSync);
+  lv_obj_add_flag(s_tmSync, LV_OBJ_FLAG_HIDDEN);
 }
 
 // A top-right corner control: an invisible touch plate with the glyph placed on
@@ -821,10 +826,18 @@ static void updateEmergencyStrip(uint32_t nowMs) {
   Track* e = tracksFirstEmergency();
   setHiddenCached(s_ovEmergBox, e == nullptr);
   if (!e) return;
-  char nm[12];
-  trackDisplayName(e, nm, sizeof(nm));
+  // C5. The strip read "7600 ACA337" -- a code the owner has to translate, and
+  // a callsign the Selected card already shows in 28 px the moment you tap the
+  // strip (which is a 48 px target). At a glance the useful fact is WHICH KIND
+  // of emergency, so the strip says that and the card answers "which
+  // aircraft". Width is neutral: the callsign was ~53 px of micro13 and each
+  // word is six characters or fewer, and font_val22 carries 0x20-0x7E so
+  // letters need no font work.
+  const char* what = !strcmp(e->squawk, "7500") ? "HIJACK"
+                   : !strcmp(e->squawk, "7600") ? "RADIO"
+                   : !strcmp(e->squawk, "7700") ? "MAYDAY" : "";
   setTextCached(s_ovEmergSqk, s_bufEmergSqk, sizeof(s_bufEmergSqk), e->squawk);
-  setTextCached(s_ovEmergLbl, s_bufEmerg, sizeof(s_bufEmerg), nm);
+  setTextCached(s_ovEmergLbl, s_bufEmerg, sizeof(s_bufEmerg), what);
   strlcpy(s_emergHex, e->hex, sizeof(s_emergHex));
   // Blink the FILL, hold the text. Blinking the text colour meant the alarm
   // measured 2.18:1 in its dim phase -- half the time, the only warning on the
@@ -1156,8 +1169,19 @@ static void updateSelectedIdentity(const Track* t) {
   setHiddenCached(s_selMil, !t->mil);
 }
 
-static void updateSelectedGrid(const Track* t) {
+// C3. During coast, tracksDeadReckon() INTEGRATES lat/lon forward, so DIST is
+// a live estimate that keeps moving -- while ALT, SPD, HDG, V/S and SQK are
+// frozen at the last report and do not. All six rendered identically, and the
+// contradiction shows: "V/S +64" says climbing while "FL330" says it has not.
+// The status line's 13 px amber COAST was the smallest text on the card
+// qualifying the largest numbers on it.
+//
+// Drop the five frozen cells a rank and leave DIST bright: the one still being
+// computed is the one still bright. A whole column dimming is a signature you
+// can see from where this thing is read; a 13 px word is not.
+static void updateSelectedGrid(const Track* t, bool coasting) {
   char b[16];
+  const lv_color_t frozen = coasting ? C_IVORY2 : C_IVORY;
   // Units live in the key. "489 kt" was 82.6 px in a 64 px cell and clipped to
   // "489 k"; "216° SW" ran into the next column's "+64".
   if (t->altFt >= FL_TRANSITION_FT)
@@ -1167,15 +1191,22 @@ static void updateSelectedGrid(const Track* t) {
   else
     snprintf(b, sizeof(b), "---");
   setTextCached(s_selAlt, s_bufAlt, sizeof(s_bufAlt), b);
+  // ALT keeps its altitude hue -- that is a semantic, not a rank -- but it is
+  // a frozen reading too, so it dims by blending toward the card rather than
+  // by losing its colour.
   uint8_t r, g, bl;
   altColorRGB(t->altFt, r, g, bl);
-  setColorCached(s_selAlt, &s_colAlt, lv_color_make(r, g, bl));
+  lv_color_t ac = lv_color_make(r, g, bl);
+  if (coasting) ac = lv_color_mix(ac, C_SURF, 168);
+  setColorCached(s_selAlt, &s_colAlt, ac);
 
   snprintf(b, sizeof(b), "%d", (int)t->gsKt);
+  setColorCached(s_selSpd, &s_colSpd, frozen);
   setTextCached(s_selSpd, s_bufSpd, sizeof(s_bufSpd), b);
 
   int hd = (((int)t->trackDeg) % 360 + 360) % 360;
   snprintf(b, sizeof(b), "%03d\xC2\xB0", hd);   // cardinal dropped: it never fit
+  setColorCached(s_selHdg, &s_colHdg, frozen);
   setTextCached(s_selHdg, s_bufHdg, sizeof(s_bufHdg), b);
 
   snprintf(b, sizeof(b), "%+d", t->vRateFpm);
@@ -1185,7 +1216,7 @@ static void updateSelectedGrid(const Track* t) {
   // on the glyph 200 px away, and cyan means "live". The sign and the tabular
   // figures already carry direction and magnitude, so the colour was spending
   // two reserved meanings to say nothing new.
-  setColorCached(s_selClimb, &s_colClimb, C_IVORY);
+  setColorCached(s_selClimb, &s_colClimb, frozen);
 }
 
 static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
@@ -1302,7 +1333,10 @@ static void updateSelected(uint32_t nowMs) {
   selApplyLogoLayout();
   updateSelectedIdentity(t);
   updateSelLogo(t);
-  updateSelectedGrid(t);
+  int32_t ageMs = (int32_t)(nowMs - t->lastApiMs);
+  if (ageMs < 0) ageMs = 0;
+  const bool coasting = ageMs > (int32_t)AR_STALE_TRACK_MS;
+  updateSelectedGrid(t, coasting);
   updateSelectedStatus(t, nowMs);
 }
 
@@ -1322,11 +1356,22 @@ static void updateTimeCard() {
     // sat in the second-loudest slot on the panel while the truth ("WAITING
     // FOR TIME") was 13 px of C_DIM six hundred pixels away. An empty clock
     // card reads as "no time" honestly.
+    // C4. Removing the "0:00" lie was right; leaving a 168x52 EMPTY CARD in
+    // its place was not, and putting the explanation in the Overview card's
+    // date slot -- the opposite corner of the screen -- broke proximity: a
+    // status message about a component belongs IN that component. This is
+    // also the boot state, so it is the first thing anyone ever sees, and a
+    // blank box plus a blank weather band reads as a rendering fault.
+    //
+    // font_clock36 is digits and ':' only, so the word cannot go in the clock
+    // face; micro13 centred in the same card can.
     setTextCached(s_tmTime, s_bufTime, sizeof(s_bufTime), "");
     setHiddenCached(s_tmPm, true);
-    setTextCached(s_tmDate, s_bufDate, sizeof(s_bufDate), "WAITING FOR TIME");
+    setHiddenCached(s_tmSync, false);
+    setTextCached(s_tmDate, s_bufDate, sizeof(s_bufDate), "--- \xC2\xB7 --- --");
     return;
   }
+  setHiddenCached(s_tmSync, true);
   if (!g_timeSynced) g_timeSynced = true;      // loop context: allowed write
 
   char b[8];

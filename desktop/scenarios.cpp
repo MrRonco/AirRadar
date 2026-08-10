@@ -131,6 +131,9 @@ void scenarioApply(int n) {
       // Overview should show a COASTING count.
       g_tracks[0].lastApiMs = millis() - 40000;
       g_tracks[1].lastApiMs = millis() - 52000;
+      strlcpy(g_selHex, "a1b2c3", sizeof(g_selHex));  // pinned AND coasting: the
+                                                     //  card mixes an estimate
+                                                     //  with frozen readings
       g_lastGoodApply = millis() - 45000;      // drives the STALE feed state
       g_feedIsLocal = false;                   // and the CLOUD fallback dot
       g_heardCount = 2;
