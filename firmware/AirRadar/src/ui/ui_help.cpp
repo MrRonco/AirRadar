@@ -231,7 +231,7 @@ void helpBuild(lv_obj_t* parent) {
   hJet(s_overlay, c1, sampleY(y, 26), C_ALT_MID, LV_OPA_COVER, 900, 256);
   y += hRow(s_overlay, c1, y, "10,000 to 30,000 ft");
   hJet(s_overlay, c1, sampleY(y, 26), C_ALT_HIGH, LV_OPA_COVER, 900, 220);
-  y += hRow(s_overlay, c1, y, "Above 30,000 ft. Bigger glyph = lower and nearer");
+  y += hRow(s_overlay, c1, y, "Above 30,000 ft");
   hJet(s_overlay, c1, sampleY(y, 26), C_IVORY2, LV_OPA_COVER, 900, 256);
   y += hRow(s_overlay, c1, y, "Altitude not reported");
   hJet(s_overlay, c1, sampleY(y, 26), C_ALT_MID, 150, 900, 256);
@@ -239,8 +239,7 @@ void helpBuild(lv_obj_t* parent) {
             "Faded glyph and a ~ before the callsign: COASTING. Still counted "
             "and tracked, position estimated from the last report");
   hJet(s_overlay, c1, sampleY(y, 26), C_ALERT, LV_OPA_COVER, 900, 256);
-  y += hRow(s_overlay, c1, y, "Emergency squawk: 7500 HIJACK, 7600 RADIO, "
-                              "7700 MAYDAY. The Overview strip names it too");
+  y += hRow(s_overlay, c1, y, "Emergency: 7500 HIJACK, 7600 RADIO, 7700 MAYDAY");
   // C7: the ISS is the one mark on the disc that is not an aircraft, it shows
   // unannounced a few times a day, and nothing explained it -- which makes it
   // look like a malfunction rather than a feature.
@@ -250,6 +249,11 @@ void helpBuild(lv_obj_t* parent) {
     lv_obj_set_pos(i, c1, sampleY(y, 12));
   }
   y += hRow(s_overlay, c1, y, "The ISS, when it is overhead and the layer is on");
+  // C11: glyph size applies to all three altitude bands, so it is a general
+  // rule and belongs where the SCOPE column already puts its general rules --
+  // below a divider, not welded onto the caption of one row.
+  y += hNoteHair(s_overlay, c1, y);
+  y += hNote(s_overlay, c1, y, "Bigger glyph = lower and nearer.");
 
   // ---------- scope ----------
   hHeading(s_overlay, c2, HLP_TOP - 22, "SCOPE");

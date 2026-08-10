@@ -167,8 +167,13 @@ static void resetTracks() {
 // Send an HTML notice, then reboot (WiFi / network / DHCP switches).
 static void webReboot(const String& msg) {
   String h = F("<!doctype html><meta name=viewport content='width=device-width,"
-               "initial-scale=1'><body style='font-family:system-ui;background:#0b0f15;"
-               "color:#dfe8f2;padding:2em'>");
+               // C9. This fires after every Wi-Fi save and every network
+               // change -- the exact moment someone is waiting to be told it
+               // worked -- and it used #0b0f15/#dfe8f2, an adjacent black and
+               // an adjacent white to the page's own #05080d/#eef1f4. Same
+               // tokens now, so the wait looks like the same product.
+               "initial-scale=1'><body style='font-family:system-ui;background:#05080d;"
+               "color:#eef1f4;padding:2em'>");
   h += msg;
   h += F("</body>");
   server.send(200, "text/html", h);
@@ -198,11 +203,11 @@ static void htmlAppendHead(String& h) {
          ".c3{grid-template-columns:repeat(3,1fr)}"
          ".c21{grid-template-columns:2fr 1fr}"
          ".b{background:#182231;border:1px solid rgba(180,205,230,.16);"
-         "border-radius:13px;padding:14px}"
+         "border-radius:12px;padding:14px}"
          ".t{font:500 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.09em;"
          "text-transform:uppercase;color:#8e9baa;margin:0 0 10px}"
          ".tile{background:#0d1420;border:1px solid rgba(180,205,230,.10);"
-         "border-radius:8px;padding:9px 11px}"
+         "border-radius:12px;padding:9px 11px}"
          ".tk{font:500 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;"
          "color:#75828f;text-transform:uppercase}"
          ".tv{font:500 22px/1.35 system-ui;font-variant-numeric:tabular-nums}"
@@ -218,7 +223,11 @@ static void htmlAppendHead(String& h) {
          "tr.em{background:rgba(255,100,114,.13)}tr.em b{color:#ff8a94}"
          "td.op{max-width:210px;overflow:hidden;text-overflow:ellipsis}"
          "tr.rw{cursor:pointer}tr.rw:hover{background:#182231}"
-         "button{padding:9px 15px;background:#54dcee;color:#05080d;border:0;border-radius:7px;"
+         // C8. There was not one :focus rule on the page, so keyboard focus
+         // showed as the browser's default blue against a cyan product -- or,
+         // on some platforms, as nothing at all.
+         ":focus-visible{outline:2px solid #54dcee;outline-offset:2px}"
+         "button{padding:9px 15px;background:#54dcee;color:#05080d;border:0;border-radius:6px;"
          "font:600 13px system-ui;cursor:pointer;margin-top:11px}"
          "button.d{background:#ff6472;color:#05080d}"
          "table{width:100%;border-collapse:collapse;"
@@ -446,6 +455,14 @@ static void htmlAppendFooter(String& h) {
          "for(var j=0;j<rs.length;j++){rs[j].onclick=function(){"
          "fetch('/api/select?hex='+this.getAttribute('data-h'),{method:'POST'})}}"
          "}).catch(function(){})}"
+         // Pair every label with the control it labels. Done in script rather
+         // than by hand-writing for=/id= on nineteen pairs: it is fewer bytes
+         // of flash, and it cannot drift when a field is added later. Clicking
+         // a label now focuses its field.
+         "var lb=document.querySelectorAll('label'),lk=0;"
+         "for(var q=0;q<lb.length;q++){var nx=lb[q].nextElementSibling;"
+         "if(nx&&(nx.tagName=='INPUT'||nx.tagName=='SELECT')){"
+         "if(!nx.id)nx.id='f'+(++lk);lb[q].htmlFor=nx.id;}}"
          "$('host').textContent=location.host;"
          "var t1,t2;function GO(){M();T();t1=setInterval(M,10000);t2=setInterval(T,15000)}"
          "function STOP(){clearInterval(t1);clearInterval(t2)}"
