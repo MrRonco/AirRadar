@@ -20,6 +20,7 @@
 #include "web.h"
 #include "../core/units.h"
 #include "../core/timezones.h"
+#include "../ui/spark.h"
 #include "heapwalk.h"
 #include "../core/stall.h"
 #include "mqtt.h"
@@ -1048,6 +1049,10 @@ static void handleMetrics() {
   snprintf(l, sizeof(l), "airradar_in_range %d\n", g_orderN); s += l;
   s += F("# TYPE airradar_heard gauge\n");
   snprintf(l, sizeof(l), "airradar_heard %d\n", g_heardCount); s += l;
+  s += F("# TYPE airradar_spark_count gauge\n");
+  snprintf(l, sizeof(l), "airradar_spark_count %d\n", (int)sparkCount()); s += l;
+  s += F("# TYPE airradar_spark_newest gauge\n");
+  snprintf(l, sizeof(l), "airradar_spark_newest %d\n", (int)sparkNewest()); s += l;
   s += F("# TYPE airradar_coasting gauge\n");
   snprintf(l, sizeof(l), "airradar_coasting %d\n", tracksCoastingCount(millis())); s += l;
   s += F("# TYPE airradar_in_range_total gauge\n");

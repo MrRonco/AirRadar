@@ -932,17 +932,31 @@ static void updateOverview(uint32_t nowMs) {
   const bool allCoasting = (g_orderN > 0 && coasting == g_orderN);
   setColorCached(s_ovCount, &s_colCount, allCoasting ? C_AMBER : C_IVORY);
 
-  sparkSample(nowMs, (uint8_t)(g_orderN > 255 ? 255 : g_orderN));
-  const bool alerting = (coasting > 0) || (tracksFirstEmergency() != nullptr);
-  setHiddenCached(s_ovSpark, alerting);
-  setHiddenCached(s_ovSparkKey, alerting);
-  if (!alerting && sparkDirty()) sparkRedraw();
+  // Not before the feeder has ever answered. The first tick happens seconds
+  // after boot, while g_orderN is still 0 -- that zero is an artefact of
+  // startup, not an hour with no traffic, and it would sit in the history for
+  // an hour claiming otherwise. The call site owns this policy; spark.cpp
+  // knows nothing about feeds.
+  if (g_lastGoodApply) sparkSample(nowMs, (uint8_t)(g_orderN > 255 ? 255 : g_orderN));
+  // Only the EMERGENCY strip contends with the sparkline: it occupies content
+  // y 188-214 and the sparkline sits at 194-214. The coast row is at 174-187
+  // and does not overlap at all -- tying the sparkline to "alerting" hid it
+  // whenever a single aircraft out of fifteen was coasting, which is an
+  // ordinary state on a real feed, not an alert. Caught on the device with
+  // airradar_coasting reading 1.
+  //
+  // The KEY does clash with the coast row, so that alone yields.
+  const bool emerg    = (tracksFirstEmergency() != nullptr);
+  const bool sparkOn  = !emerg;
+  setHiddenCached(s_ovSpark, !sparkOn);
+  setHiddenCached(s_ovSparkKey, !sparkOn || coasting > 0);
+  if (sparkOn && sparkDirty()) sparkRedraw();
 
-  // Recentre the hero group against however many alert rows are showing --
-  // or against the sparkline, which occupies the same slot when nothing is.
-  const int alertH = alerting ? ((coasting > 0 ? 22 : 0) +
-                                 (tracksFirstEmergency() ? (OV_EMERG_H + 10) : 0))
-                              : (OV_SPARK_H + 15 + 10);
+  // Recentre the hero group against whatever is below it -- alert rows, the
+  // sparkline, or both.
+  const int alertH = emerg ? ((coasting > 0 ? 22 : 0) + OV_EMERG_H + 10)
+                   : (coasting > 0 ? (22 + OV_SPARK_H + 10)
+                                   : (OV_SPARK_H + 15 + 10));
   const int avail  = (OV_HAIR2_Y - 8 - alertH) - OV_BAND_TOP;
   int heroY = OV_BAND_TOP + (avail - OV_GROUP_H) / 2;
   if (heroY < OV_BAND_TOP) heroY = OV_BAND_TOP;

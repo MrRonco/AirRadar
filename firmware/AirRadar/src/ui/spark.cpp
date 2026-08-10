@@ -40,6 +40,8 @@ void sparkSample(uint32_t nowMs, uint8_t inRange) {
 }
 
 bool sparkDirty() { return s_dirty; }
+uint8_t sparkCount()  { return s_count; }
+uint8_t sparkNewest() { return s_count ? s_hist[(s_head + SPARK_SLOTS - 1) % SPARK_SLOTS] : 0; }
 
 lv_obj_t* sparkBuild(lv_obj_t* parent, int w, int h) {
   static uint8_t buf[LV_CANVAS_BUF_SIZE_ALPHA_1BIT(SPARK_SLOTS * 2, 24)];

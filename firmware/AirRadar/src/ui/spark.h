@@ -31,3 +31,10 @@ void sparkRedraw();
 
 // True when a fresh sample has landed since the last redraw.
 bool sparkDirty();
+
+// How many samples are held, and the newest value. Published on /metrics so
+// "the sparkline is flat" can be told apart from "the sparkline is broken"
+// without a reflash -- which is exactly the distinction that cost a debugging
+// round here.
+uint8_t sparkCount();
+uint8_t sparkNewest();
