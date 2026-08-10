@@ -101,7 +101,7 @@ static void banner() {
 int main(int argc, char** argv) {
   const char* shot = nullptr;
   const char* screen = "main";
-  int tintNum = 16;
+  int tintNum = 0;              // 0 = leave fakemap.cpp's own default alone
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--shot") && i + 1 < argc) shot = argv[++i];
     else if (!strcmp(argv[i], "--scenario") && i + 1 < argc) s_scenario = atoi(argv[++i]);
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
   g_wifiUp = true;
   themeInit();
   mapBegin();          // same order as the firmware's setup()
-  if (tintNum != 16) fakeMapSetTint(tintNum, 10);
+  if (tintNum > 0) fakeMapSetTint(tintNum, 10);
   uiInit();
   scenarioApply(s_scenario);
   uiTick(millis());

@@ -135,12 +135,18 @@ static lv_obj_t* mkRow(lv_obj_t* group, const char* key, bool divider) {
   }
   lv_obj_t* r = lv_obj_create(group);
   lv_obj_remove_style_all(r);
-  lv_obj_set_size(r, LV_PCT(100), 33);
-  // 33 px is 6.3 mm. The corner glyphs on the main screen were given tiled
-  // 48 px plates and this screen never got the same treatment, even though
-  // mis-tapping HELI instead of MIL silently changes what the radar shows,
-  // with no undo. 8 px each side takes the row to 49.
-  lv_obj_set_ext_click_area(r, 8);
+  // 44 px, not 33 (6.3 mm) -- the corner glyphs on the main screen were given
+  // tiled 48 px plates and this screen never got the same treatment, even
+  // though mis-tapping HELI instead of MIL silently changes what the radar
+  // shows, with no undo.
+  //
+  // HEIGHT, not ext_click_area. Extending a 33 px row by 8 each side inside a
+  // stack with no row gap makes every neighbour overlap by 15 px, and LVGL
+  // hit-tests the topmost child first -- so the bottom of each row fired the
+  // row BELOW it. In SYSTEM that put "Reboot device" under the lower edge of
+  // "Panel password". An ext_click_area is only ever free when there is empty
+  // space to grow into.
+  lv_obj_set_size(r, LV_PCT(100), 44);
   lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(r, LV_FLEX_ALIGN_SPACE_BETWEEN,
                         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -875,12 +881,12 @@ void settingsBuild() {
   // halo, which is what a control that silently changes what the radar shows
   // should have had from the start.
   r = mkRow(g, "Aircraft class", false);
-  lv_obj_set_height(r, 26);
+  lv_obj_set_height(r, 26);                   // a caption, not a target
   lv_obj_set_flex_align(r, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
                         LV_FLEX_ALIGN_CENTER);   // one child: SPACE_BETWEEN centres it
   lv_obj_t* chipBox = lv_obj_create(g);
   lv_obj_remove_style_all(chipBox);
-  lv_obj_set_size(chipBox, LV_PCT(100), 32);
+  lv_obj_set_size(chipBox, LV_PCT(100), 40);
   lv_obj_set_style_pad_bottom(chipBox, 7, 0);
   lv_obj_set_flex_flow(chipBox, LV_FLEX_FLOW_ROW);
   lv_obj_set_style_pad_column(chipBox, 8, 0);
@@ -888,10 +894,9 @@ void settingsBuild() {
   static const char* chipNames[4] = {"AIRLINER", "LIGHT", "HELI", "MIL"};
   for (int i = 0; i < 4; i++) {
     lv_obj_t* b = lv_btn_create(chipBox);
-    lv_obj_set_size(b, 0, 32);
+    lv_obj_set_size(b, 0, 40);                // 78 x 40; same reason as the rows
     lv_obj_set_flex_grow(b, 1);
     lv_obj_set_style_pad_hor(b, 0, 0);
-    lv_obj_set_ext_click_area(b, 8);          // 32 -> 48 px, 2 px of dead space
     lv_obj_set_style_radius(b, R_SM, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_border_width(b, 0, 0);
