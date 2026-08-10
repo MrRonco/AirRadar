@@ -40,10 +40,15 @@ bootloader as DIO, and a QIO header there produces a watchdog boot loop from an 
 whose offsets, magics and digests all verify. v7.2.3's published installer shipped with
 exactly that fault.
 
-Verify before committing:
+Verify before committing — **by comparison, never by installing it on a configured
+device.** The merged image is a first-install image: `merge_bin` pads the gaps with
+0xFF and `0x9000-0xdfff` is the NVS partition, so installing it wipes every setting,
+including the Wi-Fi password, which is never recoverable by design. The component
+check in [`../firmware/BUILD.md`](../firmware/BUILD.md) section C costs nothing and
+proves more. A quick version sanity check on the OTA image:
 
 ```bash
-python3 -c "print('7.1.0' in open('flasher/airradar-ota.bin','rb').read().decode('latin1'))"
+python3 -c "import re;print(sorted(set(re.findall(rb'7\\.\\d+\\.\\d+', open('flasher/airradar-ota.bin','rb').read()))))"
 ```
 
 Keep `manifest.json`'s `version` and the footer in `index.html` in step with `AR_VERSION`

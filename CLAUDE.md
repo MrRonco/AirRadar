@@ -100,6 +100,11 @@ FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
    `WiFi.localIP()`) *before* anything else; that is the anchor the origin test
    hangs off. Absent Host is allowed on purpose — every browser sends one, so
    rejecting buys nothing, and a client that omits it cannot be rebound.
+16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
+   decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
+   over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,
+   ±noise, top highlight, bottom shade. Chrome changes require editing `buildChrome()`
+   and any dependent `restore()` rectangles together.
 17. **(v7.1) `vTaskDelete(NULL)` skips every C++ destructor in that scope.**
    It never returns, so a `DynamicJsonDocument` (or any RAII object) declared in
    a task function leaks its heap buffer on every single run. This was the
@@ -206,11 +211,24 @@ FQBN no longer takes `FlashFreq` — `FlashMode=qio` already means QIO 80 MHz.
    device: it is a first-install image and the 0xFF padding between components
    covers 0x9000-0xdfff, which is NVS. That is a wiped configuration, learned
    the expensive way.
-16. **All chrome is composited once at boot** (`buildChrome()` → `bg` sprite): gradient,
-   decorative rings, radar rings, frosted cards. Glass = per-pixel blend of the card
-   over the background; **alpha 185 in `glassRect()` is the frost-opacity knob**,
-   ±noise, top highlight, bottom shade. Chrome changes require editing `buildChrome()`
-   and any dependent `restore()` rectangles together.
+29. **(v7.2.5) A disclosure comparing two counts must compare the SAME
+   population over the SAME window.** The "more aircraft than shown" indicator
+   first tested `g_inRangeTotal > g_orderN`. Both are counts of aircraft and
+   the comparison looks obviously right, but one is what the feeder reported
+   this poll and the other is what survived the filters and the age cutoff — so
+   the panel confidently announced `OF 6` while showing 9. It was caught only
+   because `/metrics` prints both numbers side by side, where `in_range 9`
+   beside `in_range_total 6` is self-evidently impossible. Two variables being
+   the same *kind* of thing does not make them comparable.
+30. **(v7.2.5) Validate the whole string, not the first character.** The
+   coordinate guard added to `handleSave` accepted `46,45` — it checked that
+   the field started with a digit and then called `toDouble()`, which silently
+   parses the leading `46` and discards the rest. The radar moved. Walk every
+   character, count the digits and the decimal points, and reject on anything
+   else. This one damaged live stored data during its own test, which is the
+   argument for testing input guards with input that is *wrong*, not input that
+   is empty.
+
 
 ## Threading contract
 

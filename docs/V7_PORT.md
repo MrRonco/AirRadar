@@ -16,13 +16,21 @@ firmware/
   AirRadar/
     AirRadar.ino           boot + main loop (thread owner)
     src/config.h           every constant: geometry, timing, NVS keys, URLs
-    src/core/  types.h state.{h,cpp} tracks.{h,cpp}
-    src/net/   feeder.* enrich.* maptiles.*      (core-0 task modules)
+    src/core/  types.h state.{h,cpp} tracks.{h,cpp} units.{h,cpp}
+               timezones.h                       (curated POSIX table)
+               stall.{h,cpp}                     (per-stage loop timing → /api/stalls)
+    src/net/   feeder.* enrich.* maptiles.* logos.*   (core-0 task modules)
     src/ui/    theme.* ui.h ui_nav.cpp ui_scope.cpp ui_cards.cpp ui_settings.cpp
+               ui_help.cpp                       (legend overlay)
+               bezel.*                           (bearing scale, engraved into the map)
+               spark.*                           (one-hour traffic history)
+               brandcolor.*                      (airline tile colours)
     src/hal/   hal_display.*                     (panel/touch/backlight/LVGL glue)
-    src/svc/   web.* mqtt.*
+    src/svc/   web.* mqtt.* heapwalk.*
     src/assets/ img_*.c font_*.c                 (generated: glyphs + Inter/JBM fonts)
 ```
+
+~10,600 lines of C++ across 42 files, assets excluded.
 
 ## Threading model (the invariant everything hangs off)
 
@@ -36,8 +44,11 @@ firmware/
 
 ## Rendering
 
-* LVGL draw buffers: 2 × 800×120 RGB565 in PSRAM; flush = `lcd.pushImage`
-  into LovyanGFX's RGB-panel framebuffer (panel scans it via DMA).
+* LVGL draw buffer: a single 800×30 RGB565 buffer (48 KB) in **internal SRAM**;
+  flush = byte-swap in SRAM, then `lcd.pushImage` into LovyanGFX's RGB-panel
+  framebuffer (the panel scans that via DMA). Both halves of that sentence were
+  originally wrong and each cost a session — see findings 2 and 9 below for why
+  it is not in PSRAM, and CLAUDE.md rule 9 for why it is 30 lines and not 60.
 * The scope is a circle-clipped container: CARTO base map image (fetched,
   stitched, blue-tinted in `maptiles.cpp`, double-buffered), hairline rings,
   and a pooled set of blip widgets (glow + recolorable jet + label). Target
@@ -52,17 +63,25 @@ Open-Meteo weather · wheretheiss ISS · CARTO dark tiles. All keyless.
 
 ## Services
 
-* Web: settings page + `/api/state` + `/api/config` + `/screen.bmp` +
-  `/metrics` + `/update` (OTA), HTTP Basic auth when a panel password is set.
+* Web: console page + `/api/state` + `/api/config` + `/api/select` +
+  `/screen.bmp` + `/metrics` + `/update` (OTA), plus three diagnostics that
+  exist because serial is awkward on this board — `/api/probe?url=` (note 7),
+  `/api/stalls` (note 13) and `/api/heapwalk` (note 12). HTTP Basic auth when a
+  **Web & API password** is set; the name was corrected in v7.2.5 because it
+  never locked the panel.
 * MQTT: Home Assistant discovery (sensors + emergency binary_sensor), LWT
   availability, 5 s state publish.
 
 ## Hardware bring-up findings (first live session — each cost real debugging)
 
-1. **RGB path wants byte-swapped 565.** `lcd.setSwapBytes(true)` in the flush;
-   LVGL stays `LV_COLOR_16_SWAP 0`. Symptom of getting it wrong: `#0c1119`
-   background renders olive (128,96,64), AA text gets chromatic fringes.
-2. **LVGL draw buffer must be internal SRAM** (single 800×60). PSRAM draw
+1. **RGB path wants byte-swapped 565.** LVGL stays `LV_COLOR_16_SWAP 0`.
+   Symptom of getting it wrong: `#0c1119` background renders olive (128,96,64),
+   AA text gets chromatic fringes. **Superseded in v7.2:** this was originally
+   done with `lcd.setSwapBytes(true)`, which silently disabled LovyanGFX's fast
+   path — the flag is now `false` and the swap is done by hand in `flush_cb`.
+   See CLAUDE.md rule 10.
+2. **LVGL draw buffer must be internal SRAM** (a single 800×60 at the time;
+   **it is 800×30 now** — 96 KB starved everything else, CLAUDE.md rule 9). PSRAM draw
    buffers put render-writes + flush-reads on the bus the panel DMA scans —
    visible wiggle whenever the map forced real compositing.
 3. **…but then LVGL's heap must move to PSRAM** (`ps_malloc` in lv_conf.h),
@@ -95,11 +114,15 @@ Open-Meteo weather · wheretheiss ISS · CARTO dark tiles. All keyless.
    repeat them: `SO_LINGER`/abortive close (reverted — with HTTP/1.0 the
    *server* closes first, so the device never held TIME_WAIT) and HTTP
    keep-alive on the feeder (kept for hygiene — 30× fewer connections — but
-   the drain stayed at 72.8 B/s). **The drain is still unexplained.** It is
-   now largely neutralised rather than solved: the map and routes both cache
-   to FATFS and keep working with the TLS gate shut. Weather and new logo
-   fetches remain exposed. Next step is real heap tracing, not another
-   hypothesis.
+   the drain stayed at 72.8 B/s).
+
+   **This note ends here because that is where it ended at the time. The drain
+   was SOLVED in v7.2 — see note 12.** The attribution above is the part to
+   distrust: "the whole ~72 B/s is feeder run count, with iss contributing
+   exactly 0" was read off two counters that were declared, published to
+   `/metrics` and never once incremented. It was a hardcoded zero being read as
+   a measurement, and it sent three sessions after the wrong subsystem. The
+   actual culprit was `issTask`.
 10. **Non-uniform font codepoint ranges.** Regenerating all faces with one
    uniform range silently dropped U+2039/203A and turned the range stepper's
    chevrons into tofu. Per-face ranges are listed in CLAUDE.md.
@@ -108,8 +131,11 @@ Open-Meteo weather · wheretheiss ISS · CARTO dark tiles. All keyless.
 
 ## Deferred (tracked, not forgotten)
 
-ETA on routes · session stats view · trails on the scope · web `/live` page ·
-aircraft type silhouettes.
+Trails on the scope · web `/live` page · aircraft type silhouettes ·
+**ETA to destination** (v7.2.5 shipped time-to-*you*, which is a different
+question and needed no network) · **a session-statistics view** (v7.2.5 shipped
+one hour of in-range history as a sparkline; max range and peak count are still
+unrecorded).
 
 **Aircraft photos are blocked on licensing, not code.** Planespotters' photo
 API is free and keyless and LovyanGFX *does* have a JPEG decoder (`drawJpg`),

@@ -22,6 +22,24 @@ Drive GPIO4 (INT) low as output → TP_RST low (out reg 0x1C) → 12 ms → TP_R
 (0x1E) → 60 ms (address latch window with INT held low ⇒ 0x5D) → release INT to
 input → Wire.end() so LovyanGFX's I2C driver owns the bus.
 
+## Two properties of this board that constrain the software
+
+**Flash and PSRAM share the MSPI bus, and flash operations cannot be
+suspended.** `CONFIG_SPI_FLASH_AUTO_SUSPEND` is not set in the prebuilt
+arduino-esp32 3.3.10 libraries (verified in the shipped sdkconfig), so while
+flash is busy the panel's DMA cannot reach the framebuffer and **the whole
+screen shakes**. Measured at ~150–220 ms per write, near-independent of size —
+it is sector erase plus FAT metadata, not bytes. Chunking a small write
+therefore makes it worse. This is a hardware property, not a bug to fix.
+
+**Geometry, for anything about legibility.** 800×480 over a 177.8 mm diagonal
+is a **0.1906 mm pixel pitch**. The panel is used on a desk at about **0.9 m**,
+measured — so a 13 px face subtends 6.5′ of arc against a ~5′ acuity limit and
+a 16–22′ comfortable-reading band. Nothing on the panel is unresolvable; an
+argument of the form "X disappears at distance" does not apply to this
+installation and has twice been wrong. If you wall-mount yours, that changes,
+and the table in `CLAUDE.md` gives the other five faces.
+
 ## Network (example setup — adapt to yours)
 Give the ESP32 a stable address (DHCP reservation or the on-device static-IP screen).
 Feeder: adsb.im on a Raspberry Pi — port 80 = Flask config app, port 8080 = tar1090

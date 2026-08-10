@@ -9,12 +9,14 @@ draws the sky above your house on a 7-inch panel.
 
 [![firmware](https://img.shields.io/badge/firmware-v7.2.5-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
-<img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map under a coverage disc ringed by a graduated bearing bezel, six violet altitude-coloured aircraft with their callsigns, and a WestJet 737 pinned in the right-hand card with its logo, its Winnipeg to Edmonton route and a live instrument grid">
+<img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map under a coverage disc ringed by a graduated bearing bezel, twenty violet altitude-coloured aircraft with their callsigns, a traffic sparkline in the left card, and an Air Canada A220 pinned in the right-hand card with its logo, its Edmonton to Montreal route and a live instrument grid">
 
 <sub>Live capture off the device via <code>GET /screen.bmp</code> — the actual framebuffer, not a
-mockup, and not a rendering of one. Six aircraft over the house on an ordinary evening; a WestJet
-737 is pinned, so the right-hand card carries its operator logo, route, airframe and a live
-instrument grid. The disc is ringed by a bearing scale graduated every 10°.</sub>
+mockup, and not a rendering of one. Twenty aircraft on an ordinary afternoon; an Air Canada A220 is
+pinned, so the right-hand card carries its operator logo, route, airframe and a live instrument
+grid. In the left card, <b>LAST HOUR</b> is a sparkline of aircraft-in-range per minute (short here
+— the device had been up fifteen minutes), and the nearest target reads <code>OUTBOUND</code>
+rather than a bare distance. The disc is ringed by a bearing scale graduated every 10°.</sub>
 
 </div>
 
@@ -38,6 +40,9 @@ the device. The only things you supply are Wi-Fi and coordinates.
 | **Reads at a glance** | Glyph colour encodes altitude band, glyph size encodes proximity, a white ring marks selection, a square marks military, gold marks your watchlist. **Red is reserved for emergency squawks** — 7500, 7600, 7700 — and nothing else uses it. |
 | **Real base map** | CARTO dark tiles stitched on-device into one 800×480 image behind the whole screen, dimmed outside your coverage radius so the disc still reads as the instrument. |
 | **Knows the flight** | Airline logo and name, origin → destination, airframe type, registration and year — resolved lazily and cached to flash so they survive a reboot. |
+| **Says what is coming toward you** | `NEAREST` is not just a distance. Closing traffic reads `9 KM IN 3 MIN`; anything on its way out reads `OUTBOUND`. Computed from data already on the wire — no network, no extra fetch. |
+| **Remembers the last hour** | A sparkline of aircraft-in-range per minute, so "is this busy or quiet?" has an answer. 60 bytes of RAM, repainted once a minute, nothing written to flash. |
+| **Says when it does not know** | Coasted positions are marked, a departed pin stops reporting `LIVE`, an unsynced clock says `SYNCING` rather than a plausible time, and a capped track list says `OF 57`. |
 | **Runs headless too** | JSON API, Prometheus metrics, live screenshot endpoint, MQTT with Home Assistant auto-discovery, and OTA firmware upload over the network. |
 
 ---
@@ -58,15 +63,17 @@ This is the layer alone; the bearing bezel and the scope chrome are composited o
 
 <div align="center">
 
-<img src="docs/img/panel-emergency.png" width="700" alt="The same display with an emergency: Air Canada 337 squawking 7600 drawn as a red glyph, a red 7600 alert strip in the Overview card, and a red squawk value in the Selected card, while every other target stays violet">
+<img src="docs/img/panel-emergency.png" width="700" alt="The same display with an emergency: Air Canada 337 squawking 7600 drawn as a red glyph, an alert strip in the Overview card reading 7600 RADIO, and a red squawk value in the Selected card, while every other target stays violet">
 
 <sub><b>The same display, something wrong.</b> A squawk of <b>7600</b> is radio failure, and it is
 the one condition that overrides the altitude palette: red glyph, red squawk value, and an alert
-strip in the Overview card naming the aircraft. Every other target stays violet, because red means
-emergency and nothing else — which is also why the airline brand tile is the only other red on the
-panel and why it is kept small. Rendered in the desktop harness: waiting for a real 7600 is not a
-documentation strategy, and the alternative is flashing a build with the state hardcoded, which is
-how this device once got boot-looped.</sub>
+strip in the Overview card. The strip says <code>7600 RADIO</code> — the number alone asks the
+reader to remember which of three codes it is, and the one moment to not require that is this one.
+Every other target stays violet, because red means emergency and nothing else, which is also why
+the airline brand tile is the only other red on the panel and why it is kept small. Note that the
+sparkline is gone: it shares this slot and yields it whenever something is wrong. Rendered in the
+desktop harness — waiting for a real 7600 is not a documentation strategy, and the alternative is
+flashing a build with the state hardcoded, which is how this device once got boot-looped.</sub>
 
 </div>
 
@@ -85,7 +92,10 @@ anything the panel already labels needs no explanation.
 
 <sub><b>The legend.</b> Every entry carries a live sample drawn by the same code that draws the
 real thing, so it cannot drift from the display it explains. Built once at boot and hidden, so
-it costs nothing until you ask for it.</sub>
+it costs nothing until you ask for it. It documents the marks that carry meaning and nothing
+else — including the ones that say the panel is unsure: a <code>~</code> before a coasting
+callsign, <code>--</code> for a route it could not resolve, and an amber count meaning more
+aircraft are up than the ring is showing.</sub>
 
 </div>
 
@@ -97,11 +107,14 @@ computer — the whole settings tree lives behind the gear.
 
 <img src="docs/img/panel-settings.png" width="700" alt="The on-device settings screen scrolled to the Display group: target labels, night mode, weather strip, units, 12/24-hour clock and time zone on the left; Wi-Fi, IP mode, feeder and Home Assistant on the right; a pinned footer below both">
 
-<sub>Settings on the panel, scrolled to show the Display group. Location, favourites and range;
+<sub>Settings on the panel, scrolled to the Display group. Location, favourites and range;
 metric/imperial units and a time zone picked from a list rather than typed as a POSIX string;
-class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL and Home Assistant. The footer
-stays pinned while the columns scroll. Captured from the desktop harness, which has no real
-network settings to redact.</sub>
+class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL and Home Assistant. Rows are
+44 px so a fingertip is the unit of design, not a cursor. The credential under SYSTEM is the
+<b>Web &amp; API password</b> — it was called a panel password for four versions and never locked
+the panel, which is the sort of thing only a stranger reading the label notices. The footer stays
+pinned while the columns scroll. Captured from the desktop harness, which has no real network
+settings to redact.</sub>
 
 </div>
 
@@ -109,15 +122,19 @@ network settings to redact.</sub>
 
 ## The web console
 
-Open `http://airradar.local/` from a computer. This is a management console, not a
-phone app — it assumes a desktop and lays out on a fixed 1240 px grid.
+Open `http://airradar.local/` from anything on the network. It is laid out for a
+desktop on a 1240 px grid and reflows down to a phone, which matters mostly because
+the one time you need the console urgently is the one time you are not at your desk.
 
 <div align="center">
 
-<img src="docs/img/web-console.png" width="880" alt="The AirRadar web console: a status strip of eight live tiles, a traffic table, the panel mirror, and configuration forms for radar, network and integrations">
+<img src="docs/img/web-console.png" width="880" alt="The AirRadar web console: a status strip of five live tiles above an open diagnostics group, a traffic table with a squawk column, the panel mirror, and configuration forms for radar, network and integrations">
 
 <sub>Live, with the panel mirror loaded — the mirror is the panel's actual framebuffer, not a
-re-render. Coordinates blurred; network values are documentation placeholders.</sub>
+re-render. The two headline tiles are <b>IN RANGE</b> and <b>COASTING</b>, which measure the same
+population; heap and TLS counters moved into <b>DIAGNOSTICS</b>, open here. Clicking a row in the
+traffic table pins that aircraft on the panel. Coordinates rounded and network values replaced
+with documentation placeholders.</sub>
 
 </div>
 
@@ -128,8 +145,11 @@ is a 1.1 MB BMP and it blocks the display for about two seconds.
 
 ### API
 
-Everything sits behind HTTP Basic auth (`admin` + your panel password) once a password
-is set, with an exact-origin CSRF guard on writes.
+Everything sits behind HTTP Basic auth (`admin` + your **Web & API password**) once a
+password is set. Writes are additionally guarded by validating the `Host` header
+against the names this device answers to, *then* matching `Origin` against it — an
+origin check alone proves only that a requester agrees with itself, which under DNS
+rebinding it always does.
 
 | Endpoint | Purpose |
 |---|---|
@@ -137,8 +157,15 @@ is set, with an exact-origin CSRF guard on writes.
 | `GET` / `POST /api/config` | Read or write every setting |
 | `GET /metrics` | Prometheus format, including `heap_free` / `heap_min` / `heap_largest` |
 | `GET /screen.bmp` | The live 800×480 framebuffer as a BMP |
+| `POST /api/select` | Pin an aircraft on the panel by ICAO hex |
 | `GET /api/probe?url=` | Device-side fetch test — settles "is it my firewall or your firmware?" |
+| `GET /api/stalls` | Per-stage loop timing, flushed pixels and their bounding box |
+| `GET /api/heapwalk` | Live heap blocks *with their contents* — how the 72 B/s leak was caught |
 | `POST /update` | OTA firmware upload |
+
+The last three are diagnostics rather than API surface, and they are in this table
+because each one closed an investigation that inspection had failed to close. On this
+board CDC-on-boot makes serial awkward, so the device reports on itself over HTTP.
 
 ```bash
 curl -s http://airradar.local/api/state | jq '.tracks[0]'
@@ -241,6 +268,13 @@ to configure.
 > If the flasher reports *"No serial data received"*, flip the **UART slide switch** on
 > the board. It has caught everyone at least once.
 
+> [!WARNING]
+> The one-click image is a **first-install** image. Running it on a device you have
+> already set up erases NVS — every setting, including the Wi-Fi password, which is
+> never recoverable because the web UI is designed not to serve it back. To *update* an
+> existing device, use OTA instead: the web console's **Firmware** section, or
+> `curl -F "update=@airradar-ota.bin" http://airradar.local/update`.
+
 ### From source
 
 See [`firmware/BUILD.md`](firmware/BUILD.md) for exact steps. The short version:
@@ -314,7 +348,7 @@ core 1  loop()  ──▶ LVGL render · touch · tracks[] · NVS · MQTT
                      ▲
                      │ pending buffers, guarded by g_dataMux
                      │
-core 0  tasks   ──▶ feeder · routes · weather · map tiles · logos
+core 0  tasks   ──▶ feeder · routes · weather · ISS · map tiles · logos
 ```
 
 **Rendering is event-driven.** There is no refresh loop. The RGB panel's DMA scans the
@@ -324,9 +358,11 @@ value actually changed.
 
 **Three FATFS caches**, because the network is the fragile part:
 
-- `/mp/r<km>` — the stitched base map, keyed by location. It only depends on
-  `{lat, lon, range}`, so it is fetched once and reused indefinitely. The map is on
-  screen about 5 seconds after boot, *before Wi-Fi finishes associating.*
+- `/mp/r<km>` — the stitched base map, fetched once and reused indefinitely. It is on
+  screen about 5 seconds after boot, *before Wi-Fi finishes associating.* Its key
+  carries a **recipe version** alongside `{lat, lon}`: a cache key covering only the
+  inputs would leave every device that already had a map showing the old tint forever
+  after a style change, with no error and no way to tell from the panel.
 - `/lg/<ICAO>` — airline logos, with a 24-slot RAM tier in front.
 - `/rt/tbl` — resolved routes. A callsign's route is static, so caching it means origin
   and destination survive both a reboot and a network outage.
@@ -372,13 +408,20 @@ left floating it comes up at 0x5D or 0x14 more or less at random per power cycle
 CH422G init does a controlled reset — INT driven low while TP_RST pulses — pinning
 0x5D every boot.
 
-**Three heap hypotheses that were wrong.** A slow internal-heap drain was blamed on
+**Four heap hypotheses that were wrong.** A slow internal-heap drain was blamed on
 per-TLS-connection leakage, then TIME_WAIT socket exhaustion, then missing feeder
-keep-alive. All three were measured, all three were falsified, and all three are
-written down in [`docs/V7_PORT.md`](docs/V7_PORT.md) specifically so nobody retries
-them. The drain tracks feeder poll count and is still open — the flash caches
-*neutralised* it rather than fixed it, and the honest next step is real heap tracing
-rather than a fourth guess.
+keep-alive, then the feeder itself. All four were measured, all four were falsified,
+and all four are written down in [`docs/V7_PORT.md`](docs/V7_PORT.md) specifically so
+nobody retries them.
+
+The fourth is the instructive one. Per-subsystem counters said the feeder owned the
+whole drain and the ISS poller contributed *exactly zero* — and that zero was a
+variable declared, exported to `/metrics`, and never once incremented. It read like a
+measurement for three sessions. The culprit was the ISS poller: `vTaskDelete(NULL)`
+never returns, so a `DynamicJsonDocument` declared in a task function never runs its
+destructor. 1,088 bytes every 15 seconds is 72.5 B/s against a measured 72.7. It was
+found by dumping the surviving heap blocks' *contents*, which read
+`iss_position.latitude.51.4031` — no inference required.
 
 </details>
 
@@ -397,9 +440,11 @@ The fixes were measured rather than stylistic:
   blur passes per card per repaint. Deleted.
 - Card opacity at 216 forced `LV_COVER_RES_NOT_COVER`, recompositing the screen root
   beneath every 1 Hz label, for a **1.057 : 1** visual difference. Cards are now opaque.
-- Values went 20 → 22 px to clear the 16-arcminute ISO 9241-303 legibility floor at a
-  650 mm viewing distance, and tabular figures were frozen into Inter with
-  `pyftfeatfreeze` so live numbers stop shimmying as digits change.
+- Values went 20 → 22 px to clear the 16-arcminute ISO 9241-303 legibility floor, and
+  tabular figures were frozen into Inter with `pyftfeatfreeze` so live numbers stop
+  shimmying as digits change. (The viewing distance used in that calculation was
+  assumed, not measured. It has since been measured at 900 mm, where 22 px is 11.5′ —
+  the size change was still right, the arithmetic behind it was not. See v7.2.5.)
 - Eight type faces became six.
 
 And one genuine safety bug: `altColorRGB`'s unknown-altitude branch returned a value
@@ -414,10 +459,10 @@ alone.
 ## Repo layout
 
 ```
-firmware/AirRadar/       v7 LVGL application — ~7,400 lines of C++ across 29 files
+firmware/AirRadar/       v7 LVGL application — ~10,600 lines of C++ across 42 files
   src/core/                state, track lifecycle, dead reckoning
   src/net/                 feeder, enrichment, map tiles, logos
-  src/ui/                  scope, cards, settings, legend, theme
+  src/ui/                  scope, cards, settings, legend, bezel, sparkline, theme
   src/svc/                 web console + API, MQTT
   src/hal/                 display, touch, backlight
 firmware/tools/          asset and font generation
@@ -438,11 +483,16 @@ v7 was ported from. New work goes in `firmware/AirRadar/`.
 
 Shipped in v7.1: full-bleed map · spatial label decluttering · FATFS map and route
 caches · legend overlay · desktop web console · six-face type scale with tabular figures.
+In v7.2.4–v7.2.5, two design audits totalling 69 implemented findings: the bearing
+bezel, metric/imperial units, a list-based time zone picker, the approach readout and
+the traffic sparkline.
 
 Still open — see [`docs/ROADMAP.md`](docs/ROADMAP.md):
 
-- Route ETA and a session-statistics screen
+- ETA to *destination* (v7.2.5 shipped time-to-you, which is a different question)
+- Session stats beyond the hour — max range today, peak count
 - A served `/live` page in the web console
+- Trails, aircraft-type silhouettes, dusk dimming
 
 **Solved in v7.2: the internal-heap drain.** Free internal SRAM used to fall
 ~72 B/s from boot and never recover, eventually starving mbedTLS so weather and
@@ -458,6 +508,14 @@ write cannot be suspended. A 2,592-byte logo cost 222 ms of blocked bus. Cost is
 fixed overhead rather than bytes, so chunking makes small writes *worse*;
 frequency is the only lever. Logo and route saves are now spread out — measured
 over 7.6 hours, from roughly one shake a minute to one an hour.
+
+**Corrected in v7.2.5: a viewing distance nobody had measured.** Two design reviews
+and six source comments reasoned from "read from 1–3 metres, ambient" — a figure this
+README's own author invented and then cited as established. It is a desk display read
+from 0.9 m. The largest finding of the second audit, that most of the panel's text
+falls below the acuity limit, was an artefact of the invented number and was withdrawn.
+`CLAUDE.md` now carries the measured angular size of all six faces, and the useful
+inversion is that at desk distance the panel has headroom for *more* information.
 
 **Solved in v7.2: an oversized repaint.** `lv_obj_move_foreground()` invalidates
 its entire parent, and it was called twice per new aircraft to raise a marker

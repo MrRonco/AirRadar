@@ -125,13 +125,23 @@ costs nothing:
 python3 - <<'EOF'
 B='firmware/AirRadar/build/esp32.esp32.esp32s3/'
 m=open('flasher/airradar-merged.bin','rb').read()
+import glob
+BA=glob.glob('/Users/*/Library/Arduino15/packages/esp32/**/boot_app0.bin', recursive=True)[0]
 for name, off, path in (('bootloader',0x0,B+'AirRadar.ino.bootloader.bin'),
                         ('partitions',0x8000,B+'AirRadar.ino.partitions.bin'),
+                        ('boot_app0',0xe000,BA),
                         ('app',0x10000,B+'AirRadar.ino.bin')):
     b=open(path,'rb').read()
     print(name, 'OK' if m[off:off+len(b)]==b else 'DIFFERS')
+print('flash-mode byte', hex(m[2]), '- must be 0x2 (DIO) on this board')
 EOF
 ```
+
+All four must print `OK`. With `keep` there is nothing for esptool to patch, so
+**byte-identity is the expected result, not a lucky one** — a `DIFFERS` on any
+line means a flag rewrote something, which is precisely the failure this section
+exists to catch. Check `m[2]` explicitly anyway: it is the one byte whose wrong
+value produces an image that passes every other test and still cannot boot.
 
 (`esptool` ships inside the esp32 core at
 `~/Library/Arduino15/packages/esp32/tools/esptool_py/*/esptool`; note that 5.x
@@ -151,9 +161,12 @@ lives at `/flasher/` underneath the site root.
 
 Open `http://airradar.local/` → **Firmware** section → choose the new
 `AirRadar.ino.bin` (the app binary alone, not the merged image) → Update.
-The device verifies, flashes the spare OTA slot and reboots. Set a **panel
-password** first (Settings → System, or the web page) — it protects OTA and
-the whole API.
+The device verifies, flashes the spare OTA slot and reboots. Set a **Web & API
+password** first (Settings → System, or the web page) — it protects OTA and the
+whole API. It does not lock the panel itself, which is why it is no longer
+called a panel password.
+
+OTA keeps NVS, so settings survive. The merged image does not — see section C.
 
 ## E. First-flash checklist (bring-up truths)
 

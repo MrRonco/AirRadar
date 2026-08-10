@@ -74,11 +74,11 @@ Each one is an edge, not a pretty picture — layout bugs live at the extremes.
 |---|---|---|
 | 1 | typical traffic | the ordinary case, six aircraft, one selected |
 | 2 | empty sky | zero-state, which most screens are never tested in |
-| 3 | squawk 7600 | red glyph, alert strip, red squawk value |
+| 3 | squawk 7600 | red glyph, the `7600 RADIO` alert strip, red squawk value — and the sparkline yielding its slot |
 | 4 | **layout extremes** | −40 °C · NW 120 km/h · −3072 fpm · FL450 · 999 kt · a 33-character operator name · a track with every field unknown |
-| 5 | crowded | 30 aircraft, label decluttering under load |
+| 5 | crowded | a full track table (`AR_MAX_TRACKS`) against 57 actually in range — decluttering under load, and the `OF 57` disclosure |
 | 6 | coasting / stale | translucent glyphs, COASTING count, CLOUD fallback dot |
-| 7 | no NTP | `0:00` and the WAITING FOR TIME hint |
+| 7 | no NTP | `SYNCING` in the clock's own place, rather than a plausible-looking wrong time |
 | 8 | pinned target left the ring | the card and the disc disagreeing — no blip, but a populated Selected card |
 
 Scenario 4 is the one that earns the tool. It renders in one keypress every
