@@ -259,7 +259,9 @@ void helpBuild(lv_obj_t* parent) {
   hText(s_overlay, c2, y, "[ABC]", C_IVORY, F_MONO13);
   y += hRow(s_overlay, c2, y, "Brackets mark a callsign on your watchlist");
   hRings(s_overlay, c2, y, C_RING);
-  y += hRow(s_overlay, c2, y, "Range rings, each labelled in km at the north-east");
+  // No unit named: the numerals follow the Metric/Imperial setting now, so
+  // "in km" was true for exactly half the users who would read it.
+  y += hRow(s_overlay, c2, y, "Range rings, labelled at the north-east");
   y += hNoteHair(s_overlay, c2, y);
   y += hNote(s_overlay, c2, y, "North is always up. The circle edge is your range "
                                "limit, and the map beyond it is dimmed.");

@@ -14,8 +14,13 @@
 #define WIFI_SCAN_FAILED -2
 #define WIFI_SCAN_RUNNING -1
 
+// RFC 5737 documentation range (192.0.2.0/24). These values reach screenshots
+// -- the settings footer prints the device address -- and desktop/README.md
+// promises harness captures carry no real device IP. They previously carried
+// the author's actual one, which is precisely the leak that promise exists to
+// prevent. 192.0.2.x can never route anywhere.
 struct IPAddress {
-  uint8_t o[4] = {10, 0, 20, 161};
+  uint8_t o[4] = {192, 0, 2, 47};
   IPAddress() {}
   IPAddress(uint8_t a, uint8_t b, uint8_t c, uint8_t d) { o[0]=a; o[1]=b; o[2]=c; o[3]=d; }
   String toString() const {
@@ -40,10 +45,10 @@ struct WiFiShim {
   void setSleep(bool)           {}
   void begin(const char*, const char*) {}
   void disconnect(bool = false, bool = false) {}
-  IPAddress localIP()           { return IPAddress(10, 0, 20, 161); }
-  IPAddress gatewayIP()         { return IPAddress(10, 0, 20, 1); }
+  IPAddress localIP()           { return IPAddress(192, 0, 2, 47); }
+  IPAddress gatewayIP()         { return IPAddress(192, 0, 2, 1); }
   IPAddress subnetMask()        { return IPAddress(255, 255, 255, 0); }
-  IPAddress dnsIP()             { return IPAddress(10, 0, 10, 8); }
+  IPAddress dnsIP()             { return IPAddress(192, 0, 2, 8); }
   int  scanNetworks(bool = false) { return 5; }
   int  scanComplete()           { return 5; }
   void scanDelete()             {}

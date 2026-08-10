@@ -7,7 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.2.3-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
+[![firmware](https://img.shields.io/badge/firmware-v7.2.4-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen during a real emergency: a full-bleed dark base map with the coverage disc, seven aircraft, and Air Canada 337 squawking 7600 shown as a red glyph with a red alert strip in the Overview card and a red squawk value in the Selected card">
 
@@ -45,19 +45,23 @@ the device. The only things you supply are Wi-Fi and coordinates.
 
 <div align="center">
 
-<img src="docs/img/map-fullbleed.png" width="700" alt="The full-bleed base map with the coverage lens: sharp inside the receiver radius, progressively dimmed outside it">
+<img src="docs/img/map-fullbleed.png" width="700" alt="The full-bleed base map layer with the coverage lens: sharp inside the receiver radius, progressively dimmed outside it, and carrying no place names">
 
-<sub><b>The coverage lens.</b> The map covers all 800×480, but everything outside your receiver's range is dimmed with a feathered falloff — so the scope still reads as a disc without drawing a hard edge across the geography.</sub>
+<sub><b>The coverage lens.</b> The map covers all 800×480, but everything outside your receiver's
+range is dimmed with a feathered falloff — so the scope still reads as a disc without drawing a
+hard edge across the geography. The tiles are CARTO <code>dark_nolabels</code>: place names at this
+zoom are not legible across a room, only textural, and the scope wants a ground rather than a map.
+This is the layer alone; the bearing bezel and the scope chrome are composited over it.</sub>
 
 </div>
 
 <div align="center">
 
-<img src="docs/img/panel-normal.png" width="700" alt="The same display in its ordinary state: eleven violet and cyan altitude-coloured targets, no alert strip, with a Porter Airlines flight pinned in the Selected card showing its logo, its Winnipeg to Ottawa route and a live instrument grid">
+<img src="docs/img/panel-normal.png" width="700" alt="The same display in its ordinary state: six violet altitude-coloured targets around a graduated bearing bezel, no alert strip, with a WestJet flight pinned in the Selected card showing its logo, its Winnipeg to Edmonton route and a live instrument grid">
 
 <sub><b>The same display, nothing wrong.</b> Compare with the hero above: no alert strip in the
 Overview card, and every glyph is altitude-coloured rather than red. The emergency treatment is
-deliberately the only thing on screen that uses red. A Porter flight is pinned here, so the
+deliberately the only thing on screen that uses red. A WestJet flight is pinned here, so the
 right-hand card is filled in.</sub>
 
 </div>
@@ -87,11 +91,13 @@ computer — the whole settings tree lives behind the gear.
 
 <div align="center">
 
-<img src="docs/img/panel-settings.png" width="700" alt="The on-device settings screen: Location, Display, Layers, Filters and Network groups in a two-column layout with a pinned footer">
+<img src="docs/img/panel-settings.png" width="700" alt="The on-device settings screen scrolled to the Display group: target labels, night mode, weather strip, units, 12/24-hour clock and time zone on the left; Wi-Fi, IP mode, feeder and Home Assistant on the right; a pinned footer below both">
 
-<sub>Settings on the panel. Location, favourites and range; display and layer toggles including
-°C/°F and a 12/24-hour clock; class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL
-and Home Assistant. The footer stays pinned while the columns scroll. Personal values blurred.</sub>
+<sub>Settings on the panel, scrolled to show the Display group. Location, favourites and range;
+metric/imperial units and a time zone picked from a list rather than typed as a POSIX string;
+class, altitude and watchlist filters; Wi-Fi, static IP, feeder URL and Home Assistant. The footer
+stays pinned while the columns scroll. Captured from the desktop harness, which has no real
+network settings to redact.</sub>
 
 </div>
 
