@@ -115,6 +115,10 @@ static const int LABEL_CLASH_Y = LBL_H + 4;   // vertical band two labels share
 // of two that started costing real callsigns (JZA239 vanished behind an "83"
 // it was nowhere near). Test the numeral's own rectangle.
 static const int NUM_HALF_W    = 14;            // "250" is 24 px; +2 margin
+// The jet bitmap is 26 px square and sits centred on the track's position, so
+// a label overlaps it when it comes within half that plus a small margin.
+static const int GLYPH_HALF    = 15;
+static const int GLYPH_CLASH_Y = (LBL_H + 26) / 2 + 2;
 static const int NUM_CLASH_Y   = (LBL_H + 16) / 2 + 2;
 static const int LABEL_MAX        = 8;    // ink ceiling regardless of spacing
 
@@ -169,6 +173,15 @@ static lv_obj_t* s_clip         = nullptr;   // circular clip container
 static lv_obj_t* s_mapImg       = nullptr;
 static lv_obj_t* s_attrib       = nullptr;   // CARTO/OSM credit, map layer only
 static bool      s_issRaisePending = false;  // z-order fix deferred out of blipBuild
+// B10. Blips are created LAZILY, so every newly seen aircraft lands above the
+// range numerals and can sit on one -- the selection ring bisecting "250" was
+// the observed case, and the 250 km ring is where cloud-radius traffic first
+// appears, so it is the most likely one to be sat on. The numerals are the
+// scale; chrome that explains the picture has to stay on top of the picture.
+// Raised on the same deferred one-shot the ISS already uses, never inside
+// blipCreateObjects -- lv_obj_move_foreground() invalidates the WHOLE parent
+// and the parent here is the 424 px disc (rule 19).
+static bool      s_numRaisePending = true;
 static lv_obj_t* s_rangeLblMid  = nullptr;
 static lv_obj_t* s_rangeLblIn   = nullptr;
 static lv_obj_t* s_rangeLblFull = nullptr;
@@ -296,6 +309,7 @@ static void blipCreateObjects(Blip& b) {
   // is actually on screen, which is a few passes a day rather than every time
   // a new aircraft appears.
   s_issRaisePending = true;
+  s_numRaisePending = true;
 }
 
 // Find the slot already bound to hex, else bind the first free one.
@@ -704,11 +718,30 @@ void scopeUpdate(uint32_t nowMs) {
   if (!s_clip) return;
   scopeUpdateRangeLabels();
 
+  if (s_numRaisePending) {
+    s_numRaisePending = false;
+    lv_obj_move_foreground(s_rangeLblFull);
+    lv_obj_move_foreground(s_rangeLblMid);
+    lv_obj_move_foreground(s_rangeLblIn);
+  }
+
   bool seen[AR_MAX_TRACKS] = {false};
 
   // ---- decide which targets get a callsign, and on which side ----
   bool  ranked[AR_MAX_TRACKS]  = {false};
   bool  lblLeft[AR_MAX_TRACKS] = {false};
+  // Every drawable glyph's centre, in CLIP coordinates, so the label pass can
+  // avoid other aircraft as well as chrome. Built once here rather than
+  // recomputed inside the O(n^2) side test.
+  float gx[AR_MAX_TRACKS], gy[AR_MAX_TRACKS];
+  int   gIdx[AR_MAX_TRACKS], nGlyph = 0;
+  for (int oi = 0; oi < g_orderN; oi++) {
+    const int idx = g_orderIdx[oi];
+    float sx = 0, sy = 0;
+    if (!scopeToScreen(g_tracks[idx].lat, g_tracks[idx].lon, sx, sy)) continue;
+    gx[nGlyph] = sx - SCOPE_X0; gy[nGlyph] = sy - SCOPE_Y0;
+    gIdx[nGlyph] = idx; nGlyph++;
+  }
   // Placed label rectangles, in CLIP coordinates: [rx0, rx0+LBL_W] x ry.
   float rx0[LABEL_MAX], ry[LABEL_MAX];
   int   nLbl = 0;
@@ -737,22 +770,56 @@ void scopeUpdate(uint32_t nowMs) {
 
       // Try the right, then the left. A side is blocked by the disc edge, by
       // a range numeral, or by a label already placed on this pass.
-      bool blocked[2];
+      // B3 + B11. Two blockers, and they are NOT equivalent.
+      //
+      // edgeBad: the label would run past the clip container, which DELETES
+      //   characters -- "SWR9999" rendered as "SWR99", cut mid-glyph, with no
+      //   ellipsis. Unrecoverable.
+      // inkBad:  the label would overlap a range numeral, another label, or
+      //   another aircraft's glyph. Untidy, but everything stays readable.
+      //
+      // The old code merged them, so a must-have label with both sides
+      // "blocked" fell through to `left = blocked[0] && !blocked[1]` -> false
+      // -> the RIGHT, which in the failing case was the side blocked by the
+      // edge. The one label the system promises to draw whatever happens was
+      // the one it amputated. Ranked now: for a must-have, an ink collision
+      // always beats losing characters.
+      //
+      // B11: the pass tested the disc edge, the numerals and labels already
+      // placed -- never the 26 px glyph boxes of OTHER aircraft, whose screen
+      // positions it is already computing in this very loop. Consequences were
+      // visible in two renders: a label drawn straight through three jets, and
+      // a label sitting 12 px from its own aircraft and 27 px from a different
+      // unlabelled one, which reads as labelling the wrong plane. A callsign
+      // whose ownership is ambiguous is worse than no callsign.
+      bool edgeBad[2], inkBad[2];
       for (int si = 0; si < 2; si++) {
         const bool left = (si == 1);
         const float x0 = lblX0(cxL, left);
-        bool bad = (x0 < 2.0f) || (x0 + LBL_W > (float)(SCOPE_D - 2));
+        edgeBad[si] = (x0 < 2.0f) || (x0 + LBL_W > (float)(SCOPE_D - 2));
+        bool bad = false;
         for (int k = 0; k < kRsvN && !bad; k++)
           bad = lblHitsNumeral(cxL, cyL, kRsvX[k], kRsvY[k], left);
         for (int k = 0; k < nLbl && !bad; k++)
           bad = fabsf(ry[k] - cyL) < (float)LABEL_CLASH_Y &&
                 (rx0[k] < x0 + LBL_W) && (x0 < rx0[k] + LBL_W);
-        blocked[si] = bad;
+        // Other aircraft. O(n) with n <= AR_MAX_TRACKS, once per scope tick,
+        // not per frame.
+        for (int k = 0; k < nGlyph && !bad; k++) {
+          if (gIdx[k] == idx) continue;                  // its own glyph
+          bad = fabsf(gy[k] - cyL) < (float)GLYPH_CLASH_Y &&
+                (gx[k] + GLYPH_HALF > x0) && (gx[k] - GLYPH_HALF < x0 + LBL_W);
+        }
+        inkBad[si] = bad;
       }
-      // A must-have label (selected, watchlist, emergency) is drawn whatever
-      // happens -- it takes the less-bad side rather than disappearing.
-      if (!must && blocked[0] && blocked[1]) continue;
-      const bool left = blocked[0] && !blocked[1];
+      const bool blocked0 = edgeBad[0] || inkBad[0];
+      const bool blocked1 = edgeBad[1] || inkBad[1];
+      if (!must && blocked0 && blocked1) continue;
+      bool left;
+      if (!blocked0)                      left = false;  // right is clean
+      else if (!blocked1)                 left = true;   // left is clean
+      else if (edgeBad[0] && !edgeBad[1]) left = true;   // must-have: ink beats edge
+      else                                left = false;
 
       ranked[idx]  = true;
       lblLeft[idx] = left;
