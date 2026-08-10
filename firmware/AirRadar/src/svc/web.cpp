@@ -215,6 +215,8 @@ static void htmlAppendHead(String& h) {
          // A hint sits UNDER the control it qualifies and reads as commentary,
          // not as another field: no uppercase, no mono, one rank down.
          ".hint{margin:5px 0 0;font:12px/1.5 system-ui;color:#8e9baa}"
+         "tr.em{background:rgba(255,100,114,.13)}tr.em b{color:#ff8a94}"
+         "td.op{max-width:210px;overflow:hidden;text-overflow:ellipsis}"
          "button{padding:9px 15px;background:#54dcee;color:#05080d;border:0;border-radius:7px;"
          "font:600 13px system-ui;cursor:pointer;margin-top:11px}"
          "button.d{background:#ff6472;color:#05080d}"
@@ -262,8 +264,8 @@ static void htmlAppendLive(String& h) {
   h += F("<div class='g c21'>"
          "<div class=b><p class=t>Traffic</p>"
          "<table><thead><tr><th>callsign</th><th>type</th><th>operator</th>"
-         "<th>route</th><th>alt</th><th>dist</th></tr></thead>"
-         "<tbody id=tb><tr><td colspan=6 class=n>loading&hellip;</td></tr></tbody></table></div>"
+         "<th>route</th><th>alt</th><th>dist</th><th>sqk</th></tr></thead>"
+         "<tbody id=tb><tr><td colspan=7 class=n>loading&hellip;</td></tr></tbody></table></div>"
          "<div class=b><p class=t>Panel mirror</p>"
          "<img class=mir id=mir alt='live panel' style=display:none>"
          "<p class=n id=mirh>Not loaded. The panel is only mirrored on demand.</p>"
@@ -385,8 +387,14 @@ static void htmlAppendFooter(String& h) {
   // Polling is deliberately gentle: the web server runs inside loop() next to
   // LVGL, and every request is a fresh TCP connection against a 16-slot PCB
   // pool. Hidden tabs stop polling entirely.
-  h += F("<script>"
-         "var $=function(i){return document.getElementById(i)};"
+  // Constants the table needs, emitted from firmware truth rather than
+  // restated in JS: the flight-level transition and the unit conversion.
+  h += F("<script>var FLT=" AR_STR(AR_FL_TRANSITION_FT) ",DK=");
+  h += unitsImperial() ? F("0.621371") : F("1");
+  h += F(",DU='");
+  h += unitsDistLabel();
+  h += F("';");
+  h += F("var $=function(i){return document.getElementById(i)};"
          "function P(t){var m={};t.split('\\n').forEach(function(l){"
          "if(l&&l[0]!='#'){var i=l.indexOf(' ');if(i>0)m[l.slice(0,i)]=+l.slice(i+1)}});return m}"
          "function U(s){var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),"
@@ -407,14 +415,28 @@ static void htmlAppendFooter(String& h) {
          "$('mT').style.color=sh>0?'#ffc061':'#eef1f4';"
          "$('up').textContent=U(m.airradar_uptime_seconds);"
          "}).catch(function(){})}"
+         "function D(km){return (km*DK).toFixed(km*DK>=100?0:1)+' '+DU}"
+         "function D(km){var v=km*DK;return v.toFixed(v>=100?0:1)+' '+DU}"
          "function T(){fetch('/api/state').then(function(r){return r.json()}).then(function(d){"
          "var b='',f=d.flights||[];"
-         "if(!f.length){b='<tr><td colspan=6 class=n>no aircraft in range</td></tr>'}"
+         "if(!f.length){b='<tr><td colspan=7 class=n>no aircraft in range</td></tr>'}"
+         // B12, four faults in one template. No squawk column at all, so an
+         // emergency was structurally invisible here. A blank callsign where
+         // the panel falls back to hex. A JS slice(0,22) cutting operators
+         // mid-word ("Porter Airlines (Canad") -- CSS ellipsis instead, which
+         // needs no second copy of the panel's word-boundary logic. And two
+         // conventions: 18000 ft for the flight level where the panel uses
+         // FL_TRANSITION_FT, and a hard-coded ' km' regardless of the units
+         // setting, so an imperial owner read miles on the panel and
+         // kilometres in the browser.
          "else for(var i=0;i<f.length;i++){var a=f[i];"
-         "b+='<tr><td>'+(a.flight||'').trim()+'</td><td>'+(a.type||'')+'</td><td>'+"
-         "((a.op||'').slice(0,22))+'</td><td>'+((a.origin&&a.dest)?a.origin+'&rarr;'+a.dest:"
-         "'<span class=n>&mdash;</span>')+'</td><td>'+(a.alt_ft>=18000?'FL'+Math.round(a.alt_ft/100):"
-         "(a.alt_ft>=0?a.alt_ft+' ft':'&mdash;'))+'</td><td>'+a.dist_km.toFixed(1)+' km</td></tr>'}"
+         "var em=/^(7500|7600|7700)$/.test(a.squawk||'');"
+         "b+='<tr'+(em?' class=em':'')+'><td>'+((a.flight||'').trim()||a.hex)+"
+         "'</td><td>'+(a.type||'')+'</td><td class=op title=\"'+(a.op||'')+'\">'+"
+         "(a.op||'')+'</td><td>'+((a.origin&&a.dest)?a.origin+'&rarr;'+a.dest:"
+         "'<span class=n>&mdash;</span>')+'</td><td>'+(a.alt_ft>=FLT?'FL'+Math.round(a.alt_ft/100):"
+         "(a.alt_ft>=0?a.alt_ft+' ft':'&mdash;'))+'</td><td>'+D(a.dist_km)+"
+         "'</td><td>'+(em?'<b>! '+a.squawk+'</b>':(a.squawk||'&mdash;'))+'</td></tr>'}"
          "$('tb').innerHTML=b}).catch(function(){})}"
          "$('host').textContent=location.host;"
          "var t1,t2;function GO(){M();T();t1=setInterval(M,10000);t2=setInterval(T,15000)}"

@@ -203,6 +203,18 @@
 #define AR_KM_PER_NM   1.852f     // also knots -> km/h
 #define AR_DEG2RAD     0.01745329f
 
+// How long after the last range tap before the NVS write and the map refetch
+// happen. Long enough to absorb a burst of taps, short enough not to be lost
+// to a reboot in between.
+// Above this the panel and the web console both show a flight level. ONE
+// definition -- the console had its own 18000 and disagreed with the panel in
+// the same table the panel's numbers appear in.
+#define AR_FL_TRANSITION_FT 10000
+#define AR_STR2(x) #x
+#define AR_STR(x)  AR_STR2(x)
+
+#define AR_RANGE_COMMIT_MS 700
+
 #define AR_NIGHT_WAKE_MS   (30 * 1000)
 #define AR_NIGHT_ALERT_MS  (60 * 1000)
 

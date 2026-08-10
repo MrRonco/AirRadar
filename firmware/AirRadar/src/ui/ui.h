@@ -26,6 +26,8 @@ lv_obj_t* uiScreenRoot(Screen s);    // root object of a screen (built by uiInit
 
 // Advance the range step (dir=+1/-1), persist, kick feeder + map + UI refresh.
 void uiCycleRange(int dir);
+void uiRangeCommitPoll(uint32_t nowMs);   // deferred NVS write + map refetch
+bool uiRangeAtEnd(int dir);               // -1 = smallest, +1 = largest
 
 // ---- main screen (ui_scope.cpp) ----
 void scopeBuild(lv_obj_t* parent);   // circular map + rings + blip pool + ISS

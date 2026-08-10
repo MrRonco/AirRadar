@@ -179,7 +179,7 @@ static const int SEL_LIVE_Y   = 320;
 static const int SEL_DOT_D    = 7;             // LIVE dot diameter
 
 // Semantics
-static const int      FL_TRANSITION_FT = 10000;  // FLxxx above this; keeps values <=5 glyphs
+static const int      FL_TRANSITION_FT = AR_FL_TRANSITION_FT;
 static const int      CLIMB_STRONG_FPM = 300;    // colored climb/descent
 static const uint32_t EMERG_BLINK_MS   = 500;
 
@@ -202,6 +202,8 @@ static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl, *s_ovEmergSqk;
 static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovNearCpa, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24], s_bufEmergSqk[8];
 static char s_bufFiltered[16], s_bufWunit[6], s_bufCpa[20];
+static bool s_sqkBoxed = false;
+static lv_color_t s_colChL = {0}, s_colChR = {0};
 // Whether the wind pictogram fits alongside the wind UNIT. Owned by the layout
 // block in updateWeatherPill(), read by the visibility block above it -- the
 // two used to set the same flag independently, so the visibility pass re-showed
@@ -245,7 +247,7 @@ static const lv_img_dsc_t* s_wxIconSrc = nullptr;
 static char s_bufTemp[8], s_bufUnit[4], s_bufWdir[4], s_bufWspd[8];
 
 // Range pill
-static lv_obj_t *s_rngLbl;
+static lv_obj_t *s_rngLbl, *s_rngChL, *s_rngChR;
 static char s_bufRange[48];
 
 // ============================================================
@@ -787,12 +789,12 @@ static void buildRangePill(lv_obj_t* parent) {
   // which is the only cue this control can afford.
   s_rngLbl = mkLbl(pill, F_MONO13, C_IVORY2);
   lv_obj_center(s_rngLbl);
-  lv_obj_t* chL = mkLbl(pill, F_MONO13, C_CY_SOFT);
-  lv_label_set_text(chL, "\xE2\x80\xB9");
-  lv_obj_align(chL, LV_ALIGN_LEFT_MID, RNG_CHEV_INSET, 0);
-  lv_obj_t* chR = mkLbl(pill, F_MONO13, C_CY_SOFT);
-  lv_label_set_text(chR, "\xE2\x80\xBA");
-  lv_obj_align(chR, LV_ALIGN_RIGHT_MID, -RNG_CHEV_INSET, 0);
+  s_rngChL = mkLbl(pill, F_MONO13, C_CY_SOFT);
+  lv_label_set_text(s_rngChL, "\xE2\x80\xB9");
+  lv_obj_align(s_rngChL, LV_ALIGN_LEFT_MID, RNG_CHEV_INSET, 0);
+  s_rngChR = mkLbl(pill, F_MONO13, C_CY_SOFT);
+  lv_label_set_text(s_rngChR, "\xE2\x80\xBA");
+  lv_obj_align(s_rngChR, LV_ALIGN_RIGHT_MID, -RNG_CHEV_INSET, 0);
 }
 
 // ============================================================
@@ -1189,7 +1191,27 @@ static void updateSelectedStatus(const Track* t, uint32_t nowMs) {
   bool emerg = sqIsEmergency(t->squawk);
   setTextCached(s_selSqk, s_bufSqk, sizeof(s_bufSqk),
                 t->squawk[0] ? t->squawk : "----");
-  setColorCached(s_selSqk, &s_colSqk, emerg ? C_RED : C_IVORY2);
+  // B4. Under protanopia #ff6472 collapses to a near-neutral grey: simulated
+  // (Machado, severity 1.0) the emergency squawk measured 4.14:1 against the
+  // card while a ROUTINE squawk in C_IVORY2 held 8.93:1. The alarm rendered
+  // 2.2x QUIETER than the normal state for roughly 8% of men. C_ALERT is the
+  // token the emergency strip already uses and it survives the transform:
+  // 6.49 -> 8.26 normal vision, 4.14 -> 6.44 protan.
+  //
+  // Hue alone was the whole marking here, which is why it could invert. The
+  // strip and the scope glyph are rescued by form -- a box and a blink -- so
+  // the cell gets the strip's tint treatment as well.
+  setColorCached(s_selSqk, &s_colSqk, emerg ? C_ALERT : C_IVORY2);
+  if (emerg != s_sqkBoxed) {
+    s_sqkBoxed = emerg;
+    lv_obj_set_style_bg_color(s_selSqk, C_RED, 0);
+    lv_obj_set_style_bg_opa(s_selSqk, emerg ? 38 : LV_OPA_TRANSP, 0);
+    lv_obj_set_style_radius(s_selSqk, R_SM, 0);
+    // No horizontal padding. The cell is SEL_COL2_W (56 px) and a 4-digit
+    // squawk in F_M20 is ~57 -- 4 px each side clipped "7600" to "760", which
+    // is a worse failure than the one being fixed. The tint fills the cell
+    // exactly instead, which also lines it up with the grid.
+  }
 
   // Signed: applyPending may stamp lastApiMs a hair after our nowMs — the
   // unsigned difference would underflow into COAST + a 4-billion-second age.
@@ -1421,6 +1443,12 @@ static void updateWeatherPill() {
 }
 
 static void updateRangePill() {
+  // The stepper clamps rather than wrapping (B7), so a chevron at the end of
+  // its travel does nothing. Say so: C_FAINT is legitimate here where it would
+  // not be for text, because a chevron is decoration.
+  setColorCached(s_rngChL, &s_colChL, uiRangeAtEnd(-1) ? C_FAINT : C_CY_SOFT);
+  setColorCached(s_rngChR, &s_colChR, uiRangeAtEnd(+1) ? C_FAINT : C_CY_SOFT);
+
   char b[24];
   // g_set.rangeKm stays the canonical kilometre step -- it keys the map cache
   // (/mp/r<km>), the track filter and the API. Only the pill converts.

@@ -53,6 +53,7 @@ void uiShow(Screen s) {
 
 void uiTick(uint32_t nowMs) {
   settingsPoll(nowMs);                 // async flows (wifi connect, etc.)
+  uiRangeCommitPoll(nowMs);            // debounced range write (rule 22)
   if (g_screen == SCR_MAIN) {
     cardsUpdate(nowMs);
     scopeUpdate(nowMs);                // blip glide targets + emergency blink phase
@@ -60,19 +61,53 @@ void uiTick(uint32_t nowMs) {
   }
 }
 
+// B7. Two problems on the panel's most-used control.
+//
+// The index WRAPPED, so tapping the right chevron at the top step jumped to
+// the smallest one -- the same shape as the left-chevron-steps-up bug already
+// fixed, arriving through a different door. It clamps now, and the chevron
+// with nowhere to go dims (a chevron is decoration, so C_FAINT is legitimate
+// there where it would not be for text).
+//
+// And every tap called settingsSaveLocation() -- three NVS writes, in loop
+// context. Per rule 22 that is 150-220 ms of stalled MSPI and a visible
+// whole-screen shake, on the one interaction this appliance invites. The
+// value and the UI update immediately; the flash write and the map refetch
+// are deferred until the tapping stops.
+static uint32_t s_rangeCommitAt = 0;      // 0 = nothing pending
+
 void uiCycleRange(int dir) {
   static const int steps[] = AR_RANGE_STEPS;
   const int n = sizeof(steps) / sizeof(steps[0]);
   int idx = 0;
   for (int i = 0; i < n; i++) if (steps[i] == g_set.rangeKm) idx = i;
-  idx = (idx + dir + n) % n;
+  idx += dir;
+  if (idx < 0) idx = 0;                   // clamp, do not wrap
+  if (idx >= n) idx = n - 1;
+  if (steps[idx] == g_set.rangeKm) return;   // already at the end: no-op
   g_set.rangeKm = steps[idx];
-  settingsSaveLocation();
   tracksRebuildOrder();
-  feederKick();
-  mapRequestRefresh();
   scopeUpdate(millis());
   cardsUpdate(millis());
+  s_rangeCommitAt = millis() + AR_RANGE_COMMIT_MS;
+}
+
+// Called from uiTick. The expensive half of a range change.
+void uiRangeCommitPoll(uint32_t nowMs) {
+  if (!s_rangeCommitAt || (int32_t)(nowMs - s_rangeCommitAt) < 0) return;
+  s_rangeCommitAt = 0;
+  settingsSaveLocation();                 // the flash write, once
+  feederKick();
+  mapRequestRefresh();
+}
+
+// Is the range at the end of its travel in this direction? The pill dims the
+// chevron that would do nothing.
+bool uiRangeAtEnd(int dir) {
+  static const int steps[] = AR_RANGE_STEPS;
+  const int n = sizeof(steps) / sizeof(steps[0]);
+  if (dir < 0) return g_set.rangeKm <= steps[0];
+  return g_set.rangeKm >= steps[n - 1];
 }
 
 bool uiNightActive() {
