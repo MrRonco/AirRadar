@@ -189,6 +189,12 @@ static void htmlAppendHead(String& h) {
   // System font stacks only — the device may have no internet, so web fonts
   // are not an option. Palette mirrors the panel tokens (theme.h).
   h += F("<!doctype html><html lang=en><head><meta charset=utf-8>"
+         // D5. The console declared itself desktop-only, yet webReboot() --
+         // the throwaway interstitial -- already shipped a viewport tag. The
+         // throwaway page was mobile-correct and the console was not, and the
+         // likeliest moment anyone opens this is standing in front of the
+         // panel with a phone, wondering why it says CLOUD.
+         "<meta name=viewport content='width=device-width,initial-scale=1'>"
          "<title>AirRadar</title><style>"
          "*{box-sizing:border-box}"
          "body{font:15px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;"
@@ -199,9 +205,19 @@ static void htmlAppendHead(String& h) {
          ".hd .r{margin-left:auto;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;"
          "color:#8e9baa}"
          ".g{display:grid;gap:12px;margin-bottom:12px;align-items:start}"
-         ".c8{grid-template-columns:repeat(8,1fr)}"
+         // A grid item defaults to min-width:auto, so it refuses to shrink
+         // below its content's intrinsic width -- which meant the card holding
+         // the 7-column table stayed 493 px on a 420 px phone and the overflow
+         // container inside it never got a constraint to scroll against. This
+         // one declaration is what makes .tw actually work.
+         ".g>*{min-width:0}"
+         ".c8{grid-template-columns:repeat(5,1fr)}"
          ".c3{grid-template-columns:repeat(3,1fr)}"
          ".c21{grid-template-columns:2fr 1fr}"
+         "@media(max-width:900px){.c8{grid-template-columns:repeat(3,1fr)}"
+         ".c3,.c21{grid-template-columns:1fr}}"
+         "@media(max-width:520px){.c8{grid-template-columns:repeat(2,1fr)}"
+         "td.op{max-width:110px}}"
          ".b{background:#182231;border:1px solid rgba(180,205,230,.16);"
          "border-radius:12px;padding:14px}"
          ".t{font:500 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.09em;"
@@ -223,6 +239,18 @@ static void htmlAppendHead(String& h) {
          "tr.em{background:rgba(255,100,114,.13)}tr.em b{color:#ff8a94}"
          "td.op{max-width:210px;overflow:hidden;text-overflow:ellipsis}"
          "tr.rw{cursor:pointer}tr.rw:hover{background:#182231}"
+         // A button that reboots the device should not look like one that
+         // saves a preference. Outlined, not filled -- the confirm() dialogs
+         // were doing the whole job of warning and the buttons none of it.
+         "button.w{background:transparent;color:#ffc061;border:1px solid #ffc061}"
+         "details.dg{margin-bottom:12px}"
+         // A seven-column table cannot fit a phone. It scrolls inside its own
+         // box so the PAGE never scrolls sideways -- hiding columns would mean
+         // deciding which aircraft facts a phone user does not deserve.
+         ".tw{overflow-x:auto}"
+         "details.dg>summary{cursor:pointer;font:500 11px/1.7 ui-monospace,"
+         "SFMono-Regular,Menlo,monospace;color:#8e9baa;letter-spacing:.06em;"
+         "text-transform:uppercase;padding:4px 0}"
          // C8. There was not one :focus rule on the page, so keyboard focus
          // showed as the browser's default blue against a cyan product -- or,
          // on some platforms, as nothing at all.
@@ -264,18 +292,23 @@ static void htmlAppendStatus(String& h) {
          "<div class=tile><div class=tk>msg rate</div><div class=tv id=mM>&mdash;</div></div>"
          "<div class=tile><div class=tk>source</div><div class=tv id=mS>&mdash;</div></div>"
          "<div class=tile><div class=tk>rssi</div><div class=tv id=mW>&mdash;</div></div>"
+         // D3. Three of the eight headline tiles were firmware diagnostics --
+         // 37% of the top strip, above the traffic. For an owner they are
+         // noise 364 days a year; for debugging they are the first thing you
+         // want. That is what a <details> is for.
+         "</div><details class=dg><summary>Diagnostics</summary><div class='g c3'>"
          "<div class=tile><div class=tk>heap free</div><div class=tv id=mF>&mdash;</div></div>"
          "<div class=tile><div class=tk>heap min</div><div class=tv id=mN>&mdash;</div></div>"
          "<div class=tile><div class=tk>tls shed</div><div class=tv id=mT>&mdash;</div></div>"
-         "</div>");
+         "</div></details>");
 }
 
 static void htmlAppendLive(String& h) {
   h += F("<div class='g c21'>"
-         "<div class=b><p class=t>Traffic</p>"
+         "<div class=b><p class=t>Traffic</p><div class=tw>"
          "<table><thead><tr><th>callsign</th><th>type</th><th>operator</th>"
          "<th>route</th><th>alt</th><th>dist</th><th>sqk</th></tr></thead>"
-         "<tbody id=tb><tr><td colspan=7 class=n>loading&hellip;</td></tr></tbody></table></div>"
+         "<tbody id=tb><tr><td colspan=7 class=n>loading&hellip;</td></tr></tbody></table></div></div>"
          "<div class=b><p class=t>Panel mirror</p>"
          "<img class=mir id=mir alt='live panel' style=display:none>"
          "<p class=n id=mirh>Not loaded. The panel is only mirrored on demand.</p>"
@@ -341,7 +374,7 @@ static void htmlAppendNetwork(String& h, const String& pIp, const String& pGw,
   h += htmlEscape(g_set.wifiSsid);
   h += F("'><label>Wi-Fi password (blank = keep current)</label>"
          "<input type=password name=pass autocomplete=off>"
-         "<button type=submit>Save &amp; reboot</button></form></div>");
+         "<button class=w type=submit>Save &amp; reboot</button></form></div>");
 }
 
 static void htmlAppendIntegrations(String& h) {
@@ -381,7 +414,7 @@ static void htmlAppendIntegrations(String& h) {
          "onsubmit='return confirm(\"Flash this firmware and reboot?\")'>"
          "<label>Firmware &mdash; running " AR_VERSION "</label>"
          "<input type=file name=fw accept='.bin'>"
-         "<button type=submit>Upload &amp; flash</button></form></div></div>");
+         "<button class=w type=submit>Upload &amp; flash</button></form></div></div>");
 }
 
 static void htmlAppendFooter(String& h) {
