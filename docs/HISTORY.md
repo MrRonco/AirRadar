@@ -344,7 +344,7 @@ answer forward. Closer targets win contested space.
 ## v7.2.5 — the second audit, built
 
 Two reviewers went over thirteen panel states and the web console again, with
-the previous round's 38 fixes ruled out in advance. Thirty-two of their
+the previous round's 38 fixes ruled out in advance. Thirty-one of their
 findings are implemented here. Two were withdrawn and the reason is the most
 useful thing in this release.
 
