@@ -33,7 +33,7 @@ LDLIBS   = $(SDL_LIBS)
 # network, flash or the panel is faked in fakes.cpp instead.
 FW_CXX = $(SRC)/ui/ui_nav.cpp $(SRC)/ui/ui_cards.cpp $(SRC)/ui/ui_scope.cpp \
          $(SRC)/ui/ui_help.cpp $(SRC)/ui/ui_settings.cpp $(SRC)/ui/theme.cpp \
-         $(SRC)/ui/brandcolor.cpp $(SRC)/ui/bezel.cpp \
+         $(SRC)/ui/brandcolor.cpp $(SRC)/ui/bezel.cpp $(SRC)/ui/spark.cpp \
          $(SRC)/core/state.cpp $(SRC)/core/tracks.cpp $(SRC)/core/units.cpp
 FW_C   = $(wildcard $(SRC)/assets/*.c)
 LV_C   = $(shell find $(LVGL)/src -name '*.c')

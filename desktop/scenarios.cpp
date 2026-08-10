@@ -17,6 +17,7 @@
 #include "scenarios.h"
 #include "../firmware/AirRadar/src/core/state.h"
 #include "../firmware/AirRadar/src/core/tracks.h"
+#include "../firmware/AirRadar/src/ui/spark.h"
 
 static void clearTracks() {
   for (int i = 0; i < AR_MAX_TRACKS; i++) g_tracks[i].valid = false;
@@ -71,7 +72,21 @@ const char* scenarioName(int n) {
   }
 }
 
+// The sparkline samples once a minute, so a headless shot would otherwise show
+// a single bar. sparkSample() takes its timestamp as a parameter, so the fake
+// world can hand it a synthetic hour without the firmware knowing.
+static void seedSparkHistory() {
+  static const uint8_t shape[SPARK_SLOTS] = {
+    2,3,3,4,6,5,7,8,8,9,11,12,10,9,8,7,6,6,5,7,
+    9,12,14,15,13,11,9,8,6,5,4,4,3,5,7,9,11,13,14,16,
+    15,13,12,10,9,7,6,8,10,12,13,11,9,8,7,6,5,6,7,6 };
+  for (int i = 0; i < SPARK_SLOTS; i++)
+    sparkSample((uint32_t)(i + 1) * 60000U + 1U, shape[i]);
+  sparkRedraw();
+}
+
 void scenarioApply(int n) {
+  seedSparkHistory();
   clearTracks();
   // Sane baseline; individual scenarios override.
   g_wx.valid = true; g_wx.tempC = 21.0f; g_wx.windKmh = 12.0f;

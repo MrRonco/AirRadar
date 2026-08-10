@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include "ui.h"
 #include "../core/units.h"
+#include "spark.h"
 #include "brandcolor.h"
 #include "../core/tracks.h"
 #include "../net/logos.h"
@@ -95,6 +96,14 @@ static const int OV_COAST_Y   = 174;           // same face as IN RANGE
 static const int OV_EMERG_Y   = 188;
 static const int OV_EMERG_H   = 26;
 static const int OV_HAIR2_Y   = 222;
+// D2. The sparkline shares the alert slot rather than taking new space: the
+// hero band's apparent slack is centring room (proved when D1 tried to move
+// OV_HAIR2_Y and collided the hero into the coast row). So it shows only when
+// nothing is wrong, which is also when it is worth looking at -- and when
+// something IS wrong the alert takes the space back.
+static const int OV_SPARK_H   = 20;
+static const int OV_SPARK_W   = 120;
+static const int OV_SPARK_Y   = OV_HAIR2_Y - 8 - OV_SPARK_H;
 static const int OV_NEAR_Y    = 228;           // "NEAREST" key
 static const int OV_NEARNAME_Y= 246;           // callsign, larger
 static const int OV_NEARD_Y   = 272;           // distance, left, lighter face
@@ -199,7 +208,7 @@ static lv_obj_t *s_ovCount, *s_ovInRange, *s_ovHeard, *s_ovFiltered;
 static const int HERO_ONE_KERN = 2;
 static int s_heroX = 0;
 static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl, *s_ovEmergSqk;
-static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovNearCpa, *s_ovFeed, *s_ovSrc, *s_ovDot;
+static lv_obj_t *s_ovSpark, *s_ovSparkKey, *s_ovNear, *s_ovNearD, *s_ovNearCpa, *s_ovFeed, *s_ovSrc, *s_ovDot;
 static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24], s_bufEmergSqk[8];
 static char s_bufFiltered[16], s_bufWunit[6], s_bufCpa[20];
 static const lv_opa_t LOGO_DIM_OPA = 64;   // 25%: white 255 -> ~193
@@ -499,6 +508,12 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_add_flag(s_ovEmergBox, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_ext_click_area(s_ovEmergBox, 11);      // 26 -> 48 px
   lv_obj_add_event_cb(s_ovEmergBox, onEmergClicked, LV_EVENT_CLICKED, NULL);
+
+  s_ovSpark = sparkBuild(card, OV_SPARK_W, OV_SPARK_H);
+  lv_obj_set_pos(s_ovSpark, 0, OV_SPARK_Y);
+  lv_obj_add_flag(s_ovSpark, LV_OBJ_FLAG_HIDDEN);
+  s_ovSparkKey = mkMicro(card, "LAST HOUR", 0, OV_SPARK_Y - 15);
+  lv_obj_add_flag(s_ovSparkKey, LV_OBJ_FLAG_HIDDEN);
 
   mkHair(card, OV_HAIR2_Y, CONTENT_W);
   // C_IVORY2, not the style's C_DIM. This caption is the ONLY thing separating
@@ -917,9 +932,17 @@ static void updateOverview(uint32_t nowMs) {
   const bool allCoasting = (g_orderN > 0 && coasting == g_orderN);
   setColorCached(s_ovCount, &s_colCount, allCoasting ? C_AMBER : C_IVORY);
 
-  // Recentre the hero group against however many alert rows are showing.
-  const int alertH = (coasting > 0 ? 22 : 0) +
-                     (tracksFirstEmergency() ? (OV_EMERG_H + 10) : 0);
+  sparkSample(nowMs, (uint8_t)(g_orderN > 255 ? 255 : g_orderN));
+  const bool alerting = (coasting > 0) || (tracksFirstEmergency() != nullptr);
+  setHiddenCached(s_ovSpark, alerting);
+  setHiddenCached(s_ovSparkKey, alerting);
+  if (!alerting && sparkDirty()) sparkRedraw();
+
+  // Recentre the hero group against however many alert rows are showing --
+  // or against the sparkline, which occupies the same slot when nothing is.
+  const int alertH = alerting ? ((coasting > 0 ? 22 : 0) +
+                                 (tracksFirstEmergency() ? (OV_EMERG_H + 10) : 0))
+                              : (OV_SPARK_H + 15 + 10);
   const int avail  = (OV_HAIR2_Y - 8 - alertH) - OV_BAND_TOP;
   int heroY = OV_BAND_TOP + (avail - OV_GROUP_H) / 2;
   if (heroY < OV_BAND_TOP) heroY = OV_BAND_TOP;
