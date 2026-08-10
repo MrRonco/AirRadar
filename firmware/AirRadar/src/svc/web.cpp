@@ -165,9 +165,29 @@ static void resetTracks() {
   g_orderN = 0;
 }
 
+// Every page load asked for /favicon.ico, got a 404, and left an error in the
+// console of anyone debugging their own network with this page open -- a false
+// lead on a page whose entire job is diagnosis. Declaring an icon stops the
+// request being made at all, which is cheaper than answering it: a route would
+// cost a handler and a payload on every tab.
+//
+// Inlined as a data URI rather than served, so it costs no route, no flash and
+// no second request. SVG because the panel's mark is three circles and a dot;
+// `#` must be written %23 inside a URI, which is the one way this string
+// silently breaks.
+#define AR_FAVICON \
+  "<link rel=icon href=\"data:image/svg+xml," \
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>" \
+  "<circle cx='16' cy='16' r='15' fill='%2305080d'/>" \
+  "<circle cx='16' cy='16' r='11.5' fill='none' stroke='%2354dcee' stroke-width='2'/>" \
+  "<circle cx='16' cy='16' r='5.5' fill='none' stroke='%2354dcee' stroke-width='1.5' opacity='.45'/>" \
+  "<circle cx='21' cy='10.5' r='3' fill='%23ffc061'/></svg>\">"
+
 // Send an HTML notice, then reboot (WiFi / network / DHCP switches).
 static void webReboot(const String& msg) {
-  String h = F("<!doctype html><meta name=viewport content='width=device-width,"
+  // The doctype stays first: anything ahead of it puts the page in quirks mode.
+  String h = F("<!doctype html>" AR_FAVICON
+               "<meta name=viewport content='width=device-width,"
                // C9. This fires after every Wi-Fi save and every network
                // change -- the exact moment someone is waiting to be told it
                // worked -- and it used #0b0f15/#dfe8f2, an adjacent black and
@@ -186,10 +206,9 @@ static void webReboot(const String& msg) {
 //  Root page — v6 look (dark #0b0f15, cyan buttons) + v7 sections
 // ============================================================
 static void htmlAppendHead(String& h) {
-  // Desktop-only management console: no viewport meta, no mobile column.
   // System font stacks only — the device may have no internet, so web fonts
   // are not an option. Palette mirrors the panel tokens (theme.h).
-  h += F("<!doctype html><html lang=en><head><meta charset=utf-8>"
+  h += F("<!doctype html><html lang=en><head><meta charset=utf-8>" AR_FAVICON
          // D5. The console declared itself desktop-only, yet webReboot() --
          // the throwaway interstitial -- already shipped a viewport tag. The
          // throwaway page was mobile-correct and the console was not, and the

@@ -399,3 +399,32 @@ populations, a coordinate guard that validated only the first character (so
 `46,45` still moved the radar), a wind icon with two owners fighting over its
 visibility, and a sparkline hidden by any single coasting aircraft. Three of
 the four were found only on the hardware.
+
+## v7.2.6 — the console stops growing
+
+Two small things in the web console, both of the kind that only show up once
+someone else looks at the page.
+
+**The traffic list was the only element on the page sized by the sky.** Forty
+aircraft made its card 1,055 px tall next to a 360 px panel mirror, so the page
+ran on for 700 px of empty column and everything below the fold moved position
+depending on how busy the afternoon happened to be. It is now bounded by the
+height of the card beside it and scrolls inside that, with its header pinned.
+
+The mechanism is worth recording, because the obvious fix does not hold: a
+`max-height` in pixels is a guess that drifts with the window, and the card it
+is matching is sized by an image whose height depends on the column width. The
+row is stretched instead and the scroller is *absolutely positioned* inside the
+traffic card — an absolutely positioned child contributes nothing to its
+parent's intrinsic height, so the row is sized by the mirror alone and the list
+takes whatever that turns out to be. No JavaScript and no measured constant, so
+it re-matches on a resize by itself. Below 901 px the rule is off: a phone has
+no second column to match, and a vertical scroll nested inside a page scroll is
+a trap.
+
+**Every page load asked for `/favicon.ico` and got a 404**, which put a red
+error in the console of anyone using this page to debug their own network — a
+false lead on a page whose entire job is diagnosis. The fix is to declare an
+icon so the request is never made, rather than add a route to answer it: a
+route would cost a handler and a payload on every tab. It is an inline SVG data
+URI, three circles and a dot, 363 bytes, no flash and no second request.
