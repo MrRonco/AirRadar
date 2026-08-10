@@ -89,8 +89,15 @@ Everything about *the panel* is absent:
   19, 20, 22 and 23 in `CLAUDE.md` are hardware findings. `/api/stalls` remains
   the only instrument for them.
 - **Not the panel's colour.** sRGB on a Mac display is not the IPS. The map
-  tint constants in `maptiles.cpp` were calibrated on the real thing and this
-  would have lied about them.
+  tint constants in `maptiles.cpp` were calibrated on the real thing.
+- **Not cartography.** The ground is synthetic. Its *statistics* are now
+  calibrated against a real z8 `dark_nolabels` mosaic — water at luma 9, land
+  at 38, mean 19 — because the first version was a smooth field averaging 76
+  and made the map look four times brighter than the device draws it. It still
+  cannot show you a label, a coastline you would recognise, or what a style
+  change does. For anything about the map *itself*, use
+  `firmware/tools/tintpreview.py`, which fetches the real tiles and runs the
+  real `maptiles.cpp` arithmetic over them.
 - **No touch reality.** Target size in millimetres, GT911 accuracy, whether a
   thumb covers the glyph it is pressing.
 

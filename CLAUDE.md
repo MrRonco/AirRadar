@@ -296,6 +296,15 @@ ngw nmask ndns`. v7 adds `tz` (POSIX TZ), `ppass` (panel/API password),
   SDL2 and renders every screen and seven scenarios headless in ~2 s. Use it
   for anything about layout, typography or state; it says nothing about DMA,
   panel colour or touch. See `desktop/README.md`.
+- **The harness's ground is synthetic — never judge the MAP against it.**
+  `firmware/tools/tintpreview.py` fetches the real CARTO tiles and runs
+  `maptiles.cpp`'s own tint and lens arithmetic over them, which is the only
+  way to see a map change short of the panel. Two things it settled that the
+  harness had wrong: real `dark_nolabels` tiles average luma **19** (bimodal —
+  water 9, land 38, max 41) where the fake field averaged 76, and because the
+  tint's additive floors (+7/+14/+26) dominate at those levels,
+  `TINT_LUM_NUM` 16 -> 11 moves the disc mean only 27 -> 22. A knob that looks
+  decisive in the harness can be nearly inert on the device.
 - Regenerate images with `firmware/tools/genassets.py`.
 - **Fonts: six faces.** `font_hero56` / `font_clock36` (InterDisplay Light,
   **tnum frozen**), `font_id28` (Inter Medium), `font_val22` (Inter Medium,

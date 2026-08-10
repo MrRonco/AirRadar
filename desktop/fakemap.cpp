@@ -7,12 +7,24 @@
 // it. Worse, anything that DRAWS INTO the map buffer — the graduated bezel — is
 // invisible without one.
 //
-// This is not a map. It is a ground with the right statistical character: a
-// value-noise landmass field at roughly the tonal range CARTO's dark tiles
-// produce after the blue tint, run through the REAL coverage-lens formula
-// copied from maptiles.cpp so the disc edge, the vignette and the 30% outside
-// dim all behave exactly as they do on the device. Judge composition and
-// contrast against it; do not judge cartography.
+// This is not a map. It is a ground with the right statistical character, run
+// through the REAL tint and coverage-lens formulas copied from maptiles.cpp so
+// the disc edge, the vignette and the 30% outside dim all behave exactly as
+// they do on the device. Judge composition and contrast against it; do not
+// judge cartography.
+//
+// CALIBRATED, not invented -- and this cost a wrong answer to find. The first
+// version was a smooth value-noise field scaled to 0..150, which put its mean
+// input luminance at 76. Real CARTO dark_nolabels tiles measure a mean of
+// **19**, with a strongly BIMODAL distribution: water at 9, land at 38, and a
+// maximum of 41 across a whole z8 mosaic. The harness was therefore showing a
+// ground four times brighter than the panel's, and a smooth gradient where the
+// real thing is two flat tones with a fine feature network on top. Anything
+// judged against it -- "is the map too loud", "can I still see it" -- was
+// being judged against the wrong picture.
+//
+// The constants below are measured off a 5x3 z8 dark_nolabels mosaic at the
+// synthetic home. Re-measure if AR_TILE_STYLE ever changes again.
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -31,6 +43,14 @@ static const float VIGNETTE_STRENGTH = 0.55f;
 static const int   TINT_R_PCT = 32,  TINT_R_ADD = 7;
 static const int   TINT_G_PCT = 62,  TINT_G_ADD = 14;
 static const int   TINT_B_PCT = 105, TINT_B_ADD = 26;
+
+// Measured off a 5x3 z8 dark_nolabels mosaic: mean 19, median 13, p25 9,
+// p75 38, max 41.
+static const float LUM_WATER   = 9.0f;
+static const float LUM_LAND    = 38.0f;
+static const float LUM_FEATURE = 5.0f;
+static const float LAND_EDGE0  = 0.47f;   // noise value where the coast starts
+static const float LAND_EDGE1  = 0.55f;   //  ... and where it is fully land
 
 static uint16_t*    s_buf = nullptr;
 static lv_img_dsc_t s_dsc;
@@ -74,12 +94,20 @@ void fakeMapBuild() {
 
   for (int y = 0; y < MAP_H; y++) {
     for (int x = 0; x < MAP_W; x++) {
-      // Two octaves: coarse landmass, finer coastline detail. Water sits dark,
-      // land a little lighter — the same figure/ground relationship the real
-      // dark_all tiles have once tinted.
+      // Two octaves decide WHERE the coastline is; they do not set brightness.
+      // CARTO's dark tiles are not a continuous field, they are two flat tones
+      // with a thin feature network drawn over them, so the noise is
+      // thresholded into water/land with a soft edge rather than used directly.
       float n = vnoise(x / 96.0f, y / 96.0f, 7u) * 0.68f +
                 vnoise(x / 31.0f, y / 31.0f, 19u) * 0.32f;
-      int lum = (int)(n * 150.0f);                 // pre-tint luminance
+      float land = (n - LAND_EDGE0) / (LAND_EDGE1 - LAND_EDGE0);
+      if (land < 0.0f) land = 0.0f; else if (land > 1.0f) land = 1.0f;
+      land = land * land * (3.0f - 2.0f * land);            // smoothstep
+      // Roads and built-up areas: a fine, low-amplitude layer. This is what
+      // the resample aliases against on the device, so it has to be present.
+      const float feat = vnoise(x / 6.5f, y / 6.5f, 31u);
+      int lum = (int)(LUM_WATER + (LUM_LAND - LUM_WATER) * land
+                      + feat * LUM_FEATURE);
       lum = lum * s_lumNum / s_lumDen;             // the knob under test
       if (lum > 255) lum = 255;
 

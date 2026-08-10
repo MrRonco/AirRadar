@@ -25,3 +25,6 @@ docs/mockups/
 # exists. Kept locally, not published.
 docs/V6_PLAN.md
 docs/V6_1_PLAN.md
+
+# Tile cache for firmware/tools/tintpreview.py
+firmware/tools/.tilecache/
