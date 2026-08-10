@@ -158,7 +158,6 @@ struct Blip {
   bool      cGlowHid, cSelHid, cMilHid, cLblHid;
   bool      cLblWatch;
   bool      cLblLeft;   // label mirrored to the inboard side of the disc
-  lv_opa_t  cLblOpa;    // fades with the glyph while coasting
   char      cLbl[16];
 };
 static Blip s_blips[AR_MAX_TRACKS];
@@ -383,7 +382,8 @@ static void blipPlace(Blip& b, int cx, int cy, bool isNew, bool lblLeft) {
   blipGlide(b.holder, blipAnimY, lv_obj_get_y(b.holder), cy - HOLDER_CY);
 }
 
-static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked) {
+static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked,
+                         bool coasting) {
   bool show = selected || (g_set.showLabels &&
                            (ranked || trackOnWatchlist(t) || sqIsEmergency(t.squawk)));
   if (!b.cInit || b.cLblHid != !show) {
@@ -403,11 +403,32 @@ static void blipSetLabel(Blip& b, const Track& t, bool selected, bool ranked) {
   // channel that can carry a distinction, and hue was being asked to mean two
   // unrelated things at once. Mark it by FORM instead -- brackets -- and hand
   // hue back to altitude.
+  //
+  // A2: the same argument, applied to the coast fade I added in F8. Dimming
+  // the label alongside the glyph took it to a MEASURED 2.04:1 against the
+  // map, where theme.h's own comment calls 1.9:1 "DECORATION ONLY -- never
+  // text". Coasting is the state where the panel is showing a dead-reckoned
+  // guess -- up to 13.9 km of fiction at 450 kt -- so it is exactly when a
+  // reader needs the callsign in order to decide whether to believe it, and
+  // it was the one state where the callsign could not be read.
+  //
+  // Stop spending contrast to say "estimated". The GLYPH keeps its fade,
+  // which reads as depth and works; the label holds full opacity and takes a
+  // leading "~" instead. Form, not ink -- it survives whatever the text
+  // survives, and it is inside micro13's subset.
+  // LBL_W is 72 px and micro13 is 8 px per glyph, so the label holds exactly
+  // NINE characters. The two markers stack, so the room left for the callsign
+  // itself depends on which are present -- truncate against that, not against
+  // a fixed number, or a watched coasting 7-character callsign runs past the
+  // holder and leaves a ghost when the blip moves (rule 12).
+  static const int LBL_MAX_CH = LBL_W / 8;
   const bool watched = trackOnWatchlist(t);
   const char* name = t.flight[0] ? t.flight : t.hex;
+  const int room = LBL_MAX_CH - (coasting ? 1 : 0) - (watched ? 2 : 0);
   char txt[16];
-  if (watched) snprintf(txt, sizeof(txt), "[%.7s]", name);
-  else         strlcpy(txt, name, sizeof(txt));
+  snprintf(txt, sizeof(txt), "%s%s%.*s%s",
+           coasting ? "~" : "", watched ? "[" : "",
+           room, name, watched ? "]" : "");
   if (!b.cInit || strcmp(txt, b.cLbl) != 0) {
     strlcpy(b.cLbl, txt, sizeof(b.cLbl));
     lv_label_set_text(b.lbl, txt);
@@ -446,10 +467,6 @@ static void blipStyle(Blip& b, const Track& t, uint32_t nowMs, bool ranked,
   // target's callsign rendered byte-identical to a live one's -- the legend
   // promises "faded = position estimated" and half the mark was not keeping it.
   lv_opa_t jetOpa = coasting ? COAST_OPA : LV_OPA_COVER;
-  if (!b.cInit || b.cLblOpa != jetOpa) {
-    b.cLblOpa = jetOpa;
-    lv_obj_set_style_text_opa(b.lbl, jetOpa, 0);
-  }
   if (emergency) jetOpa = ((nowMs / BLINK_HALF_MS) & 1) ? BLINK_HI : BLINK_LO;
   if (!b.cInit || jetOpa != b.cOpa) {
     b.cOpa = jetOpa;
@@ -473,7 +490,7 @@ static void blipStyle(Blip& b, const Track& t, uint32_t nowMs, bool ranked,
     b.cMilHid = !t.mil;
     setHidden(b.milBox, !t.mil);
   }
-  blipSetLabel(b, t, selected, ranked);
+  blipSetLabel(b, t, selected, ranked, coasting);
   b.cInit = true;
 }
 

@@ -236,8 +236,8 @@ void helpBuild(lv_obj_t* parent) {
   y += hRow(s_overlay, c1, y, "Altitude not reported");
   hJet(s_overlay, c1, sampleY(y, 26), C_ALT_MID, 150, 900, 256);
   y += hRow(s_overlay, c1, y,
-            "Faded: COASTING. Still counted and tracked, position estimated "
-            "from the last report");
+            "Faded glyph and a ~ before the callsign: COASTING. Still counted "
+            "and tracked, position estimated from the last report");
   hJet(s_overlay, c1, sampleY(y, 26), C_ALERT, LV_OPA_COVER, 900, 256);
   y += hRow(s_overlay, c1, y, "Emergency squawk 7500 / 7600 / 7700");
 
