@@ -50,8 +50,15 @@ static const size_t   PNG_SIG_LEN      = 8;
 // Blue tint ramp (matches the approved mock) + edge vignette.
 // HARDWARE-TUNED: x2.6 lift (calibrated on a dark z8 tile) rendered water
 // neon-bright at the z9-z11 the scope actually uses. x1.6 + lower blue floor
-// matches the approved slate-dark mock on the real panel.
-static const int   TINT_LUM_NUM      = 16;   // luminance boost x1.6
+// matched the approved slate-dark mock on the real panel.
+//
+// F1: dropped to x1.1. The map is the FIELD the instrument is drawn on, and
+// at x1.6 its brightest water was competing with the aircraft glyphs sitting
+// on top of it -- the review's phrase was that the ground reads as a
+// photograph rather than as a chart. This value was calibrated on the panel
+// and has NOT been re-checked there since the change; it is one constant, and
+// 16 is what to put back if the ground now looks dead rather than quiet.
+static const int   TINT_LUM_NUM      = 11;   // luminance boost x1.1 (was 16)
 static const int   TINT_LUM_DEN      = 10;
 static const int   TINT_R_PCT        = 32,  TINT_R_ADD = 7;
 static const int   TINT_G_PCT        = 62,  TINT_G_ADD = 14;
@@ -111,8 +118,15 @@ static void cachePath(int km, char* out, size_t cap) {
   snprintf(out, cap, "%s/r%d", kCacheDir, km);
 }
 
+// The key must cover everything the CACHED PIXELS depend on, not just where
+// they are. Changing the tile style or the tint ramp with a lat/lon-only key
+// leaves a device that already has a cache showing the old map forever --
+// the fetch never runs, so there is nothing to notice. Bump AR_MAP_RECIPE
+// whenever the style, the tint or the resample changes.
+#define AR_MAP_RECIPE 2   // 1 = dark_all @ x1.6, 2 = dark_nolabels @ x1.1
 static void cacheKeyNow(char* out, size_t cap) {
-  snprintf(out, cap, "%.6f,%.6f", g_set.homeLat, g_set.homeLon);
+  snprintf(out, cap, "%.6f,%.6f,r%d", g_set.homeLat, g_set.homeLon,
+           AR_MAP_RECIPE);
 }
 
 // Drop every cached range. Called when the home coordinates move.

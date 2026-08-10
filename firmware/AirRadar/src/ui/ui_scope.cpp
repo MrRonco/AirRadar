@@ -101,8 +101,15 @@ static const uint32_t POOL_WARN_MIN_MS = 5000;  // rate-limit pool-full log
 // tall. Wrong shape in BOTH directions, so two labels 60 px apart horizontally
 // passed the test and overprinted, while labels that would have stacked
 // perfectly well vertically were refused. The test is now the ink's own box.
-static const int LABEL_CLASH_X = LBL_GAP + LBL_W;
-static const int LABEL_CLASH_Y = LBL_H + 4;
+static const int LABEL_CLASH_Y = LBL_H + 4;   // vertical band two labels share
+// A range numeral is at most three monospace digits -- 24 px, not the 72 px of
+// a callsign -- and it sits centred on its anchor. Testing it with the full
+// LABEL_CLASH box treated it as if it were a callsign, which suppressed
+// anything within 93 px on EITHER side. With three numerals reserved instead
+// of two that started costing real callsigns (JZA239 vanished behind an "83"
+// it was nowhere near). Test the numeral's own rectangle.
+static const int NUM_HALF_W    = 14;            // "250" is 24 px; +2 margin
+static const int NUM_CLASH_Y   = (LBL_H + 16) / 2 + 2;
 static const int LABEL_MAX        = 8;    // ink ceiling regardless of spacing
 
 // 45deg-NE centre offsets for the range labels (from container centre).
@@ -322,20 +329,25 @@ static void blipGlide(lv_obj_t* o, lv_anim_exec_xcb_t cb, int32_t from,
 
 // Put the label on whichever side keeps it inside the disc. Called from
 // blipPlace because that is where the screen position is known.
-static void blipLabelSide(Blip& b, int cx, int cy) {
-  // Prefer the right, flip for the disc edge, and flip again if the right side
-  // would land on a range numeral. A must-have label (selected, watchlist,
-  // emergency) skips the declutter pass entirely, so without this the SELECTED
-  // target -- the one that most needs to be readable -- was the one printing
-  // over "250".
-  bool left = (cx + LBL_GAP + LBL_W) > (SCOPE_D - 2);
-  if (!left) {
-    for (int k = 0; k < kRsvN; k++) {
-      if (fabsf(kRsvX[k] - (float)cx) < (float)LABEL_CLASH_X &&
-          fabsf(kRsvY[k] - (float)cy) < (float)LABEL_CLASH_Y &&
-          kRsvX[k] >= (float)cx) { left = true; break; }
-    }
-  }
+// Left edge of a label hung on `left`/right of a blip at clip-x `cx`.
+static inline float lblX0(float cx, bool left) {
+  return left ? (cx - LBL_GAP - LBL_W) : (cx + LBL_GAP);
+}
+
+// Would that label overlap the numeral at (nx,ny)? All values CLIP coords.
+static bool lblHitsNumeral(float cx, float cy, float nx, float ny, bool left) {
+  if (fabsf(ny - cy) > (float)NUM_CLASH_Y) return false;
+  const float x0 = lblX0(cx, left);
+  return (nx + NUM_HALF_W) > x0 && (nx - NUM_HALF_W) < (x0 + LBL_W);
+}
+
+// The side is decided ONCE, by the declutter pass, and carried here. It used
+// to be recomputed per blip from the disc edge and the numerals alone, which
+// knew nothing about the labels already placed -- so relaxing the numeral test
+// immediately produced a flip straight into a neighbouring callsign. Whoever
+// decides WHETHER a label appears has to decide WHERE, because the two
+// questions share one answer: is there a free side.
+static void blipLabelSide(Blip& b, bool left) {
   if (b.cInit && b.cLblLeft == left) return;      // change-cached: a no-op
   b.cLblLeft = left;                              //  set_pos still invalidates
   lv_obj_set_x(b.lbl, left ? (HOLDER_CX - LBL_GAP - LBL_W)
@@ -345,8 +357,8 @@ static void blipLabelSide(Blip& b, int cx, int cy) {
 }
 
 // cx/cy = desired blip centre in clip-container coordinates.
-static void blipPlace(Blip& b, int cx, int cy, bool isNew) {
-  blipLabelSide(b, cx, cy);
+static void blipPlace(Blip& b, int cx, int cy, bool isNew, bool lblLeft) {
+  blipLabelSide(b, lblLeft);
   if (isNew) {
     lv_anim_del(b.holder, blipAnimX);
     lv_anim_del(b.holder, blipAnimY);
@@ -638,18 +650,23 @@ void scopeUpdate(uint32_t nowMs) {
 
   bool seen[AR_MAX_TRACKS] = {false};
 
-  // ---- decide which targets get a callsign (spatial declutter) ----
-  bool  ranked[AR_MAX_TRACKS] = {false};
-  float lx[LABEL_MAX], ly[LABEL_MAX];
+  // ---- decide which targets get a callsign, and on which side ----
+  bool  ranked[AR_MAX_TRACKS]  = {false};
+  bool  lblLeft[AR_MAX_TRACKS] = {false};
+  // Placed label rectangles, in CLIP coordinates: [rx0, rx0+LBL_W] x ry.
+  float rx0[LABEL_MAX], ry[LABEL_MAX];
   int   nLbl = 0;
-  // The two range numerals are ink on the same field and were never in the
-  // clash test, so a callsign could land straight on top of one -- which only
-  // became obvious once they stopped being C_FAINT and could actually be seen.
-  // They sit at 45 deg NE of centre, and they are RESERVED rather than counted:
+  // The range numerals are ink on the same field and were never in the clash
+  // test, so a callsign could land straight on top of one -- which only became
+  // obvious once they stopped being C_FAINT and could actually be seen. They
+  // sit at 45 deg NE of centre, and they are RESERVED rather than counted:
   // LABEL_MAX is a budget for callsigns, not for chrome.
   // kRsv* are CLIP coordinates; this loop works in SCREEN coordinates, so the
   // comparison has to be made in one space. Getting this wrong produced a
   // spurious clash that silently cost a label.
+  // A numeral only suppresses a callsign if BOTH sides are blocked --
+  // blipLabelSide will flip to the free one, exactly as it does at the disc
+  // edge. Testing one side made the numerals far more expensive than they are.
   for (int pass = 0; pass < 2; pass++) {
     for (int oi = 0; oi < g_orderN && nLbl < LABEL_MAX; oi++) {
       int idx = g_orderIdx[oi];
@@ -660,21 +677,30 @@ void scopeUpdate(uint32_t nowMs) {
       if (pass == 0 && !must) continue;        // pass 0 seeds the must-haves
       float sx = 0, sy = 0;
       if (!scopeToScreen(t.lat, t.lon, sx, sy)) continue;
-      if (!must) {
-        bool clash = false;
-        const float cxL = sx - SCOPE_X0, cyL = sy - SCOPE_Y0;
-        for (int k = 0; k < kRsvN && !clash; k++) {
-          if (fabsf(kRsvX[k] - cxL) < LABEL_CLASH_X &&
-              fabsf(kRsvY[k] - cyL) < LABEL_CLASH_Y) clash = true;
-        }
-        for (int k = 0; k < nLbl && !clash; k++) {
-          if (fabsf(lx[k] - sx) < LABEL_CLASH_X &&
-              fabsf(ly[k] - sy) < LABEL_CLASH_Y) clash = true;
-        }
-        if (clash) continue;
+      const float cxL = sx - SCOPE_X0, cyL = sy - SCOPE_Y0;
+
+      // Try the right, then the left. A side is blocked by the disc edge, by
+      // a range numeral, or by a label already placed on this pass.
+      bool blocked[2];
+      for (int si = 0; si < 2; si++) {
+        const bool left = (si == 1);
+        const float x0 = lblX0(cxL, left);
+        bool bad = (x0 < 2.0f) || (x0 + LBL_W > (float)(SCOPE_D - 2));
+        for (int k = 0; k < kRsvN && !bad; k++)
+          bad = lblHitsNumeral(cxL, cyL, kRsvX[k], kRsvY[k], left);
+        for (int k = 0; k < nLbl && !bad; k++)
+          bad = fabsf(ry[k] - cyL) < (float)LABEL_CLASH_Y &&
+                (rx0[k] < x0 + LBL_W) && (x0 < rx0[k] + LBL_W);
+        blocked[si] = bad;
       }
-      ranked[idx] = true;
-      lx[nLbl] = sx; ly[nLbl] = sy; nLbl++;
+      // A must-have label (selected, watchlist, emergency) is drawn whatever
+      // happens -- it takes the less-bad side rather than disappearing.
+      if (!must && blocked[0] && blocked[1]) continue;
+      const bool left = blocked[0] && !blocked[1];
+
+      ranked[idx]  = true;
+      lblLeft[idx] = left;
+      rx0[nLbl] = lblX0(cxL, left); ry[nLbl] = cyL; nLbl++;
     }
   }
 
@@ -691,7 +717,7 @@ void scopeUpdate(uint32_t nowMs) {
 
     Blip& b = s_blips[slot];
     blipPlace(b, (int)lroundf(sx) - SCOPE_X0, (int)lroundf(sy) - SCOPE_Y0,
-              isNew);
+              isNew, lblLeft[i]);
     // This loop walks track SLOTS, so "nearest" is the slot g_orderIdx[0]
     // names -- g_orderIdx is the distance-sorted index, not this loop's cursor.
     const bool isNear = (g_orderN > 0 && g_orderIdx[0] == i);

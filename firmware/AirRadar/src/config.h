@@ -168,8 +168,13 @@
 // reporting plenty free. Field-measured: heap_largest sat at 11 KB while
 // heap_free was 30 KB. Both tests must pass before an optional TLS fetch runs.
 #define AR_TLS_BLOCK_FLOOR (20 * 1024)
-#define AR_TILE_HOST   "basemaps.cartocdn.com"                       // CARTO dark_all
-#define AR_TILE_STYLE  "dark_all"
+#define AR_TILE_HOST   "basemaps.cartocdn.com"
+// F1: dark_nolabels, not dark_all. CARTO's labelled tiles put place names at
+// z9-z11 under a 424 px disc that is already carrying aircraft glyphs, their
+// callsigns, three range numerals and a crosshair -- and the panel is read
+// from across a room, where a 7 px town name is not legible, only textured.
+// The scope wants a GROUND, not a map. Same tile server, same cache path.
+#define AR_TILE_STYLE  "dark_nolabels"
 #define AR_TILE_ATTRIB "(C) OSM - CARTO"
 
 // ============================================================

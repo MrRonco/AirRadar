@@ -30,7 +30,7 @@ static const int   TINT_B_PCT = 105, TINT_B_ADD = 26;
 static uint16_t*    s_buf = nullptr;
 static lv_img_dsc_t s_dsc;
 static uint32_t     s_gen = 0;
-static int          s_lumNum = 16, s_lumDen = 10;   // TINT_LUM_NUM/DEN under test
+static int          s_lumNum = 11, s_lumDen = 10;   // TINT_LUM_NUM/DEN under test
 
 // Deterministic value noise — same field every run, so a layout change is the
 // only thing that can differ between two screenshots.
