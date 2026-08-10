@@ -53,12 +53,27 @@ static const int OV_WIND_GAP_MIN = 2;
 static const int OV_WIND_GAP_MAX = 6;
 static const int OV_ROW_CLEAR = 6;    // wanted between the two readings
 static const int OV_HAIR1_Y   = 62;
-static const int OV_COUNT_Y   = 90;            // hero numeral
+// The hero group (numeral + IN RANGE) is CENTRED in whatever the alert rows
+// leave, not pinned at a fixed y. Both alert slots are usually empty, so a
+// fixed layout left a 49 px hole under IN RANGE in the state the card spends
+// almost all its life in -- and the eye reads that as something missing, not
+// as breathing room. No static y can fix it: the band has to hold 132 px of
+// content in 158 px, and the slack has to go somewhere.
+//
+// Recentring moves two objects and only when the alert count actually changes,
+// so it is not a per-tick cost.
+static const int OV_BAND_TOP  = 70;            // just under the first hairline
+static const int OV_GROUP_H   = 77;            // hero 56 + gap + IN RANGE 13
+static const int OV_COUNT_Y   = 90;            // fallback / build-time position
 static const int OV_INRANGE_Y = 154;           // stacked UNDER the numeral
 static const int OV_COAST_Y   = 174;           // same face as IN RANGE
-static const int OV_EMERG_Y   = 194;
+// The pill's bottom edge used to land exactly on OV_HAIR2_Y -- zero clearance,
+// so it absorbed the divider and read as the third line of the count block,
+// while the nearest thing below the rule was a DIFFERENT aircraft. 8 px of
+// clear card above and below now.
+static const int OV_EMERG_Y   = 188;
 static const int OV_EMERG_H   = 26;
-static const int OV_HAIR2_Y   = 220;
+static const int OV_HAIR2_Y   = 222;
 static const int OV_NEAR_Y    = 230;           // "NEAREST" key
 static const int OV_NEARNAME_Y= 250;           // callsign, larger
 static const int OV_NEARD_Y   = 278;           // distance, left, lighter face
@@ -142,15 +157,15 @@ static const char* RECOLOR_VAL = "aab4c0";   // C_IVORY2, was cyan
 static bool s_built = false;
 
 // Overview
-static lv_obj_t *s_ovCount, *s_ovInRange, *s_ovHeard;
-static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl;
+static lv_obj_t *s_ovCount, *s_ovInRange, *s_ovHeard, *s_ovFiltered;
+static lv_obj_t *s_ovEmergBox, *s_ovEmergLbl, *s_ovEmergSqk;
 static lv_obj_t *s_ovNear, *s_ovNearD, *s_ovFeed, *s_ovSrc, *s_ovDot;
-static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24];
+static char s_bufCount[8], s_bufHeard[24], s_bufEmerg[24], s_bufEmergSqk[8];
 static char s_bufNear[12], s_bufNearD[24], s_bufFeed[12], s_bufSrc[24];
 static lv_color_t s_colSrc = {};
 static lv_color_t s_colCount = {};
-static lv_color_t s_colEmerg = {};
-static lv_color_t s_emergDim;                  // computed at build
+static int        s_heroY = -1;
+static lv_opa_t   s_emergOpa = 0;
 
 // Selected
 static lv_obj_t *s_selCont, *s_selEmpty;
@@ -291,6 +306,20 @@ static void onHelpClicked(lv_event_t* e)     { (void)e; helpToggle(); }
 // to pass +1 whatever you hit — so the left arrow stepped up like the right one
 // and the only way down was all the way round. Split on the midpoint: the half
 // you tapped is the direction you get.
+// The panel names an emergency and a nearest aircraft and then made you hunt a
+// 26 px glyph on the disc to see either one. Both blocks now select their
+// aircraft. The hex is captured at update time because the Track* is only
+// valid in loop context.
+static char s_emergHex[8] = "", s_nearHex[8] = "";
+static void selectHex(const char* hex) {
+  if (!hex || !hex[0]) return;
+  strlcpy(g_selHex, hex, sizeof(g_selHex));
+  scopeUpdate(millis());
+  cardsUpdate(millis());
+}
+static void onEmergClicked(lv_event_t*) { selectHex(s_emergHex); }
+static void onNearClicked(lv_event_t*)  { selectHex(s_nearHex); }
+
 static void onRangeClicked(lv_event_t* e) {
   lv_obj_t* pill = lv_event_get_target(e);
   lv_indev_t* indev = lv_indev_get_act();
@@ -360,6 +389,13 @@ static void buildOverview(lv_obj_t* parent) {
   // not look like different kinds of thing.
   s_ovHeard = mkMicro(card, "", 0, OV_COAST_Y);
   lv_obj_set_style_text_color(s_ovHeard, C_MUTE, 0);
+  // tracksRebuildOrder() skips anything failing the filters, so the 56 px hero
+  // is the FILTERED count -- turn off LIGHT and the panel reports "4 IN RANGE"
+  // with total confidence while six aircraft are overhead. Nothing said so.
+  s_ovFiltered = mkMicro(card, "FILTERED", 0, OV_INRANGE_Y);
+  lv_obj_set_style_text_color(s_ovFiltered, C_AMBER, 0);
+  lv_obj_align(s_ovFiltered, LV_ALIGN_TOP_RIGHT, 0, OV_INRANGE_Y);
+  lv_obj_add_flag(s_ovFiltered, LV_OBJ_FLAG_HIDDEN);
 
   s_ovEmergBox = mkBox(card);
   lv_obj_set_pos(s_ovEmergBox, 0, OV_EMERG_Y);
@@ -372,10 +408,18 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_style_radius(s_ovEmergBox, R_SM, 0);
   lv_obj_set_style_pad_ver(s_ovEmergBox, 4, 0);
   lv_obj_set_style_pad_hor(s_ovEmergBox, 8, 0);
-  s_ovEmergLbl = mkLbl(s_ovEmergBox, F_MONO11, C_RED);
-  lv_obj_align(s_ovEmergLbl, LV_ALIGN_LEFT_MID, 0, 0);
+  // Two labels, not one. The whole alarm used to be a single 11 px mono string
+  // -- which does not resolve at 2 m at all, so the red bar did the work and
+  // "! 7600 ACA337" was decoration. The squawk now uses font_val22, whose
+  // tabular digits are already in the subset, and reads across a room.
+  s_ovEmergSqk = mkLbl(s_ovEmergBox, F_M20, C_ALERT);
+  lv_obj_align(s_ovEmergSqk, LV_ALIGN_LEFT_MID, 0, 0);
+  s_ovEmergLbl = mkLbl(s_ovEmergBox, F_MONO11, C_ALERT);
+  lv_obj_align(s_ovEmergLbl, LV_ALIGN_RIGHT_MID, 0, 0);
   lv_obj_add_flag(s_ovEmergBox, LV_OBJ_FLAG_HIDDEN);
-  s_emergDim = lv_color_mix(C_RED, C_CARD_LO, 140);
+  lv_obj_add_flag(s_ovEmergBox, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_ext_click_area(s_ovEmergBox, 11);      // 26 -> 48 px
+  lv_obj_add_event_cb(s_ovEmergBox, onEmergClicked, LV_EVENT_CLICKED, NULL);
 
   mkHair(card, OV_HAIR2_Y, CONTENT_W);
   // C_IVORY2, not the style's C_DIM. This caption is the ONLY thing separating
@@ -389,6 +433,16 @@ static void buildOverview(lv_obj_t* parent) {
   // so there is no row to put it in without pushing the instrument grid off
   // the card.
   lv_obj_set_style_text_color(mkMicro(card, "NEAREST", 0, OV_NEAR_Y), C_IVORY2, 0);
+  // An invisible plate over the whole NEAREST block, behind the labels, so the
+  // caption/callsign/distance act as one target instead of three inert texts.
+  {
+    lv_obj_t* hit = mkBox(card);
+    lv_obj_set_pos(hit, 0, OV_NEAR_Y);
+    lv_obj_set_size(hit, CONTENT_W, OV_HAIR3_Y - OV_NEAR_Y - 4);
+    lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(hit, onNearClicked, LV_EVENT_CLICKED, NULL);
+    lv_obj_move_background(hit);   // labels stay on top and stay readable
+  }
   s_ovNear = mkLbl(card, F_M20, C_IVORY);          // identifier, larger
   lv_obj_set_pos(s_ovNear, 0, OV_NEARNAME_Y);
   s_ovNearD = mkLbl(card, F_UI15, C_IVORY2);       // distance, lighter face
@@ -614,11 +668,20 @@ static void updateEmergencyStrip(uint32_t nowMs) {
   if (!e) return;
   char nm[12];
   trackDisplayName(e, nm, sizeof(nm));
-  char b[24];
-  snprintf(b, sizeof(b), "! %s  %.7s", e->squawk, nm);
-  setTextCached(s_ovEmergLbl, s_bufEmerg, sizeof(s_bufEmerg), b);
-  bool on = (nowMs / EMERG_BLINK_MS) & 1;
-  setColorCached(s_ovEmergLbl, &s_colEmerg, on ? C_RED : s_emergDim);
+  setTextCached(s_ovEmergSqk, s_bufEmergSqk, sizeof(s_bufEmergSqk), e->squawk);
+  setTextCached(s_ovEmergLbl, s_bufEmerg, sizeof(s_bufEmerg), nm);
+  strlcpy(s_emergHex, e->hex, sizeof(s_emergHex));
+  // Blink the FILL, hold the text. Blinking the text colour meant the alarm
+  // measured 2.18:1 in its dim phase -- half the time, the only warning on the
+  // panel sat below the contrast of decorative chrome. The label now stays at
+  // C_ALERT (never under ~5:1) and the box pulses instead, for the same
+  // repaint cost.
+  const bool on = (nowMs / EMERG_BLINK_MS) & 1;
+  const lv_opa_t opa = on ? 96 : 34;
+  if (s_emergOpa != opa) {
+    s_emergOpa = opa;
+    lv_obj_set_style_bg_opa(s_ovEmergBox, opa, 0);
+  }
 }
 
 static void updateOverview(uint32_t nowMs) {
@@ -643,8 +706,25 @@ static void updateOverview(uint32_t nowMs) {
   // but dead-reckoned fiction looked exactly like a healthy one. The only cue
   // was a 7 px amber dot, invisible at 2 m. Amber is already the stale
   // semantic, is not green, and is not the reserved red.
+  const bool filtered = (g_set.filtCls != AR_FILT_CLS_ALL) ||
+                        g_set.filtAltLo || g_set.filtAltHi ||
+                        g_set.watchlist.length();
+  setHiddenCached(s_ovFiltered, !filtered);
   const bool allCoasting = (g_orderN > 0 && coasting == g_orderN);
   setColorCached(s_ovCount, &s_colCount, allCoasting ? C_AMBER : C_IVORY);
+
+  // Recentre the hero group against however many alert rows are showing.
+  const int alertH = (coasting > 0 ? 22 : 0) +
+                     (tracksFirstEmergency() ? (OV_EMERG_H + 10) : 0);
+  const int avail  = (OV_HAIR2_Y - 8 - alertH) - OV_BAND_TOP;
+  int heroY = OV_BAND_TOP + (avail - OV_GROUP_H) / 2;
+  if (heroY < OV_BAND_TOP) heroY = OV_BAND_TOP;
+  if (heroY != s_heroY) {
+    s_heroY = heroY;
+    lv_obj_set_y(s_ovCount, heroY);
+    lv_obj_set_y(s_ovInRange, heroY + 64);
+    lv_obj_set_y(s_ovFiltered, heroY + 64);
+  }
 
   updateEmergencyStrip(nowMs);
 
@@ -653,6 +733,7 @@ static void updateOverview(uint32_t nowMs) {
     char nm[12];
     trackDisplayName(n, nm, sizeof(nm));
     setTextCached(s_ovNear, s_bufNear, sizeof(s_bufNear), nm);
+    strlcpy(s_nearHex, n->hex, sizeof(s_nearHex));
     float d = haversineKm(g_set.homeLat, g_set.homeLon, n->lat, n->lon);
     float brg = bearingTo(g_set.homeLat, g_set.homeLon, n->lat, n->lon);
     snprintf(b, sizeof(b), "%.1f km %s", (double)d, cardinal8(brg));
@@ -911,7 +992,11 @@ static void updateTimeCard() {
   if (ti.tm_year <= 120) {                     // not synced yet (or offline)
     // F_NUM36 carries only digits+':' — "0:00" stays inside the subset;
     // the sync hint lives on the mono date label instead.
-    setTextCached(s_tmTime, s_bufTime, sizeof(s_bufTime), "0:00");
+    // "0:00" is a VALID time, which is exactly what makes it a bad null: it
+    // sat in the second-loudest slot on the panel while the truth ("WAITING
+    // FOR TIME") was 13 px of C_DIM six hundred pixels away. An empty clock
+    // card reads as "no time" honestly.
+    setTextCached(s_tmTime, s_bufTime, sizeof(s_bufTime), "");
     setHiddenCached(s_tmPm, true);
     setTextCached(s_tmDate, s_bufDate, sizeof(s_bufDate), "WAITING FOR TIME");
     return;
