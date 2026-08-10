@@ -212,6 +212,25 @@ static lv_obj_t* mkLbl(lv_obj_t* p, const lv_font_t* f, lv_color_t c) {
   return l;
 }
 
+// ---------- the micro13 rank system (one face, two free axes) ----------
+// font_micro13 was carrying thirteen unrelated jobs on this screen -- grid
+// keys, operator name, airframe, registration, date, feed source, feed rate,
+// scope callsigns, range value, IN RANGE, NEAREST, the emergency string and
+// the PM marker. Below 18 px every one of them has the same rank, so the eye
+// cannot tell a key from a value. Rather than add a font, spend the two axes
+// already free:
+//
+//   LETTER-SPACING says what kind of thing it is
+//     +1 tracked, uppercase  -> a LABEL: it names something
+//      0 untracked           -> DATA: it is the thing
+//
+//   COLOUR says how much it matters
+//     C_IVORY2  heading   -- NEAREST / SELECTED, and data proper
+//     C_DIM     key       -- ALT ft, SPD kt, IN RANGE
+//     C_MUTE    meta      -- units, timers, feed rate, registration, PM
+//
+// C_MUTE has been defined and documented in theme.h since v7 and was never
+// used; it is the missing third rank.
 static lv_obj_t* mkMicro(lv_obj_t* p, const char* txt, int x, int y) {
   lv_obj_t* l = lv_label_create(p);
   lv_obj_add_style(l, &st_microlbl, 0);
@@ -363,7 +382,7 @@ static void buildOverview(lv_obj_t* parent) {
   s_wxTemp = mkLbl(card, F_UI15, C_IVORY);
   lv_label_set_text(s_wxTemp, "--");
   lv_obj_set_pos(s_wxTemp, OV_TEMP_X, OV_HOME_Y);
-  s_wxUnit = mkLbl(card, F_UI12, C_IVORY2);
+  s_wxUnit = mkLbl(card, F_UI12, C_MUTE);      // a unit is meta, not data
   lv_obj_set_pos(s_wxUnit, OV_TEMP_X, microY);
 
   // The wind block is right-aligned by measurement in updateWeatherPill — x is
@@ -457,10 +476,12 @@ static void buildOverview(lv_obj_t* parent) {
   lv_obj_set_style_radius(s_ovDot, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(s_ovDot, C_CY, 0);
   lv_obj_set_style_bg_opa(s_ovDot, LV_OPA_COVER, 0);
-  s_ovSrc = mkLbl(card, F_MONO13, C_DIM);   // matches the rate on the right
+  // Status footers stay UNTRACKED: "LOCAL - 0s 24/s" is a reading, not a
+  // label, and the +1 tracking pushed the right-aligned rate into it.
+  s_ovSrc = mkLbl(card, F_MONO13, C_MUTE);
   lv_obj_set_pos(s_ovSrc, OV_DOT_D + 6, OV_SRC_Y);
   lv_obj_align_to(s_ovDot, s_ovSrc, LV_ALIGN_OUT_LEFT_MID, -6, 0);
-  s_ovFeed = mkLbl(card, F_MONO13, C_DIM);
+  s_ovFeed = mkLbl(card, F_MONO13, C_MUTE);
   lv_obj_align(s_ovFeed, LV_ALIGN_TOP_RIGHT, 0, OV_SRC_Y);
 
 }
@@ -535,7 +556,7 @@ static void buildSelectedTop(lv_obj_t* cont) {
   lv_label_set_long_mode(s_selFrame, LV_LABEL_LONG_DOT);
   lv_obj_set_pos(s_selFrame, 0, SEL_FRAME_Y);
   lv_obj_set_width(s_selFrame, CONTENT_W);
-  s_selIdent = mkLbl(cont, F_MONO11, C_DIM);
+  s_selIdent = mkLbl(cont, F_MONO11, C_MUTE);   // reg + year: meta rank
   lv_obj_set_pos(s_selIdent, 0, SEL_IDENT_Y);
   s_selMil = mkLbl(cont, F_MONO11, C_CY);
   lv_label_set_text(s_selMil, "MIL");
@@ -564,7 +585,7 @@ static void buildSelectedBottom(lv_obj_t* cont) {
   lv_obj_set_style_radius(s_selDot, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(s_selDot, C_CY, 0);
   lv_obj_set_style_bg_opa(s_selDot, LV_OPA_COVER, 0);
-  s_selLive = mkLbl(cont, F_MONO13, C_DIM);
+  s_selLive = mkLbl(cont, F_MONO13, C_MUTE);   // status footer: meta rank, untracked
   lv_obj_set_pos(s_selLive, 14, SEL_LIVE_Y);
   lv_obj_align_to(s_selDot, s_selLive, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 }
@@ -609,7 +630,7 @@ static void buildTimeCard(lv_obj_t* parent) {
   // difference of those, which is where this offset comes from.
   s_pmDy = (F_NUM36->line_height - F_NUM36->base_line - F_NUM36->line_height / 2) -
            (F_UI12->line_height  - F_UI12->base_line  - F_UI12->line_height / 2);
-  s_tmPm = mkLbl(card, F_UI12, C_DIM);
+  s_tmPm = mkLbl(card, F_UI12, C_MUTE);        // a suffix is meta, not data
   lv_obj_align(s_tmPm, LV_ALIGN_CENTER, 0, s_pmDy);
   lv_obj_add_flag(s_tmPm, LV_OBJ_FLAG_HIDDEN);
 }
