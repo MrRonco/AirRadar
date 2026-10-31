@@ -17,6 +17,7 @@ that keep the renderer from fighting the panel DMA.
 | v7 module tree and the port's findings | [`docs/V7_PORT.md`](docs/V7_PORT.md) |
 | Version-by-version narrative | [`docs/HISTORY.md`](docs/HISTORY.md) |
 | What is shipped, parked and blocked | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| Tests, CI gates, review and release flow | [`docs/TESTING.md`](docs/TESTING.md) |
 
 Current version **v7.2.6**. The firmware is an LVGL 8.3 application under
 `firmware/AirRadar/`; the root `AirRadar.ino` is the **legacy v6** single-sketch
@@ -415,6 +416,68 @@ regardless of distance, and a fingertip is 8–10 mm.
   The old `F_*` names survive in `theme.cpp` as aliases onto this scale.
 - Generated `font_*.c` files are **OFL-1.1, not GPL** — see
   [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+
+## Testing and review (required)
+
+The full methodology, the gates and the adoption plan are in
+[`docs/TESTING.md`](docs/TESTING.md). Most gates do not exist yet: until one
+does, do its check by hand and say so in the PR or merge message. The rules:
+
+1. **Test first.** Every bug fix starts with a reproduction that fails, at the
+   cheapest layer that can show it: host unit test, then harness baseline or
+   assertion, then policy or image test. A bug only the panel can show gets a
+   HIL item whose `/api/stalls` or `/metrics` pass value is written down
+   *before* the fix (rule 27).
+2. **New logic goes in the host-testable logic layer** (no Arduino, FreeRTOS
+   or LVGL includes, plain C types in and out), with tests in the same change
+   and at least 80% coverage per file.
+3. **Gates block on `main`:**
+   - lint;
+   - gitleaks;
+   - repo policy;
+   - licences;
+   - the `arduino-cli` compile with the warnings baseline;
+   - size budgets;
+   - the merged-image and manifest test;
+   - unit tests under ASan + UBSan;
+   - coverage;
+   - harness baselines and repaint budgets;
+   - static analysis;
+   - the flasher's Playwright and axe tests;
+   - fuzzing.
+
+   Never loosen a threshold, a baseline or a budget to make CI pass without
+   a reviewed reason.
+4. **The builder never reviews its own work.** A separate security reviewer
+   ranks the findings, the builder fixes them test-first, and the same
+   reviewer re-checks until nothing CRITICAL, HIGH or MEDIUM is open. This is
+   mandatory for:
+   - network parsing;
+   - the web console and API (`authed()`, Host and Origin checks,
+     validation, escaping);
+   - credentials and NVS;
+   - OTA and `/update`;
+   - the flasher, its binaries and the release pipeline.
+
+   Flash writes, boot order and merged-image changes also get an HIL pass.
+5. **Nothing personal is committed or published.** No credentials, home
+   coordinates, private IPs, network names or host paths. Fixtures are
+   synthetic, and real feeder captures never are, because aircraft positions
+   reveal the receiver. Prefer harness screenshots: a panel capture shows the
+   map around home. Run a leak hunt before publishing anything.
+6. **`main` is production.** Pages serves `flasher/` from `main`.
+   `flasher/*.bin` change only in a release commit made from CI-built,
+   checksummed artefacts. No merge, tag, release, OTA or flash without the
+   owner's OK.
+7. **Integration:**
+   1. CI is green on the branch tip (full SHA).
+   2. Merge with `--no-ff`, the message in a file.
+   3. Verify `main`'s CI by the full merge SHA.
+   4. Tag `vX.Y.Z` = `AR_VERSION`.
+   5. Record a HIL checklist in `docs/hil/`.
+   6. Soak the RC on the panel before the installer moves.
+8. **Never install the merged image on a configured device** (rule 28). First
+   install is tested on a spare or erased board.
 
 ## Network environment (troubleshooting)
 
