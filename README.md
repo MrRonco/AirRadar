@@ -7,7 +7,7 @@
 No cloud account. No API key. No companion app. Point it at your own receiver and it
 draws the sky above your house on a 7-inch panel.
 
-[![firmware](https://img.shields.io/badge/firmware-v7.2.6-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE)
+[![firmware](https://img.shields.io/badge/firmware-v7.2.6-6fc7d8?style=flat-square)](docs/HISTORY.md) [![platform](https://img.shields.io/badge/ESP32--S3-16MB%20%2F%208MB%20PSRAM-9b8ce0?style=flat-square)](docs/HARDWARE.md) [![ui](https://img.shields.io/badge/LVGL-8.3.11-ffc061?style=flat-square)](https://lvgl.io) [![data](https://img.shields.io/badge/API%20keys%20required-none-6fc7d8?style=flat-square)](#data-sources) [![install](https://img.shields.io/badge/install-one--click%20web%20flasher-9b8ce0?style=flat-square)](https://mrronco.github.io/AirRadar/flasher/) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc061?style=flat-square)](LICENSE) [![coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-mrronco-9b8ce0?style=flat-square&logo=buymeacoffee&logoColor=white)](https://www.buymeacoffee.com/mrronco)
 
 <img src="docs/img/panel.png" width="820" alt="AirRadar main screen: a full-bleed dark base map under a coverage disc ringed by a graduated bearing bezel, twenty aircraft with their callsigns, three of them greyed and prefixed with a tilde to mark dead-reckoned positions, a full hour of traffic history as a sparkline in the left card, and an Air Canada 787 pinned in the right-hand card with its logo, its Sydney to Vancouver route and a live instrument grid">
 
@@ -557,6 +557,12 @@ hardware it is the more useful document of the two.
 
 Design direction, hardware decisions, priorities and the final call on every change
 were the author's.
+
+## Support
+
+If AirRadar puts the sky above your house on your desk, you can buy me a coffee.
+
+<a href="https://www.buymeacoffee.com/mrronco"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="60"></a>
 
 ## Credits
 
